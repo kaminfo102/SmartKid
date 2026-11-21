@@ -5,6 +5,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class KN_DB {
 
+	public static function table_terms() {
+		global $wpdb;
+		return $wpdb->prefix . 'kn_terms';
+	}
+
 	public static function table_stages() {
 		global $wpdb;
 		return $wpdb->prefix . 'kn_stages';
@@ -30,8 +35,13 @@ class KN_DB {
 		return $wpdb->prefix . 'kn_tokens';
 	}
 
+	public static function table_entitlements() {
+		global $wpdb;
+		return $wpdb->prefix . 'kn_entitlements';
+	}
+
 	/**
-	 * Create custom database tables via dbDelta.
+	 * Create or upgrade custom database tables via dbDelta.
 	 */
 	public static function install_tables() {
 		global $wpdb;
@@ -39,18 +49,45 @@ class KN_DB {
 
 		$charset_collate = $wpdb->get_charset_collate();
 
-		$t_stages    = self::table_stages();
-		$t_steps     = self::table_steps();
-		$t_questions = self::table_questions();
-		$t_profiles  = self::table_profiles();
-		$t_tokens    = self::table_tokens();
+		$t_terms        = self::table_terms();
+		$t_stages       = self::table_stages();
+		$t_steps        = self::table_steps();
+		$t_questions    = self::table_questions();
+		$t_profiles     = self::table_profiles();
+		$t_tokens       = self::table_tokens();
+		$t_entitlements = self::table_entitlements();
+
+		$sql_terms = "CREATE TABLE {$t_terms} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			slug varchar(100) NOT NULL,
+			term_number int(11) NOT NULL DEFAULT 1,
+			title varchar(255) NOT NULL,
+			subtitle varchar(255) NOT NULL DEFAULT '',
+			story_title varchar(255) NOT NULL DEFAULT '',
+			story_description text NOT NULL,
+			biome varchar(40) NOT NULL DEFAULT 'farm',
+			accent_color varchar(20) NOT NULL DEFAULT '#4BB543',
+			is_free tinyint(1) NOT NULL DEFAULT 0,
+			price_amount bigint(20) unsigned NOT NULL DEFAULT 0,
+			woo_product_id bigint(20) unsigned NOT NULL DEFAULT 0,
+			checkout_url_override text NOT NULL,
+			is_active tinyint(1) NOT NULL DEFAULT 1,
+			created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id),
+			UNIQUE KEY slug (slug),
+			KEY term_number (term_number)
+		) {$charset_collate};";
 
 		$sql_stages = "CREATE TABLE {$t_stages} (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			term_id bigint(20) unsigned NOT NULL DEFAULT 1,
 			slug varchar(100) NOT NULL,
 			stage_number int(11) NOT NULL DEFAULT 1,
 			title varchar(255) NOT NULL,
 			short_goal text NOT NULL,
+			story_caption text NOT NULL,
+			landmark varchar(40) NOT NULL DEFAULT 'barn',
 			skill varchar(60) NOT NULL DEFAULT 'recognition',
 			columns_count tinyint(3) unsigned NOT NULL DEFAULT 1,
 			unlock_requirement varchar(100) DEFAULT '',
@@ -61,6 +98,7 @@ class KN_DB {
 			updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 			PRIMARY KEY  (id),
 			UNIQUE KEY slug (slug),
+			KEY term_id (term_id),
 			KEY stage_number (stage_number)
 		) {$charset_collate};";
 
@@ -85,6 +123,7 @@ class KN_DB {
 
 		$sql_questions = "CREATE TABLE {$t_questions} (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			term_id bigint(20) unsigned NOT NULL DEFAULT 0,
 			skill varchar(60) NOT NULL DEFAULT 'recognition',
 			difficulty tinyint(3) unsigned NOT NULL DEFAULT 1,
 			columns_count tinyint(3) unsigned NOT NULL DEFAULT 1,
@@ -100,6 +139,7 @@ class KN_DB {
 			is_active tinyint(1) NOT NULL DEFAULT 1,
 			created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY  (id),
+			KEY term_id (term_id),
 			KEY skill_diff (skill, difficulty),
 			KEY is_active (is_active)
 		) {$charset_collate};";
@@ -139,49 +179,107 @@ class KN_DB {
 			KEY user_id (user_id)
 		) {$charset_collate};";
 
+		$sql_entitlements = "CREATE TABLE {$t_entitlements} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			user_id bigint(20) unsigned NOT NULL,
+			term_id bigint(20) unsigned NOT NULL,
+			woo_order_id bigint(20) unsigned NOT NULL DEFAULT 0,
+			source varchar(30) NOT NULL DEFAULT 'woocommerce',
+			granted_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id),
+			UNIQUE KEY user_term (user_id, term_id),
+			KEY user_id (user_id),
+			KEY term_id (term_id)
+		) {$charset_collate};";
+
+		dbDelta( $sql_terms );
 		dbDelta( $sql_stages );
 		dbDelta( $sql_steps );
 		dbDelta( $sql_questions );
 		dbDelta( $sql_profiles );
 		dbDelta( $sql_tokens );
+		dbDelta( $sql_entitlements );
 	}
 
 	/**
-	 * Seed the 6 core Persian Soroban stages, steps, and starter questions if empty.
+	 * Seed default storybook Terms, Stages, Steps, and Questions if tables are empty.
+	 * Also migrates any existing v1 stages without a term into Term 1.
 	 */
 	public static function seed_defaults_if_empty() {
 		global $wpdb;
+		$t_terms  = self::table_terms();
 		$t_stages = self::table_stages();
-		$count    = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t_stages}" );
 
-		if ( $count === 0 ) {
-			$default_stages = self::get_default_stages_seed();
-			foreach ( $default_stages as $stage ) {
-				$steps = $stage['steps'];
-				unset( $stage['steps'] );
+		$terms_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t_terms}" );
+		$term_id_map = array();
 
+		if ( $terms_count === 0 ) {
+			foreach ( self::get_default_terms_seed() as $term ) {
 				$wpdb->insert(
-					$t_stages,
+					$t_terms,
 					array(
-						'slug'               => $stage['slug'],
-						'stage_number'       => $stage['stage_number'],
-						'title'              => $stage['title'],
-						'short_goal'         => $stage['short_goal'],
-						'skill'              => $stage['skill'],
-						'columns_count'      => $stage['columns_count'],
-						'unlock_requirement' => $stage['unlock_requirement'],
-						'icon_name'          => $stage['icon_name'],
-						'accent_color'       => $stage['accent_color'],
-						'is_active'          => 1,
-					),
-					array( '%s', '%d', '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%d' )
+						'slug'                  => $term['slug'],
+						'term_number'           => $term['term_number'],
+						'title'                 => $term['title'],
+						'subtitle'              => $term['subtitle'],
+						'story_title'           => $term['story_title'],
+						'story_description'     => $term['story_description'],
+						'biome'                 => $term['biome'],
+						'accent_color'          => $term['accent_color'],
+						'is_free'               => $term['is_free'],
+						'price_amount'          => $term['price_amount'],
+						'woo_product_id'        => 0,
+						'checkout_url_override' => '',
+						'is_active'             => 1,
+					)
+				);
+				$term_id_map[ $term['slug'] ] = (int) $wpdb->insert_id;
+			}
+		} else {
+			$existing_terms = $wpdb->get_results( "SELECT id, slug FROM {$t_terms}", ARRAY_A );
+			foreach ( $existing_terms as $et ) {
+				$term_id_map[ $et['slug'] ] = (int) $et['id'];
+			}
+		}
+
+		// Ensure v1 stages (if any exist without valid term_id) attach to Term 1
+		$first_term_id = ! empty( $term_id_map['term-1-starter'] )
+			? (int) $term_id_map['term-1-starter']
+			: (int) reset( $term_id_map );
+
+		if ( $first_term_id > 0 ) {
+			$wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$t_stages} SET term_id = %d WHERE term_id = 0 OR term_id IS NULL",
+					$first_term_id
+				)
+			);
+		}
+
+		// Seed stages for any seeded term that currently has 0 stages
+		$stages_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t_stages}" );
+		$default_stages = self::get_default_stages_seed();
+
+		if ( $stages_count === 0 ) {
+			foreach ( $default_stages as $stage ) {
+				self::insert_seeded_stage( $stage, $term_id_map, $first_term_id );
+			}
+		} else {
+			// If upgrading from v1.0.0 where only Term 1 had stages, seed Term 2 & Term 3 stages cleanly
+			foreach ( $default_stages as $stage ) {
+				$target_term_id = isset( $term_id_map[ $stage['term_slug'] ] )
+					? (int) $term_id_map[ $stage['term_slug'] ]
+					: $first_term_id;
+
+				$exists = (int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT COUNT(*) FROM {$t_stages} WHERE slug = %s",
+						$stage['slug']
+					)
 				);
 
-				$stage_id = (int) $wpdb->insert_id;
-				if ( $stage_id > 0 && ! empty( $steps ) ) {
-					foreach ( $steps as $idx => $step ) {
-						self::insert_step( $stage_id, $idx + 1, $step );
-					}
+				if ( $exists === 0 && $target_term_id !== $first_term_id ) {
+					self::insert_seeded_stage( $stage, $term_id_map, $first_term_id );
 				}
 			}
 		}
@@ -193,6 +291,7 @@ class KN_DB {
 				$wpdb->insert(
 					$t_questions,
 					array(
+						'term_id'        => 0,
 						'skill'          => $q['skill'],
 						'difficulty'     => $q['difficulty'],
 						'columns_count'  => $q['columns_count'],
@@ -206,9 +305,42 @@ class KN_DB {
 						'visual_emoji'   => $q['visual_emoji'],
 						'operation'      => $q['operation'],
 						'is_active'      => 1,
-					),
-					array( '%s', '%d', '%d', '%s', '%s', '%d', '%d', '%s', '%d', '%d', '%s', '%s', '%d' )
+					)
 				);
+			}
+		}
+	}
+
+	private static function insert_seeded_stage( $stage, $term_id_map, $fallback_term_id ) {
+		global $wpdb;
+		$steps   = $stage['steps'];
+		$term_id = isset( $term_id_map[ $stage['term_slug'] ] )
+			? (int) $term_id_map[ $stage['term_slug'] ]
+			: (int) $fallback_term_id;
+
+		$wpdb->insert(
+			self::table_stages(),
+			array(
+				'term_id'            => $term_id,
+				'slug'               => $stage['slug'],
+				'stage_number'       => $stage['stage_number'],
+				'title'              => $stage['title'],
+				'short_goal'         => $stage['short_goal'],
+				'story_caption'      => $stage['story_caption'] ?? '',
+				'landmark'           => $stage['landmark'] ?? 'barn',
+				'skill'              => $stage['skill'],
+				'columns_count'      => $stage['columns_count'],
+				'unlock_requirement' => $stage['unlock_requirement'],
+				'icon_name'          => $stage['icon_name'],
+				'accent_color'       => $stage['accent_color'],
+				'is_active'          => 1,
+			)
+		);
+
+		$stage_id = (int) $wpdb->insert_id;
+		if ( $stage_id > 0 && ! empty( $steps ) ) {
+			foreach ( $steps as $idx => $step ) {
+				self::insert_step( $stage_id, $idx + 1, $step );
 			}
 		}
 	}
@@ -235,21 +367,118 @@ class KN_DB {
 	}
 
 	/**
-	 * Fetch full dynamic curriculum (stages + nested steps) formatted for frontend.
+	 * Fetch all terms (ordered) without nested steps for quick admin dropdowns.
 	 */
-	public static function get_curriculum( $only_active = true ) {
+	public static function get_terms_list( $only_active = false ) {
 		global $wpdb;
+		$t_terms = self::table_terms();
+		$where   = $only_active ? 'WHERE is_active = 1' : '';
+		return $wpdb->get_results( "SELECT * FROM {$t_terms} {$where} ORDER BY term_number ASC, id ASC", ARRAY_A );
+	}
+
+	/**
+	 * Get unlocked term database IDs for a given WordPress user.
+	 */
+	public static function get_user_entitlement_map( $user_id ) {
+		global $wpdb;
+		$user_id = absint( $user_id );
+		if ( $user_id <= 0 ) {
+			return array();
+		}
+		$t_ent = self::table_entitlements();
+		$rows  = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT term_id, source, woo_order_id FROM {$t_ent} WHERE user_id = %d",
+				$user_id
+			),
+			ARRAY_A
+		);
+		$map = array();
+		foreach ( $rows as $r ) {
+			$map[ (int) $r['term_id'] ] = array(
+				'source'     => $r['source'],
+				'wooOrderId' => (int) $r['woo_order_id'],
+			);
+		}
+		return $map;
+	}
+
+	public static function grant_term_entitlement( $user_id, $term_id, $source = 'woocommerce', $woo_order_id = 0 ) {
+		global $wpdb;
+		$user_id = absint( $user_id );
+		$term_id = absint( $term_id );
+		if ( $user_id <= 0 || $term_id <= 0 ) {
+			return false;
+		}
+		$t_ent    = self::table_entitlements();
+		$existing = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT id FROM {$t_ent} WHERE user_id = %d AND term_id = %d",
+				$user_id,
+				$term_id
+			)
+		);
+
+		$allowed_sources = array( 'woocommerce', 'admin', 'free' );
+		$safe_source     = in_array( $source, $allowed_sources, true ) ? $source : 'woocommerce';
+
+		if ( $existing ) {
+			return false !== $wpdb->update(
+				$t_ent,
+				array(
+					'source'       => $safe_source,
+					'woo_order_id' => absint( $woo_order_id ),
+					'granted_at'   => current_time( 'mysql' ),
+				),
+				array( 'id' => (int) $existing ),
+				array( '%s', '%d', '%s' ),
+				array( '%d' )
+			);
+		}
+
+		return false !== $wpdb->insert(
+			$t_ent,
+			array(
+				'user_id'      => $user_id,
+				'term_id'      => $term_id,
+				'woo_order_id' => absint( $woo_order_id ),
+				'source'       => $safe_source,
+				'granted_at'   => current_time( 'mysql' ),
+			),
+			array( '%d', '%d', '%d', '%s', '%s' )
+		);
+	}
+
+	public static function revoke_term_entitlement( $user_id, $term_id ) {
+		global $wpdb;
+		return false !== $wpdb->delete(
+			self::table_entitlements(),
+			array(
+				'user_id' => absint( $user_id ),
+				'term_id' => absint( $term_id ),
+			),
+			array( '%d', '%d' )
+		);
+	}
+
+	/**
+	 * Fetch full dynamic curriculum grouped by Terms -> Stages -> Steps.
+	 */
+	public static function get_terms_curriculum( $only_active = true, $user_id = 0 ) {
+		global $wpdb;
+		$t_terms  = self::table_terms();
 		$t_stages = self::table_stages();
 		$t_steps  = self::table_steps();
 
-		$where  = $only_active ? 'WHERE is_active = 1' : '';
-		$stages = $wpdb->get_results( "SELECT * FROM {$t_stages} {$where} ORDER BY stage_number ASC, id ASC", ARRAY_A );
+		$where_terms = $only_active ? 'WHERE is_active = 1' : '';
+		$terms       = $wpdb->get_results( "SELECT * FROM {$t_terms} {$where_terms} ORDER BY term_number ASC, id ASC", ARRAY_A );
+		$entitlements = self::get_user_entitlement_map( $user_id );
+		$is_admin_user = $user_id > 0 && user_can( $user_id, 'manage_options' );
 
-		if ( empty( $stages ) ) {
-			return array();
-		}
+		$where_stages = $only_active ? 'WHERE is_active = 1' : '';
+		$stages       = $wpdb->get_results( "SELECT * FROM {$t_stages} {$where_stages} ORDER BY stage_number ASC, id ASC", ARRAY_A );
 
-		$result = array();
+		$stages_by_term = array();
 		foreach ( $stages as $st ) {
 			$steps_raw = $wpdb->get_results(
 				$wpdb->prepare(
@@ -284,9 +513,12 @@ class KN_DB {
 			$stage_item = array(
 				'id'           => $st['slug'],
 				'dbId'         => (int) $st['id'],
+				'termDbId'     => (int) $st['term_id'],
 				'stageNumber'  => (int) $st['stage_number'],
 				'title'        => $st['title'],
 				'shortGoal'    => $st['short_goal'],
+				'storyCaption' => $st['story_caption'] ?: $st['short_goal'],
+				'landmark'     => $st['landmark'] ?: 'barn',
 				'skill'        => $st['skill'],
 				'columns'      => (int) $st['columns_count'],
 				'iconName'     => $st['icon_name'],
@@ -298,16 +530,83 @@ class KN_DB {
 				$stage_item['unlockRequirement'] = $st['unlock_requirement'];
 			}
 
-			$result[] = $stage_item;
+			$tid = (int) $st['term_id'];
+			if ( ! isset( $stages_by_term[ $tid ] ) ) {
+				$stages_by_term[ $tid ] = array();
+			}
+			$stages_by_term[ $tid ][] = $stage_item;
 		}
 
-		return $result;
+		$formatted_terms = array();
+		foreach ( $terms as $term ) {
+			$tid        = (int) $term['id'];
+			$is_free    = ! empty( $term['is_free'] );
+			$ent        = $entitlements[ $tid ] ?? null;
+			$unlocked   = $is_free || ! empty( $ent ) || $is_admin_user;
+			$unlock_src = $is_free ? 'free' : ( $ent['source'] ?? ( $is_admin_user ? 'admin' : null ) );
+
+			$woo_meta = class_exists( 'KN_Woo' )
+				? KN_Woo::get_term_commerce_meta( $term, $user_id )
+				: array(
+					'priceAmount'    => (int) $term['price_amount'],
+					'priceFormatted' => number_format( (int) $term['price_amount'] ) . ' تومان',
+					'checkoutUrl'    => esc_url_raw( (string) $term['checkout_url_override'] ),
+				);
+
+			$term_stages = $stages_by_term[ $tid ] ?? array();
+			foreach ( $term_stages as &$ts ) {
+				$ts['termId'] = $term['slug'];
+			}
+			unset( $ts );
+
+			$formatted_terms[] = array(
+				'id'                  => $term['slug'],
+				'dbId'                => $tid,
+				'termNumber'          => (int) $term['term_number'],
+				'title'               => $term['title'],
+				'subtitle'            => $term['subtitle'],
+				'storyTitle'          => $term['story_title'],
+				'storyDescription'    => $term['story_description'],
+				'biome'               => $term['biome'],
+				'accentColor'         => $term['accent_color'],
+				'isFree'              => $is_free,
+				'priceAmount'         => (int) $woo_meta['priceAmount'],
+				'priceFormatted'      => $is_free ? 'رایگان' : $woo_meta['priceFormatted'],
+				'wooProductId'        => (int) $term['woo_product_id'],
+				'checkoutUrlOverride' => (string) $term['checkout_url_override'],
+				'checkoutUrl'         => $woo_meta['checkoutUrl'],
+				'isActive'            => (bool) $term['is_active'],
+				'unlocked'            => $unlocked,
+				'unlockedSource'      => $unlock_src,
+				'stages'              => $term_stages,
+			);
+		}
+
+		return $formatted_terms;
+	}
+
+	/**
+	 * Fetch flat list of stages (backward-compatible helper + admin list).
+	 */
+	public static function get_curriculum( $only_active = true, $term_db_id = 0 ) {
+		$terms  = self::get_terms_curriculum( $only_active, 0 );
+		$stages = array();
+		foreach ( $terms as $term ) {
+			if ( $term_db_id > 0 && (int) $term['dbId'] !== (int) $term_db_id ) {
+				continue;
+			}
+			foreach ( $term['stages'] as $st ) {
+				$st['termTitle'] = $term['title'];
+				$stages[]        = $st;
+			}
+		}
+		return $stages;
 	}
 
 	/**
 	 * Fetch practice questions formatted for frontend.
 	 */
-	public static function get_questions( $skill = '', $difficulty = 0, $only_active = true ) {
+	public static function get_questions( $skill = '', $difficulty = 0, $only_active = true, $term_id = 0 ) {
 		global $wpdb;
 		$t_questions = self::table_questions();
 
@@ -325,6 +624,10 @@ class KN_DB {
 			$clauses[] = 'difficulty <= %d';
 			$params[]  = $difficulty;
 		}
+		if ( $term_id > 0 ) {
+			$clauses[] = '(term_id = %d OR term_id = 0)';
+			$params[]  = absint( $term_id );
+		}
 
 		$sql = "SELECT * FROM {$t_questions}";
 		if ( ! empty( $clauses ) ) {
@@ -339,18 +642,19 @@ class KN_DB {
 		$items = array();
 		foreach ( $rows as $row ) {
 			$item = array(
-				'id'           => 'wp_q_' . $row['id'],
-				'dbId'         => (int) $row['id'],
-				'skill'        => $row['skill'],
-				'difficulty'   => (int) $row['difficulty'],
-				'columns'      => (int) $row['columns_count'],
-				'promptText'   => $row['prompt_text'],
-				'spokenText'   => $row['spoken_text'],
-				'startValue'   => (int) $row['start_value'],
-				'targetValue'  => (int) $row['target_value'],
-				'visualType'   => $row['visual_type'],
-				'visualEmoji'  => $row['visual_emoji'],
-				'isActive'     => (bool) $row['is_active'],
+				'id'          => 'wp_q_' . $row['id'],
+				'dbId'        => (int) $row['id'],
+				'termDbId'    => (int) $row['term_id'],
+				'skill'       => $row['skill'],
+				'difficulty'  => (int) $row['difficulty'],
+				'columns'     => (int) $row['columns_count'],
+				'promptText'  => $row['prompt_text'],
+				'spokenText'  => $row['spoken_text'],
+				'startValue'  => (int) $row['start_value'],
+				'targetValue' => (int) $row['target_value'],
+				'visualType'  => $row['visual_type'],
+				'visualEmoji' => $row['visual_emoji'],
+				'isActive'    => (bool) $row['is_active'],
 			);
 			if ( $row['visual_count_a'] !== null ) {
 				$item['visualCountA'] = (int) $row['visual_count_a'];
@@ -471,18 +775,63 @@ class KN_DB {
 		return $row ? self::format_profile_row( $row ) : null;
 	}
 
-	private static function get_default_stages_seed() {
+	private static function get_default_terms_seed() {
 		return array(
 			array(
+				'slug'              => 'term-1-starter',
+				'term_number'       => 1,
+				'title'             => 'ترم ۱: مزرعه آفتابی اعداد',
+				'subtitle'          => 'ترم استارتر رایگان — آشنایی با چرتکه و جمع و تفریق پایه',
+				'story_title'       => 'ماجراجویی مزرعه آفتابی کیا',
+				'story_description' => 'سلام قهرمان! کیا به مزرعه آفتابی آمده تا به دوستاش کمک کنه گوسفندها، دانه‌های گندم و سیب‌های باغ رو با چرتکه بشمارن.',
+				'biome'             => 'farm',
+				'accent_color'      => '#4BB543',
+				'is_free'           => 1,
+				'price_amount'      => 0,
+			),
+			array(
+				'slug'              => 'term-2-forest',
+				'term_number'       => 2,
+				'title'             => 'ترم ۲: جنگل دوستی‌های جادویی',
+				'subtitle'          => 'مکمل‌های ۵ و ۱۰ و رمزگشایی سریع مهره‌ها',
+				'story_title'       => 'راز پل رنگین‌کمان در جنگل جادویی',
+				'story_description' => 'در جنگل جادویی، دوستان ۵ و ۱۰ منتظر تو هستند! هر مرحله را حل کن تا چراغ‌های پل رنگین‌کمانی روشن شود.',
+				'biome'             => 'forest',
+				'accent_color'      => '#8E63EB',
+				'is_free'           => 0,
+				'price_amount'      => 190000,
+			),
+			array(
+				'slug'              => 'term-3-island',
+				'term_number'       => 3,
+				'title'             => 'ترم ۳: جزیره گنج اعداد بزرگ',
+				'subtitle'          => 'اعداد دو و سه رقمی و محاسبات ذهنی سریع',
+				'story_title'       => 'سفر دریایی کاپیتان کیا به جزیره گنج',
+				'story_description' => 'سوار قایق بادبانی شو! از فانوس دریایی بگذر و با محاسبه ذهنی کلید صندوقچه جواهرات را پیدا کن.',
+				'biome'             => 'island',
+				'accent_color'      => '#0EA5E9',
+				'is_free'           => 0,
+				'price_amount'      => 290000,
+			),
+		);
+	}
+
+	private static function get_default_stages_seed() {
+		return array(
+			// Term 1 (Free Starter Farm)
+			array(
+				'term_slug'          => 'term-1-starter',
 				'slug'               => 'stage-1-intro',
 				'stage_number'       => 1,
-				'title'              => 'آشنایی با چرتکه و اعداد ۰ تا ۹',
+				'title'              => 'انبار قرمز چرتکه (اعداد ۱ تا ۹)',
 				'short_goal'         => 'شناخت مهره ۵ و ۱ و ساخت اعداد یک‌رقمی',
+				'story_caption'      => 'اولین ایستگاه در انبار قرمز مزرعه! بیایید مهره‌های زمین و آسمان را بشماریم.',
+				'landmark'           => 'barn',
 				'skill'              => 'recognition',
 				'columns_count'      => 1,
 				'unlock_requirement' => '',
 				'icon_name'          => 'sparkles',
-				'accent_color'       => '#0EA5E9',
+				'accent_color'       => '#EE5D48',
 				'steps'              => array(
 					array(
 						'step_slug'           => 's1-1',
@@ -535,15 +884,18 @@ class KN_DB {
 				),
 			),
 			array(
+				'term_slug'          => 'term-1-starter',
 				'slug'               => 'stage-2-place-value',
 				'stage_number'       => 2,
-				'title'              => 'اعداد و ارزش مکانی',
+				'title'              => 'آسیاب بادی یکان و دهگان',
 				'short_goal'         => 'شناخت یکان، دهگان و صدگان با اعداد ۲ و ۳ رقمی',
+				'story_caption'      => 'کنار آسیاب بادی مزرعه، گونی‌های گندم را دسته‌های ده‌تایی می‌کنیم!',
+				'landmark'           => 'windmill',
 				'skill'              => 'placeValue',
 				'columns_count'      => 3,
 				'unlock_requirement' => 'stage-1-intro',
 				'icon_name'          => 'layers',
-				'accent_color'       => '#10B981',
+				'accent_color'       => '#F59E0B',
 				'steps'              => array(
 					array(
 						'step_slug'           => 's2-1',
@@ -570,15 +922,18 @@ class KN_DB {
 				),
 			),
 			array(
+				'term_slug'          => 'term-1-starter',
 				'slug'               => 'stage-3-addition',
 				'stage_number'       => 3,
-				'title'              => 'جمع ساده',
+				'title'              => 'مزرعه گندم و جمع ساده',
 				'short_goal'         => 'جمع مستقیم با مهره‌های چرتکه',
+				'story_caption'      => 'خوشه‌های طلایی گندم را به سبد کشاورز اضافه کن!',
+				'landmark'           => 'wheat',
 				'skill'              => 'simpleAddition',
 				'columns_count'      => 2,
 				'unlock_requirement' => 'stage-2-place-value',
 				'icon_name'          => 'plus',
-				'accent_color'       => '#2563EB',
+				'accent_color'       => '#4BB543',
 				'steps'              => array(
 					array(
 						'step_slug'           => 's3-1',
@@ -605,10 +960,13 @@ class KN_DB {
 				),
 			),
 			array(
+				'term_slug'          => 'term-1-starter',
 				'slug'               => 'stage-4-subtraction',
 				'stage_number'       => 4,
-				'title'              => 'تفریق ساده',
+				'title'              => 'باغ آفتاب‌گردان و تفریق ساده',
 				'short_goal'         => 'کم کردن مهره‌ها با دور کردن از میله وسط',
+				'story_caption'      => 'چند گل آفتاب‌گردان چیدیم؟ بیایید با کم کردن مهره‌ها حساب کنیم!',
+				'landmark'           => 'garden',
 				'skill'              => 'simpleSubtraction',
 				'columns_count'      => 2,
 				'unlock_requirement' => 'stage-3-addition',
@@ -639,16 +997,21 @@ class KN_DB {
 					),
 				),
 			),
+
+			// Term 2 (Paid Forest Adventure)
 			array(
+				'term_slug'          => 'term-2-forest',
 				'slug'               => 'stage-5-complements',
-				'stage_number'       => 5,
-				'title'              => 'مکمل‌های ۵ و ۱۰',
-				'short_goal'         => 'حل مسائل هوشمندانه‌تر با دوستان ۵ و ۱۰',
+				'stage_number'       => 1,
+				'title'              => 'کلبه درختی دوست ۵',
+				'short_goal'         => 'جمع و تفریق هوشمندانه با دوستان عدد ۵',
+				'story_caption'      => 'برای ورود به کلبه درختی جادویی، رمز دوست ۵ را روی چرتکه بساز!',
+				'landmark'           => 'treehouse',
 				'skill'              => 'complements',
 				'columns_count'      => 2,
-				'unlock_requirement' => 'stage-4-subtraction',
+				'unlock_requirement' => '',
 				'icon_name'          => 'puzzle',
-				'accent_color'       => '#8B5CF6',
+				'accent_color'       => '#8E63EB',
 				'steps'              => array(
 					array(
 						'step_slug'           => 's5-1',
@@ -663,6 +1026,33 @@ class KN_DB {
 					),
 					array(
 						'step_slug'           => 's5-2',
+						'title'               => 'دوست ۵ در تفریق: ۷ - ۴ = ۳',
+						'instruction'         => 'یک مهره پایینی بالا ببر و مهره ۵ را به بالا برگردان.',
+						'spoken_text'         => 'برای کم کردن چهار از هفت، یک مهره پایینی اضافه کن و مهره پنج را بالا ببر.',
+						'initial_value'       => 7,
+						'target_value'        => 3,
+						'columns_count'       => 2,
+						'require_interaction' => 1,
+						'auto_demo_steps'     => 1,
+					),
+				),
+			),
+			array(
+				'term_slug'          => 'term-2-forest',
+				'slug'               => 'stage-6-ten-friends',
+				'stage_number'       => 2,
+				'title'              => 'پل معلق دوستان ۱۰',
+				'short_goal'         => 'عبور به ستون دهگان با کمک دوستان ۱۰',
+				'story_caption'      => 'از روی پل رنگین‌کمانی رد شو و دوست‌های عدد ۱۰ را صدا بزن!',
+				'landmark'           => 'bridge',
+				'skill'              => 'complements',
+				'columns_count'      => 2,
+				'unlock_requirement' => 'stage-5-complements',
+				'icon_name'          => 'sparkles',
+				'accent_color'       => '#EC5E95',
+				'steps'              => array(
+					array(
+						'step_slug'           => 's6-t2-1',
 						'title'               => 'دوست ۱۰: ۶ + ۷ = ۱۳',
 						'instruction'         => 'یک دهگان اضافه کن و ۳ تا از یکان کم کن تا عدد ۱۳ ساخته شود!',
 						'spoken_text'         => 'برای شش به اضافه هفت، یک دهگان اضافه کن و سه تا از یکان کم کن.',
@@ -675,24 +1065,83 @@ class KN_DB {
 				),
 			),
 			array(
-				'slug'               => 'stage-6-mental',
-				'stage_number'       => 6,
-				'title'              => 'محاسبات ذهنی مقدماتی',
-				'short_goal'         => 'تصویرسازی ذهنی چرتکه با نمایش کوتاه و صدا',
+				'term_slug'          => 'term-2-forest',
+				'slug'               => 'stage-7-waterfall',
+				'stage_number'       => 3,
+				'title'              => 'آبشار جادویی و قصر جغد دانا',
+				'short_goal'         => 'تمرین سرعتی مکمل‌های ترکیبی',
+				'story_caption'      => 'در کنار آبشار جادویی، قهرمانان با سرعت نور چرتکه می‌زنند!',
+				'landmark'           => 'waterfall',
 				'skill'              => 'mentalMath',
 				'columns_count'      => 2,
-				'unlock_requirement' => 'stage-5-complements',
+				'unlock_requirement' => 'stage-6-ten-friends',
 				'icon_name'          => 'brain',
-				'accent_color'       => '#EC4899',
+				'accent_color'       => '#4BB543',
 				'steps'              => array(
 					array(
-						'step_slug'           => 's6-1',
-						'title'               => 'چرتکه در ذهن من',
-						'instruction'         => 'مهره‌ها را در ذهنت نگه دار: ۲ + ۵ چند می‌شود؟ عدد ۷ را بساز!',
-						'spoken_text'         => 'چرتکه را در ذهنت تصور کن. دو به اضافه پنج چند می‌شود؟',
-						'initial_value'       => 2,
-						'target_value'        => 7,
+						'step_slug'           => 's7-t2-1',
+						'title'               => 'معمای آبشار: ۸ + ۵ = ۱۳',
+						'instruction'         => 'برای اضافه کردن ۵ به ۸، یک دهگان اضافه کن و ۵ تا کم کن!',
+						'spoken_text'         => 'هشت به اضافه پنج را با کمک ستون دهگان حل کن.',
+						'initial_value'       => 8,
+						'target_value'        => 13,
 						'columns_count'       => 2,
+						'require_interaction' => 1,
+						'auto_demo_steps'     => 1,
+					),
+				),
+			),
+
+			// Term 3 (Paid Treasure Island Adventure)
+			array(
+				'term_slug'          => 'term-3-island',
+				'slug'               => 'stage-8-island-boat',
+				'stage_number'       => 1,
+				'title'              => 'قایق بادبانی ده‌ها و صدها',
+				'short_goal'         => 'ساخت و جمع اعداد دورقمی و سه‌رقمی',
+				'story_caption'      => 'بادبان‌ها را بکش! برای رسیدن به جزیره باید جمع اعداد دو رقمی را بلد باشی.',
+				'landmark'           => 'boat',
+				'skill'              => 'placeValue',
+				'columns_count'      => 3,
+				'unlock_requirement' => '',
+				'icon_name'          => 'layers',
+				'accent_color'       => '#0EA5E9',
+				'steps'              => array(
+					array(
+						'step_slug'           => 's8-t3-1',
+						'title'               => 'ساخت عدد ۱۲۵',
+						'instruction'         => '۱ صدگان، ۲ دهگان و ۵ یکان را بچسبان تا قطب‌نمای کشتی روشن شود.',
+						'spoken_text'         => 'عدد صد و بیست و پنج را روی سه ستون چرتکه بساز.',
+						'initial_value'       => 0,
+						'target_value'        => 125,
+						'columns_count'       => 3,
+						'require_interaction' => 1,
+						'auto_demo_steps'     => 1,
+					),
+				),
+			),
+			array(
+				'term_slug'          => 'term-3-island',
+				'slug'               => 'stage-9-treasure-chest',
+				'stage_number'       => 2,
+				'title'              => 'فانوس دریایی و صندوقچه گنج',
+				'short_goal'         => 'تصویرسازی ذهنی چرتکه برای باز کردن گنج',
+				'story_caption'      => 'آخرین ایستگاه! رمز صندوقچه گنج کاپیتان کیا در ذهن توست.',
+				'landmark'           => 'chest',
+				'skill'              => 'mentalMath',
+				'columns_count'      => 3,
+				'unlock_requirement' => 'stage-8-island-boat',
+				'icon_name'          => 'brain',
+				'accent_color'       => '#F59E0B',
+				'steps'              => array(
+					array(
+						'step_slug'           => 's9-t3-1',
+						'title'               => 'رمز صندوقچه: ۱۰ + ۵ = ۱۵',
+						'instruction'         => 'در ذهن خودت حساب کن و عدد ۱۵ را بساز تا صندوقچه باز شود!',
+						'spoken_text'         => 'ده به اضافه پنج در ذهنت چند می‌شود؟ عدد پانزده را بساز.',
+						'initial_value'       => 10,
+						'target_value'        => 15,
+						'columns_count'       => 3,
 						'require_interaction' => 1,
 						'auto_demo_steps'     => 1,
 					),

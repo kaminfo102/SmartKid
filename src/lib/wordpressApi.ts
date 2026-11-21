@@ -5,6 +5,7 @@ import type {
   LessonDefinition,
   PracticeQuestion,
   SkillKey,
+  TermDefinition,
   WordPressConfig,
   WordPressUser,
 } from '../types/app';
@@ -26,7 +27,7 @@ export function hasMemoryBearerToken(): boolean {
 }
 
 /**
- * Normalize and validate a WordPress site URL (restricts to http: / https:).
+ * Normalize and validate a URL (strictly restricts to http: / https:).
  */
 export function normalizeWordPressUrl(raw: string): string {
   const trimmed = raw.trim().replace(/\/+$/, '');
@@ -37,6 +38,19 @@ export function normalizeWordPressUrl(raw: string): string {
       return '';
     }
     return parsed.origin + (parsed.pathname === '/' ? '' : parsed.pathname.replace(/\/+$/, ''));
+  } catch {
+    return '';
+  }
+}
+
+export function validateSafeHttpUrl(raw?: string | null): string {
+  if (!raw || typeof raw !== 'string') return '';
+  try {
+    const parsed = new URL(raw.trim());
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return '';
+    }
+    return parsed.toString();
   } catch {
     return '';
   }
@@ -123,8 +137,11 @@ export interface WordPressHealthResponse {
   appTitle: string;
   allowRegistration: boolean;
   dailyChallengeCount: number;
+  termsCount?: number;
   stagesCount: number;
   questionsCount: number;
+  wooActive?: boolean;
+  wooCurrency?: string;
 }
 
 export async function checkWordPressHealth(
@@ -134,16 +151,24 @@ export async function checkWordPressHealth(
 }
 
 export interface WordPressCurriculumResponse {
+  terms?: TermDefinition[];
   stages: LessonDefinition[];
+  unlockedTermIds?: number[];
+  wooActive?: boolean;
+  wooCurrency?: string;
   config?: {
     appTitle?: string;
     dailyChallengeCount?: number;
+    wooActive?: boolean;
+    wooCurrency?: string;
     defaultSettings?: Partial<AppSettings>;
   };
 }
 
 export async function fetchWordPressCurriculum(siteUrl: string): Promise<{
+  terms: TermDefinition[];
   stages: LessonDefinition[];
+  unlockedTermIds: number[];
   config: Partial<WordPressConfig>;
   defaultSettings?: Partial<AppSettings>;
 }> {
@@ -151,10 +176,14 @@ export async function fetchWordPressCurriculum(siteUrl: string): Promise<{
     method: 'GET',
   });
   return {
+    terms: Array.isArray(data.terms) ? data.terms : [],
     stages: Array.isArray(data.stages) ? data.stages : [],
+    unlockedTermIds: Array.isArray(data.unlockedTermIds) ? data.unlockedTermIds : [],
     config: {
       appTitle: data.config?.appTitle,
       dailyChallengeCount: data.config?.dailyChallengeCount,
+      wooActive: data.wooActive ?? data.config?.wooActive,
+      wooCurrency: data.wooCurrency ?? data.config?.wooCurrency,
     },
     defaultSettings: data.config?.defaultSettings,
   };
@@ -177,12 +206,56 @@ export async function fetchWordPressQuestions(
   return Array.isArray(data.questions) ? data.questions : [];
 }
 
+export interface WordPressCheckoutResponse {
+  termDbId: number;
+  termTitle: string;
+  alreadyUnlocked: boolean;
+  wooActive: boolean;
+  wooProductId: number;
+  priceAmount: number;
+  priceFormatted: string;
+  checkoutUrl: string;
+}
+
+export async function startWooCommerceTermCheckout(
+  siteUrl: string,
+  termDbId: number
+): Promise<WordPressCheckoutResponse> {
+  return wpRequest<WordPressCheckoutResponse>(
+    siteUrl,
+    `/terms/${encodeURIComponent(String(termDbId))}/checkout`,
+    { method: 'POST' },
+    true
+  );
+}
+
+export interface WordPressVerifyPurchaseResponse {
+  unlocked: boolean;
+  source: string | null;
+  orderId?: number;
+  message: string;
+  unlockedTermIds?: number[];
+}
+
+export async function verifyWooCommercePurchase(
+  siteUrl: string,
+  termDbId: number
+): Promise<WordPressVerifyPurchaseResponse> {
+  return wpRequest<WordPressVerifyPurchaseResponse>(
+    siteUrl,
+    `/terms/${encodeURIComponent(String(termDbId))}/verify-purchase`,
+    { method: 'POST' },
+    true
+  );
+}
+
 export interface WordPressAuthResponse {
   token: string;
   expiresAt: number;
   user: WordPressUser;
   profiles: ChildProfile[];
   settings: AppSettings;
+  unlockedTermIds?: number[];
 }
 
 export async function loginWordPress(

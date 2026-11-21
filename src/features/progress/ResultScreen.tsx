@@ -5,6 +5,7 @@ import type { DigitDisplayMode, SessionResult } from '../../types/app';
 import { SKILL_LABELS } from '../../data/lessons';
 import { formatNumber } from '../../lib/numbers';
 import { KiaMascot } from '../../components/KiaMascot';
+import { TrophyCelebrationIllustration } from '../../components/KidIllustrations';
 import { ConfettiOrRewardAnimation } from '../../components/ConfettiOrRewardAnimation';
 import { BuyCoffeeButton } from '../../components/BuyCoffeeButton';
 import { audioEngine } from '../../lib/audioEngine';
@@ -34,20 +35,21 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
   const kiaMood = result.stars >= 2 ? 'cheering' : 'happy';
 
   return (
-    <div className="min-h-screen bg-[#F5E4CE] dark:bg-slate-950 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-b from-[#FFE6B8] via-[#FFF4E0] to-[#F5E4CE] dark:from-slate-950 dark:to-slate-950 flex items-center justify-center p-4">
       <motion.div
         initial={reducedMotion ? false : { opacity: 0, scale: 0.94, y: 14 }}
         animate={reducedMotion ? undefined : { opacity: 1, scale: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 320, damping: 24 }}
-        className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-6 text-center shadow-lg space-y-4"
+        className="w-full max-w-md rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-6 text-center shadow-[0_22px_50px_-12px_rgba(170,104,40,0.28)] space-y-4"
       >
-        <div className="flex justify-center">
+        <div className="flex items-center justify-center gap-3">
           <KiaMascot
             mood={kiaMood}
             interactive
-            className="w-32 h-32"
+            className="w-28 h-28"
             reducedMotion={reducedMotion}
           />
+          <TrophyCelebrationIllustration className="w-24 h-24" />
         </div>
 
         <ConfettiOrRewardAnimation stars={result.stars} reducedMotion={reducedMotion} />
@@ -77,7 +79,7 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
           <button
             type="button"
             onClick={onNext}
-            className="w-full min-h-[54px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] active:border-b-0 active:translate-y-1 text-white font-extrabold text-base flex items-center justify-center gap-2 transition-all"
+            className="w-full min-h-[54px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] active:border-b-0 active:translate-y-1 text-white font-extrabold text-base flex items-center justify-center gap-2 shadow-sm transition-all"
           >
             <span>مرحله بعد</span>
             <ChevronLeft className="w-5 h-5" />
@@ -87,7 +89,7 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
             <button
               type="button"
               onClick={onRetry}
-              className="min-h-[48px] rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold text-sm flex items-center justify-center gap-1.5"
+              className="min-h-[48px] rounded-2xl bg-[#FFF6EB] hover:bg-amber-100 dark:bg-slate-800 border-2 border-[#EEDCC5] dark:border-slate-700 text-slate-800 dark:text-slate-100 font-bold text-sm flex items-center justify-center gap-1.5 transition-all"
             >
               <RotateCcw className="w-4 h-4" />
               <span>دوباره تلاش کن</span>
@@ -96,7 +98,7 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
             <button
               type="button"
               onClick={onMap}
-              className="min-h-[48px] rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold text-sm flex items-center justify-center gap-1.5"
+              className="min-h-[48px] rounded-2xl bg-[#E8F6FF] hover:bg-sky-100 dark:bg-slate-800 border-2 border-[#BCE3FA] dark:border-slate-700 text-[#0A3A59] dark:text-slate-100 font-bold text-sm flex items-center justify-center gap-1.5 transition-all"
             >
               <Map className="w-4 h-4" />
               <span>نقشه مراحل</span>

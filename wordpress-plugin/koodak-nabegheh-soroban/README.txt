@@ -1,35 +1,32 @@
-=== کودک نابغه — بک‌اند هدلس وردپرس و مدیریت چرتکه سوروبان ===
+=== کودک نابغه — پلاگین مدیریت چرتکه سوروبان و ترم‌های ووکامرس (Headless WordPress) ===
 Contributors: koodaknabegheh
-Tags: headless, soroban, abacus, education, rest-api, kids
+Tags: headless, soroban, abacus, education, woocommerce, rest-api
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.0.0
-License: GPLv2 or later
+Stable tag: 2.1.1
 
-بک‌اند کامل هدلس وردپرس برای اپلیکیشن آموزشی چرتکه ژاپنی «کودک نابغه».
+پلاگین اختصاصی هدلس وردپرس + ووکامرس برای اپلیکیشن آموزش چرتکه کودکان «کودک نابغه».
 
-== امکانات کلیدی ==
-1. مدیریت کامل جاده یادگیری (مراحل، ترتیب، آیکن، رنگ، شرط بازشدن، گام‌های آموزشی و متن صوتی)
-2. بانک سوالات تمرینی کاملاً داینامیک با دسته‌بندی مهارت و سطح سختی ۱ تا ۵
-3. احراز هویت اختصاصی هدلس (ثبت‌نام، ورود، خروج، توکن امن امضاشده HMAC-SHA256)
-4. مدیریت کاربران، پروفایل چندفرزندی کودکان، امتیازات (ستاره‌ها)، دقیقه تمرین و ریست پیشرفت
-5. تنظیمات هدلس (CORS، زمان اعتبار توکن، تنظیمات پیش‌فرض صدا/شب/ارقام)
-
-== نصب ==
-1. فایل zip افزونه را از بخش «افزونه‌ها > افزودن افزونه > بارگذاری افزونه» در پیشخوان وردپرس آپلود و فعال کنید.
-2. پس از فعال‌سازی، منوی جدید «کودک نابغه» در پیشخوان ظاهر می‌شود.
-3. آدرس API نمایش داده‌شده در داشبورد افزونه (مثلاً https://yoursite.com) را در اپلیکیشن «کودک نابغه > بخش والدین > اتصال به وردپرس هدلس» وارد کنید.
+== امکانات نسخه 2.1.1 ==
+1. سازگاری کامل با بلوک تسویه‌حساب جدید ووکامرس (WooCommerce Checkout Block): پر کردن خودکار تمامی فیلدهای آدرس/کشور/استان/شهر/کدپستی/ایمیل/نام، حذف نیاز به ارسال پستی برای محصولات ترم، نمایش بنر اتصال حساب بالای فرم بلوک و نمایش شفاف خطاهای احتمالی.
+2. ورود خودکار یک‌بارمصرف (SSO Handoff) به تسویه‌حساب ووکامرس بدون نیاز به ورود مجدد.
+3. مدیریت ترم‌های داستانی متعدد (ترم ۱ رایگان + ترم‌های ۲، ۳ و بیشتر به صورت پولی).
+4. اتصال کامل به WooCommerce: انتخاب محصول ووکامرس برای هر ترم، فعال‌سازی خودکار پس از تکمیل سفارش و بررسی آنلاین سفارش‌های کاربر.
+5. مدیریت نقشه ماجراجویی هر ترم با مکان‌های داستانی (انبار قرمز، آسیاب بادی، مزرعه گندم، کلبه درختی، پل رنگین‌کمان، فانوس دریایی، صندوقچه گنج و...).
+6. مدیریت کامل جاده مراحل، گام‌های آموزشی، بانک سوالات تمرین، پروفایل کودکان، ستاره‌ها و اعطای/لغو دسترسی دستی ترم‌ها.
+7. احراز هویت امن مبتنی بر توکن امضاشده (HMAC-SHA256) و CORS قابل تنظیم.
 
 == مسیرهای REST API ==
-Namespace: /wp-json/koodak-nabegheh/v1
-- GET  /health
-- POST /auth/register
-- POST /auth/login
-- POST /auth/logout
-- GET  /auth/me
-- GET  /curriculum
-- GET  /questions
-- GET/POST /profiles
-- PUT/DELETE /profiles/{client_id}
-- GET/PUT /settings
+- GET  /wp-json/koodak-nabegheh/v1/health
+- GET  /wp-json/koodak-nabegheh/v1/curriculum
+- POST /wp-json/koodak-nabegheh/v1/terms/{id}/checkout
+- POST /wp-json/koodak-nabegheh/v1/terms/{id}/verify-purchase
+- GET  /wp-json/koodak-nabegheh/v1/questions
+- POST /wp-json/koodak-nabegheh/v1/auth/register
+- POST /wp-json/koodak-nabegheh/v1/auth/login
+- POST /wp-json/koodak-nabegheh/v1/auth/logout
+- GET  /wp-json/koodak-nabegheh/v1/auth/me
+- GET/POST /wp-json/koodak-nabegheh/v1/profiles
+- PUT/DELETE /wp-json/koodak-nabegheh/v1/profiles/{client_id}
+- GET/PUT /wp-json/koodak-nabegheh/v1/settings

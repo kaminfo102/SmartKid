@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { Lock, ArrowRight } from 'lucide-react';
 import { toEnglishDigits, toPersianDigits } from '../lib/numbers';
 import { KidIconTile } from './KidIconTile';
+import { AbacusAdventureIllustration } from './KidIllustrations';
 
 interface ParentGateProps {
   onUnlock: () => void;
@@ -64,19 +65,22 @@ export const ParentGate: React.FC<ParentGateProps> = ({ onUnlock, onCancel }) =>
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-[#F5E4CE] dark:bg-slate-950">
-      <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-6 shadow-lg">
+      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-6 shadow-[0_20px_48px_-12px_rgba(170,104,40,0.24)]">
         <div className="flex items-center justify-between mb-4">
           <button
             type="button"
             onClick={onCancel}
             aria-label="بازگشت"
-            className="min-h-[44px] min-w-[44px] rounded-2xl bg-[#FFF6EB] hover:bg-amber-50 dark:bg-slate-800 border-b-4 border-[#DFC6A8] dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200"
+            className="min-h-[44px] min-w-[44px] rounded-2xl bg-[#FFF6EB] hover:bg-amber-50 dark:bg-slate-800 border-b-4 border-[#DFC6A8] dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 transition-all"
           >
             <ArrowRight className="w-5 h-5" />
           </button>
-          <KidIconTile color="violet" size="md">
-            <Lock className="w-6 h-6" />
-          </KidIconTile>
+          <div className="flex items-center gap-2">
+            <AbacusAdventureIllustration className="w-12 h-12" />
+            <KidIconTile color="violet" size="md">
+              <Lock className="w-6 h-6" />
+            </KidIconTile>
+          </div>
           <div className="w-11" />
         </div>
 

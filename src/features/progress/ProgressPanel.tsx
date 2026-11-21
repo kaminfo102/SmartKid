@@ -40,7 +40,7 @@ export const ProgressPanel: React.FC<ProgressPanelProps> = ({
     <div className="space-y-4">
       {/* Top 4 Metrics with Colorful KidIconTiles */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-3.5 flex items-center gap-3">
+        <div className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_8px_20px_-6px_rgba(170,104,40,0.14)] p-3.5 flex items-center gap-3">
           <KidIconTile color="green" size="md">
             <CheckCircle2 className="w-6 h-6" />
           </KidIconTile>
@@ -54,7 +54,7 @@ export const ProgressPanel: React.FC<ProgressPanelProps> = ({
           </div>
         </div>
 
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-3.5 flex items-center gap-3">
+        <div className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_8px_20px_-6px_rgba(170,104,40,0.14)] p-3.5 flex items-center gap-3">
           <KidIconTile color="sky" size="md">
             <Clock className="w-6 h-6" />
           </KidIconTile>
@@ -68,7 +68,7 @@ export const ProgressPanel: React.FC<ProgressPanelProps> = ({
           </div>
         </div>
 
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-3.5 flex items-center gap-3">
+        <div className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_8px_20px_-6px_rgba(170,104,40,0.14)] p-3.5 flex items-center gap-3">
           <KidIconTile color="violet" size="md">
             <Award className="w-6 h-6" />
           </KidIconTile>
@@ -82,7 +82,7 @@ export const ProgressPanel: React.FC<ProgressPanelProps> = ({
           </div>
         </div>
 
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-3.5 flex items-center gap-3">
+        <div className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_8px_20px_-6px_rgba(170,104,40,0.14)] p-3.5 flex items-center gap-3">
           <KidIconTile color="amber" size="md">
             <Star className="w-6 h-6 fill-white" />
           </KidIconTile>
@@ -98,7 +98,7 @@ export const ProgressPanel: React.FC<ProgressPanelProps> = ({
       </div>
 
       {/* Strong & Weak Skills Analysis */}
-      <div className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-4 space-y-3">
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_8px_20px_-6px_rgba(170,104,40,0.14)] p-4 space-y-3">
         <h2 className="font-extrabold text-sm text-slate-900 dark:text-white">
           تحلیل مهارت‌های {profile.name}
         </h2>

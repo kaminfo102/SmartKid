@@ -75,7 +75,7 @@ export const BuyCoffeeButton: React.FC<BuyCoffeeButtonProps> = ({
       whileHover={reducedMotion ? undefined : { y: -2, scale: 1.01 }}
       whileTap={reducedMotion ? undefined : { scale: 0.99 }}
       aria-label="یک قهوه من رو مهمون کن — حمایت مالی از سازنده کودک نابغه"
-      className={`group relative overflow-hidden block w-full rounded-3xl bg-gradient-to-l from-[#6C2E0E] via-[#8B3E12] to-[#B45309] hover:from-[#5D260A] hover:to-[#9A3412] text-white p-4 shadow-lg shadow-amber-950/15 border border-amber-300/30 transition-all ${className}`}
+      className={`group relative overflow-hidden block w-full rounded-2xl bg-gradient-to-l from-[#6C2E0E] via-[#8B3E12] to-[#B45309] hover:from-[#5D260A] hover:to-[#9A3412] text-white p-4 shadow-[0_12px_28px_-8px_rgba(120,53,15,0.34)] border border-amber-300/30 transition-all ${className}`}
     >
       {/* Subtle warm sheen */}
       <div

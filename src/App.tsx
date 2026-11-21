@@ -8,10 +8,11 @@ import type {
   ScreenId,
   SessionResult,
   SkillKey,
+  TermDefinition,
   WordPressConfig,
   WordPressUser,
 } from './types/app';
-import { LESSONS } from './data/lessons';
+import { DEFAULT_TERMS, LESSONS } from './data/lessons';
 import {
   clearAppData,
   createChildProfile,
@@ -47,7 +48,8 @@ import { OfflineIndicator } from './components/PWAInstallButton';
 export default function App() {
   const [data, setData] = useState<StoredAppData>(() => loadAppData());
   const [screen, setScreen] = useState<ScreenId>('start');
-  const [lessons, setLessons] = useState<LessonDefinition[]>(LESSONS);
+  const [terms, setTerms] = useState<TermDefinition[]>(DEFAULT_TERMS);
+  const [activeTermId, setActiveTermId] = useState<string>(DEFAULT_TERMS[0].id);
   const [wpQuestions, setWpQuestions] = useState<PracticeQuestion[]>([]);
   const [wpUrl, setWpUrl] = useState<string>(() => getSavedWordPressUrl());
   const [wpUser, setWpUser] = useState<WordPressUser | null>(null);
@@ -64,13 +66,25 @@ export default function App() {
   const [lastResult, setLastResult] = useState<SessionResult | null>(null);
   const [parentUnlocked, setParentUnlocked] = useState(false);
 
+  const lessons = useMemo<LessonDefinition[]>(() => {
+    const flattened = terms.flatMap((t) => t.stages);
+    return flattened.length > 0 ? flattened : LESSONS;
+  }, [terms]);
+
+  const unlockedLessons = useMemo<LessonDefinition[]>(() => {
+    const allowed = terms
+      .filter((t) => t.isFree || t.unlocked)
+      .flatMap((t) => t.stages);
+    return allowed.length > 0 ? allowed : lessons;
+  }, [terms, lessons]);
+
   const activeProfile = useMemo<ChildProfile>(() => {
     return (
       data.profiles.find((p) => p.id === data.activeProfileId) ?? data.profiles[0]
     );
   }, [data.profiles, data.activeProfileId]);
 
-  // Fetch dynamic curriculum & practice questions from Headless WordPress
+  // Fetch dynamic Terms, Learning Roads & Practice Questions from Headless WordPress
   const refreshFromWordPress = useCallback(
     async (overrideUrl?: string): Promise<boolean> => {
       const targetUrl = overrideUrl ?? wpUrl;
@@ -84,19 +98,42 @@ export default function App() {
           fetchWordPressCurriculum(targetUrl),
           fetchWordPressQuestions(targetUrl),
         ]);
-        if (curriculum.stages.length > 0) {
-          setLessons(curriculum.stages);
+
+        if (curriculum.terms.length > 0) {
+          setTerms(curriculum.terms);
+          setActiveTermId((prev) =>
+            curriculum.terms.some((t) => t.id === prev)
+              ? prev
+              : curriculum.terms[0].id
+          );
+          const allStages = curriculum.terms.flatMap((t) => t.stages);
+          if (allStages.length > 0) {
+            setActiveLesson((prev) => {
+              const match = allStages.find((s) => s.id === prev.id);
+              return match ?? allStages[0];
+            });
+          }
+        } else if (curriculum.stages.length > 0) {
+          // Backward compatibility if server returns flat stages only
+          setTerms((prev) =>
+            prev.map((t, i) =>
+              i === 0 ? { ...t, stages: curriculum.stages } : t
+            )
+          );
           setActiveLesson((prev) => {
             const match = curriculum.stages.find((s) => s.id === prev.id);
             return match ?? curriculum.stages[0];
           });
         }
+
         setWpQuestions(questions);
         setWpConfig((prev) => ({
           ...prev,
           appTitle: curriculum.config.appTitle || prev.appTitle,
           dailyChallengeCount:
             curriculum.config.dailyChallengeCount || prev.dailyChallengeCount,
+          wooActive: curriculum.config.wooActive ?? prev.wooActive,
+          wooCurrency: curriculum.config.wooCurrency ?? prev.wooCurrency,
         }));
         setWpConnected(true);
         return true;
@@ -110,7 +147,7 @@ export default function App() {
     [wpUrl]
   );
 
-  // Auto-load WordPress dynamic road & questions on boot if WP URL is configured
+  // Auto-load WordPress dynamic terms & questions on boot if WP URL is configured
   useEffect(() => {
     if (wpUrl) {
       void refreshFromWordPress(wpUrl);
@@ -284,7 +321,8 @@ export default function App() {
   const handleStartFirstOrNextLesson = () => {
     audioEngine.play('uiTap');
     const nextUnfinished =
-      lessons.find((l) => !activeProfile.lessons[l.id]?.completed) ?? lessons[0];
+      unlockedLessons.find((l) => !activeProfile.lessons[l.id]?.completed) ??
+      unlockedLessons[0];
     if (nextUnfinished) {
       setActiveLesson(nextUnfinished);
       setScreen('lesson');
@@ -297,9 +335,9 @@ export default function App() {
       return;
     }
     if (lastResult.nextAction === 'next-lesson' && lastResult.lessonId) {
-      const idx = lessons.findIndex((l) => l.id === lastResult.lessonId);
-      if (idx >= 0 && idx + 1 < lessons.length) {
-        setActiveLesson(lessons[idx + 1]);
+      const idx = unlockedLessons.findIndex((l) => l.id === lastResult.lessonId);
+      if (idx >= 0 && idx + 1 < unlockedLessons.length) {
+        setActiveLesson(unlockedLessons[idx + 1]);
         setScreen('lesson');
         return;
       }
@@ -344,13 +382,45 @@ export default function App() {
         res.profiles.length > 0 ? res.profiles[0].id : prev.activeProfileId,
       settings: res.settings ? { ...prev.settings, ...res.settings } : prev.settings,
     }));
+    if (Array.isArray(res.unlockedTermIds) && res.unlockedTermIds.length > 0) {
+      const unlockedSet = new Set(res.unlockedTermIds);
+      setTerms((prev) =>
+        prev.map((t) =>
+          t.isFree || (t.dbId && unlockedSet.has(t.dbId))
+            ? { ...t, unlocked: true }
+            : t
+        )
+      );
+    }
     void refreshFromWordPress();
   };
 
   const handleWordPressLogout = () => {
     setMemoryBearerToken(null);
     setWpUser(null);
+    setTerms((prev) =>
+      prev.map((t) => ({
+        ...t,
+        unlocked: t.isFree,
+      }))
+    );
   };
+
+  const handleTermUnlocked = useCallback(
+    (termDbId?: number) => {
+      if (termDbId) {
+        setTerms((prev) =>
+          prev.map((t) =>
+            t.dbId === termDbId
+              ? { ...t, unlocked: true, unlockedSource: 'woocommerce' }
+              : t
+          )
+        );
+      }
+      void refreshFromWordPress();
+    },
+    [refreshFromWordPress]
+  );
 
   const hasProgress = Object.keys(activeProfile.lessons).length > 0;
 
@@ -358,6 +428,7 @@ export default function App() {
     <div className="min-h-screen w-full">
       {screen === 'start' && (
         <StartScreen
+          terms={terms}
           lessons={lessons}
           activeProfile={activeProfile}
           digitMode={data.settings.digitMode}
@@ -442,14 +513,23 @@ export default function App() {
 
       {screen === 'map' && (
         <LessonMap
-          lessons={lessons}
+          terms={terms}
+          activeTermId={activeTermId}
+          onSelectTerm={(id) => {
+            audioEngine.play('uiTap');
+            setActiveTermId(id);
+          }}
           profile={activeProfile}
           digitMode={data.settings.digitMode}
           reducedMotion={data.settings.reducedMotion}
           dailyChallengeCount={wpConfig.dailyChallengeCount}
+          wpUrl={wpUrl}
+          wpUser={wpUser}
           wpConnected={wpConnected}
           isRefreshing={wpRefreshing}
           onRefreshCurriculum={() => void refreshFromWordPress()}
+          onTermUnlocked={handleTermUnlocked}
+          onOpenAuth={() => setScreen('auth')}
           onSelectLesson={(lesson) => {
             audioEngine.play('uiTap');
             setActiveLesson(lesson);

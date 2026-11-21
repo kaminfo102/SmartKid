@@ -163,7 +163,7 @@ export const KiaTutorialGuide: React.FC<KiaTutorialGuideProps> = ({
       aria-label="راهنمای تصویری و انیمیشنی کیا"
     >
       {/* RTL Kia Tutorial Instruction Card */}
-      <div className="shrink-0 rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 px-3 py-2.5 shadow-sm space-y-2">
+      <div className="shrink-0 rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 px-3 py-2.5 shadow-[0_8px_20px_-6px_rgba(170,104,40,0.16)] space-y-2">
         <div className="flex items-center gap-3">
           {/* Required Kia <img> using optimized /assets/kia_269d7c8e.png */}
           <motion.div
@@ -312,7 +312,7 @@ export const KiaTutorialGuide: React.FC<KiaTutorialGuideProps> = ({
       </div>
 
       {/* Wrapped Abacus Visual + Absolute Directional Arrows & Bead Highlights Overlay */}
-      <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden rounded-3xl border-2 border-[#EEDCC5] dark:border-slate-800">
+      <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-800 shadow-[0_10px_24px_-8px_rgba(170,104,40,0.14)]">
         {children}
 
         {overlayCoords && activeStep && (

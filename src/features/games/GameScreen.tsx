@@ -29,6 +29,7 @@ import { AudioButton } from '../../components/AudioButton';
 import { FeedbackMessage } from '../../components/FeedbackMessage';
 import { CartoonObjectIcon } from '../../components/MascotDana';
 import { KiaAvatar } from '../../components/KiaAvatar';
+import { GameHubIllustration } from '../../components/KidIllustrations';
 import { KidIconTile, type KidTileColor } from '../../components/KidIconTile';
 import { audioEngine } from '../../lib/audioEngine';
 import { formatNumber } from '../../lib/numbers';
@@ -310,21 +311,24 @@ export const GameScreen: React.FC<GameScreenProps> = ({
         </header>
 
         <main className="flex-1 w-full max-w-2xl mx-auto p-4 space-y-4">
-          <div className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-4 flex items-center gap-3 shadow-xs">
-            <KiaAvatar
-              mood="happy"
-              interactive
-              className="w-16 h-16 sm:w-20 sm:h-20 shrink-0"
-              reducedMotion={settings.reducedMotion}
-            />
-            <div>
-              <p className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white">
-                کیا می‌گه: کدوم بازی رو با هم شروع کنیم؟
-              </p>
-              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-0.5">
-                روی یکی از کارت‌های رنگارنگ بزن تا بازی و ستاره‌گیری شروع بشه!
-              </p>
+          <div className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-4 flex items-center justify-between gap-3 shadow-[0_10px_24px_-6px_rgba(170,104,40,0.16)]">
+            <div className="flex items-center gap-3 min-w-0">
+              <KiaAvatar
+                mood="happy"
+                interactive
+                className="w-16 h-16 sm:w-20 sm:h-20 shrink-0"
+                reducedMotion={settings.reducedMotion}
+              />
+              <div>
+                <p className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white">
+                  کیا می‌گه: کدوم بازی رو با هم شروع کنیم؟
+                </p>
+                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-0.5">
+                  روی یکی از کارت‌های رنگارنگ بزن تا بازی و ستاره‌گیری شروع بشه!
+                </p>
+              </div>
             </div>
+            <GameHubIllustration className="hidden xs:block w-16 h-16 shrink-0" />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -336,7 +340,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
                 animate={settings.reducedMotion ? undefined : { opacity: 1, y: 0 }}
                 transition={{ delay: settings.reducedMotion ? 0 : idx * 0.05 }}
                 onClick={() => startGameMode(g.id)}
-                className="p-4 rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] hover:border-blue-400 text-right flex items-center gap-3.5 shadow-xs transition-all active:translate-y-0.5"
+                className="p-4 rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] hover:border-sky-400 text-right flex items-center gap-3.5 shadow-[0_10px_22px_-6px_rgba(170,104,40,0.16)] transition-all active:translate-y-0.5"
               >
                 <KidIconTile color={g.tileColor} size="xl">
                   {g.icon}

@@ -109,7 +109,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         <ProgressPanel profile={profile} digitMode={settings.digitMode} lessons={lessons} />
 
         {/* Headless WordPress & Plugin Card */}
-        <section className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-4 sm:p-5 space-y-3">
+        <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] p-4 sm:p-5 space-y-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-3 min-w-0">
               <KidIconTile color="sky" size="md">
@@ -164,7 +164,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         <BuyCoffeeButton variant="card" reducedMotion={settings.reducedMotion} />
 
         {/* App Settings */}
-        <section className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-4 sm:p-5">
+        <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] p-4 sm:p-5">
           <h2 className="font-extrabold text-base text-slate-900 dark:text-white mb-2">
             تنظیمات صدا، نمایش و دسترسی‌پذیری
           </h2>
@@ -258,7 +258,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         </section>
 
         {/* PWA & Local Data Management */}
-        <section className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="font-extrabold text-sm text-slate-900 dark:text-white">
               نصب آفلاین و مدیریت اطلاعات محلی

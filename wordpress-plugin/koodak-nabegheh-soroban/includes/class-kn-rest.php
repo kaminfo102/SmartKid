@@ -19,9 +19,9 @@ class KN_REST {
 			return $served;
 		}
 
-		$settings        = get_option( 'kn_soroban_settings', array() );
-		$allowed_raw     = isset( $settings['allowed_origins'] ) ? trim( (string) $settings['allowed_origins'] ) : '*';
-		$request_origin  = isset( $_SERVER['HTTP_ORIGIN'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ) : '';
+		$settings       = get_option( 'kn_soroban_settings', array() );
+		$allowed_raw    = isset( $settings['allowed_origins'] ) ? trim( (string) $settings['allowed_origins'] ) : '*';
+		$request_origin = isset( $_SERVER['HTTP_ORIGIN'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ) : '';
 
 		if ( $allowed_raw === '*' && ! empty( $request_origin ) ) {
 			header( 'Access-Control-Allow-Origin: ' . esc_url_raw( $request_origin ) );
@@ -96,7 +96,7 @@ class KN_REST {
 			)
 		);
 
-		// Dynamic learning road (stages & steps)
+		// Dynamic Terms + Learning Roads + Stages & Steps
 		register_rest_route(
 			$ns,
 			'/curriculum',
@@ -104,6 +104,27 @@ class KN_REST {
 				'methods'             => 'GET',
 				'callback'            => array( __CLASS__, 'handle_curriculum' ),
 				'permission_callback' => '__return_true',
+			)
+		);
+
+		// WooCommerce Term Checkout & Order Verification
+		register_rest_route(
+			$ns,
+			'/terms/(?P<id>\d+)/checkout',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'handle_term_checkout' ),
+				'permission_callback' => array( __CLASS__, 'require_auth' ),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/terms/(?P<id>\d+)/verify-purchase',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'handle_term_verify_purchase' ),
+				'permission_callback' => array( __CLASS__, 'require_auth' ),
 			)
 		);
 
@@ -217,20 +238,24 @@ class KN_REST {
 	}
 
 	public static function handle_health() {
+		$terms     = KN_DB::get_terms_list( true );
 		$stages    = KN_DB::get_curriculum( true );
 		$questions = KN_DB::get_questions( '', 0, true );
 		$settings  = get_option( 'kn_soroban_settings', array() );
 
 		return rest_ensure_response(
 			array(
-				'ok'                 => true,
-				'pluginVersion'      => KN_SOROBAN_VERSION,
-				'siteName'           => get_bloginfo( 'name' ),
-				'appTitle'           => $settings['app_title'] ?? 'کودک نابغه',
-				'allowRegistration'  => ! empty( $settings['allow_registration'] ),
-				'dailyChallengeCount'=> isset( $settings['daily_challenge_count'] ) ? absint( $settings['daily_challenge_count'] ) : 5,
-				'stagesCount'        => count( $stages ),
-				'questionsCount'     => count( $questions ),
+				'ok'                  => true,
+				'pluginVersion'       => KN_SOROBAN_VERSION,
+				'siteName'            => get_bloginfo( 'name' ),
+				'appTitle'            => $settings['app_title'] ?? 'کودک نابغه',
+				'allowRegistration'   => ! empty( $settings['allow_registration'] ),
+				'dailyChallengeCount' => isset( $settings['daily_challenge_count'] ) ? absint( $settings['daily_challenge_count'] ) : 5,
+				'termsCount'          => count( $terms ),
+				'stagesCount'         => count( $stages ),
+				'questionsCount'      => count( $questions ),
+				'wooActive'           => KN_Woo::is_woo_active(),
+				'wooCurrency'         => KN_Woo::get_currency_label(),
 			)
 		);
 	}
@@ -250,14 +275,16 @@ class KN_REST {
 		$token_data = KN_Auth::issue_token( $user->ID, $device );
 		$profiles   = KN_DB::get_user_profiles( $user->ID );
 		$settings   = self::get_user_app_settings( $user->ID );
+		$ent_map    = KN_DB::get_user_entitlement_map( $user->ID );
 
 		return rest_ensure_response(
 			array(
-				'token'     => $token_data['token'],
-				'expiresAt' => $token_data['expiresAt'],
-				'user'      => KN_Auth::format_user( $user ),
-				'profiles'  => $profiles,
-				'settings'  => $settings,
+				'token'           => $token_data['token'],
+				'expiresAt'       => $token_data['expiresAt'],
+				'user'            => KN_Auth::format_user( $user ),
+				'profiles'        => $profiles,
+				'settings'        => $settings,
+				'unlockedTermIds' => array_map( 'intval', array_keys( $ent_map ) ),
 			)
 		);
 	}
@@ -297,14 +324,16 @@ class KN_REST {
 		$device     = isset( $params['deviceLabel'] ) ? (string) $params['deviceLabel'] : 'Web App';
 		$token_data = KN_Auth::issue_token( $user->ID, $device );
 		$settings   = self::get_user_app_settings( $user->ID );
+		$ent_map    = KN_DB::get_user_entitlement_map( $user->ID );
 
 		return rest_ensure_response(
 			array(
-				'token'     => $token_data['token'],
-				'expiresAt' => $token_data['expiresAt'],
-				'user'      => KN_Auth::format_user( $user ),
-				'profiles'  => $profiles,
-				'settings'  => $settings,
+				'token'           => $token_data['token'],
+				'expiresAt'       => $token_data['expiresAt'],
+				'user'            => KN_Auth::format_user( $user ),
+				'profiles'        => $profiles,
+				'settings'        => $settings,
+				'unlockedTermIds' => array_map( 'intval', array_keys( $ent_map ) ),
 			)
 		);
 	}
@@ -315,26 +344,48 @@ class KN_REST {
 	}
 
 	public static function handle_me( WP_REST_Request $request ) {
-		$user = self::get_authed_user( $request );
+		$user    = self::get_authed_user( $request );
+		$ent_map = KN_DB::get_user_entitlement_map( $user->ID );
 		return rest_ensure_response(
 			array(
-				'user'     => KN_Auth::format_user( $user ),
-				'profiles' => KN_DB::get_user_profiles( $user->ID ),
-				'settings' => self::get_user_app_settings( $user->ID ),
+				'user'            => KN_Auth::format_user( $user ),
+				'profiles'        => KN_DB::get_user_profiles( $user->ID ),
+				'settings'        => self::get_user_app_settings( $user->ID ),
+				'unlockedTermIds' => array_map( 'intval', array_keys( $ent_map ) ),
 			)
 		);
 	}
 
-	public static function handle_curriculum() {
-		$stages   = KN_DB::get_curriculum( true );
+	public static function handle_curriculum( WP_REST_Request $request ) {
+		$authed_user = KN_Auth::authenticate_request( $request );
+		$user_id     = $authed_user ? (int) $authed_user->ID : 0;
+
+		$terms    = KN_DB::get_terms_curriculum( true, $user_id );
 		$settings = get_option( 'kn_soroban_settings', array() );
+
+		$flat_stages       = array();
+		$unlocked_term_ids = array();
+		foreach ( $terms as $term ) {
+			if ( ! empty( $term['unlocked'] ) ) {
+				$unlocked_term_ids[] = (int) $term['dbId'];
+			}
+			foreach ( $term['stages'] as $st ) {
+				$flat_stages[] = $st;
+			}
+		}
 
 		return rest_ensure_response(
 			array(
-				'stages' => $stages,
-				'config' => array(
+				'terms'           => $terms,
+				'stages'          => $flat_stages,
+				'unlockedTermIds' => $unlocked_term_ids,
+				'wooActive'       => KN_Woo::is_woo_active(),
+				'wooCurrency'     => KN_Woo::get_currency_label(),
+				'config'          => array(
 					'appTitle'            => $settings['app_title'] ?? 'کودک نابغه',
 					'dailyChallengeCount' => isset( $settings['daily_challenge_count'] ) ? absint( $settings['daily_challenge_count'] ) : 5,
+					'wooActive'           => KN_Woo::is_woo_active(),
+					'wooCurrency'         => KN_Woo::get_currency_label(),
 					'defaultSettings'     => array(
 						'soundEnabled'  => ! empty( $settings['default_sound_enabled'] ),
 						'speechEnabled' => ! empty( $settings['default_speech_enabled'] ),
@@ -348,10 +399,61 @@ class KN_REST {
 		);
 	}
 
+	public static function handle_term_checkout( WP_REST_Request $request ) {
+		global $wpdb;
+		$user       = self::get_authed_user( $request );
+		$term_db_id = absint( $request->get_param( 'id' ) );
+
+		$term = $wpdb->get_row(
+			$wpdb->prepare(
+				'SELECT * FROM ' . KN_DB::table_terms() . ' WHERE id = %d',
+				$term_db_id
+			),
+			ARRAY_A
+		);
+
+		if ( ! $term ) {
+			return new WP_Error( 'term_not_found', 'ترم مورد نظر یافت نشد.', array( 'status' => 404 ) );
+		}
+
+		$entitlements     = KN_DB::get_user_entitlement_map( $user->ID );
+		$already_unlocked = ! empty( $term['is_free'] ) || isset( $entitlements[ $term_db_id ] ) || user_can( $user->ID, 'manage_options' );
+		$commerce         = KN_Woo::get_term_commerce_meta( $term, $user->ID, true );
+
+		return rest_ensure_response(
+			array(
+				'termDbId'        => $term_db_id,
+				'termTitle'       => $term['title'],
+				'alreadyUnlocked' => $already_unlocked,
+				'wooActive'       => KN_Woo::is_woo_active(),
+				'wooProductId'    => (int) $term['woo_product_id'],
+				'priceAmount'     => (int) $commerce['priceAmount'],
+				'priceFormatted'  => $commerce['priceFormatted'],
+				'checkoutUrl'     => $commerce['checkoutUrl'],
+			)
+		);
+	}
+
+	public static function handle_term_verify_purchase( WP_REST_Request $request ) {
+		$user       = self::get_authed_user( $request );
+		$term_db_id = absint( $request->get_param( 'id' ) );
+
+		$res = KN_Woo::verify_user_purchase_for_term( $user->ID, $term_db_id );
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+
+		$ent_map = KN_DB::get_user_entitlement_map( $user->ID );
+		$res['unlockedTermIds'] = array_map( 'intval', array_keys( $ent_map ) );
+
+		return rest_ensure_response( $res );
+	}
+
 	public static function handle_questions( WP_REST_Request $request ) {
 		$skill      = sanitize_text_field( (string) $request->get_param( 'skill' ) );
 		$difficulty = absint( $request->get_param( 'difficulty' ) );
-		$questions  = KN_DB::get_questions( $skill, $difficulty, true );
+		$term_id    = absint( $request->get_param( 'termId' ) );
+		$questions  = KN_DB::get_questions( $skill, $difficulty, true, $term_id );
 
 		return rest_ensure_response(
 			array(

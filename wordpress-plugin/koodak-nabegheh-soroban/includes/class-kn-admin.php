@@ -23,6 +23,30 @@ class KN_Admin {
 		'brain'    => 'مغز نابغه (ذهنی)',
 	);
 
+	private static $biomes = array(
+		'farm'   => 'مزرعه آفتابی (انبار قرمز، آسیاب بادی، گندم‌زار)',
+		'forest' => 'جنگل دوستی‌های جادویی (کلبه درختی، پل رنگین‌کمان)',
+		'island' => 'جزیره گنج اعداد بزرگ (قایق بادبانی، فانوس دریایی)',
+		'space'  => 'ایستگاه فضایی ستاره‌ها (موشک، سیاره جادویی)',
+	);
+
+	private static $landmarks = array(
+		'barn'       => 'انبار قرمز مزرعه',
+		'windmill'   => 'آسیاب بادی',
+		'wheat'      => 'مزرعه گندم طلایی',
+		'garden'     => 'باغ گل آفتاب‌گردان',
+		'treehouse'  => 'کلبه درختی جادویی',
+		'bridge'     => 'پل رنگین‌کمان',
+		'waterfall'  => 'آبشار جادویی',
+		'owlcastle'  => 'قصر جغد دانا',
+		'boat'       => 'قایق بادبانی',
+		'lighthouse' => 'فانوس دریایی',
+		'cave'       => 'غار الماس',
+		'chest'      => 'صندوقچه گنج',
+		'rocket'     => 'موشک فضایی',
+		'planet'     => 'سیاره اعداد',
+	);
+
 	private static $avatars = array(
 		'owl'    => 'جغد دانا',
 		'fox'    => 'روباه زرنگ',
@@ -40,7 +64,7 @@ class KN_Admin {
 
 	public static function register_menus() {
 		add_menu_page(
-			'کودک نابغه — چرتکه',
+			'کودک نابغه — چرتکه و ترم‌ها',
 			'کودک نابغه',
 			'manage_options',
 			'kn-soroban',
@@ -56,6 +80,15 @@ class KN_Admin {
 			'manage_options',
 			'kn-soroban',
 			array( __CLASS__, 'render_dashboard_page' )
+		);
+
+		add_submenu_page(
+			'kn-soroban',
+			'ترم‌ها و اتصال ووکامرس',
+			'ترم‌ها و ووکامرس',
+			'manage_options',
+			'kn-soroban-terms',
+			array( __CLASS__, 'render_terms_page' )
 		);
 
 		add_submenu_page(
@@ -78,8 +111,8 @@ class KN_Admin {
 
 		add_submenu_page(
 			'kn-soroban',
-			'کاربران، کودکان و امتیازات',
-			'کاربران و امتیازات',
+			'کاربران، دسترسی ترم‌ها و امتیازات',
+			'کاربران و دسترسی ترم‌ها',
 			'manage_options',
 			'kn-soroban-users',
 			array( __CLASS__, 'render_users_page' )
@@ -117,6 +150,63 @@ class KN_Admin {
 		global $wpdb;
 		$action = sanitize_key( wp_unslash( $_POST['kn_action'] ) );
 
+		// 0A. Save or Create Term
+		if ( $action === 'save_term' && check_admin_referer( 'kn_save_term' ) ) {
+			$term_db_id = absint( $_POST['term_id'] ?? 0 );
+			$slug_raw   = sanitize_title( wp_unslash( $_POST['slug'] ?? '' ) );
+			if ( empty( $slug_raw ) ) {
+				$slug_raw = 'term-' . time();
+			}
+			$biome = sanitize_key( wp_unslash( $_POST['biome'] ?? 'farm' ) );
+			if ( ! array_key_exists( $biome, self::$biomes ) ) {
+				$biome = 'farm';
+			}
+
+			$is_free              = ! empty( $_POST['is_free'] ) ? 1 : 0;
+			$checkout_override_in = trim( (string) wp_unslash( $_POST['checkout_url_override'] ?? '' ) );
+			$safe_override        = '';
+			if ( ! empty( $checkout_override_in ) ) {
+				$parsed = wp_parse_url( $checkout_override_in );
+				if ( is_array( $parsed ) && isset( $parsed['scheme'] ) && in_array( strtolower( $parsed['scheme'] ), array( 'http', 'https' ), true ) ) {
+					$safe_override = esc_url_raw( $checkout_override_in );
+				}
+			}
+
+			$data = array(
+				'slug'                  => $slug_raw,
+				'term_number'           => max( 1, absint( $_POST['term_number'] ?? 1 ) ),
+				'title'                 => sanitize_text_field( wp_unslash( $_POST['title'] ?? '' ) ),
+				'subtitle'              => sanitize_text_field( wp_unslash( $_POST['subtitle'] ?? '' ) ),
+				'story_title'           => sanitize_text_field( wp_unslash( $_POST['story_title'] ?? '' ) ),
+				'story_description'     => sanitize_textarea_field( wp_unslash( $_POST['story_description'] ?? '' ) ),
+				'biome'                 => $biome,
+				'accent_color'          => sanitize_hex_color( wp_unslash( $_POST['accent_color'] ?? '#4BB543' ) ) ?: '#4BB543',
+				'is_free'               => $is_free,
+				'price_amount'          => $is_free ? 0 : absint( $_POST['price_amount'] ?? 0 ),
+				'woo_product_id'        => $is_free ? 0 : absint( $_POST['woo_product_id'] ?? 0 ),
+				'checkout_url_override' => $safe_override,
+				'is_active'             => ! empty( $_POST['is_active'] ) ? 1 : 0,
+			);
+
+			if ( $term_db_id > 0 ) {
+				$wpdb->update( KN_DB::table_terms(), $data, array( 'id' => $term_db_id ) );
+				self::redirect_with_notice( 'kn-soroban-terms', 'ترم با موفقیت ویرایش شد.' );
+			} else {
+				$wpdb->insert( KN_DB::table_terms(), $data );
+				self::redirect_with_notice( 'kn-soroban-terms', 'ترم جدید با موفقیت ایجاد شد!' );
+			}
+		}
+
+		// 0B. Delete Term
+		if ( $action === 'delete_term' && check_admin_referer( 'kn_delete_term' ) ) {
+			$term_db_id = absint( $_POST['term_id'] ?? 0 );
+			if ( $term_db_id > 0 ) {
+				$wpdb->delete( KN_DB::table_entitlements(), array( 'term_id' => $term_db_id ), array( '%d' ) );
+				$wpdb->delete( KN_DB::table_terms(), array( 'id' => $term_db_id ), array( '%d' ) );
+			}
+			self::redirect_with_notice( 'kn-soroban-terms', 'ترم حذف شد.' );
+		}
+
 		// 1. Save or Create Stage
 		if ( $action === 'save_stage' && check_admin_referer( 'kn_save_stage' ) ) {
 			$stage_id = absint( $_POST['stage_id'] ?? 0 );
@@ -124,12 +214,19 @@ class KN_Admin {
 			if ( empty( $slug_raw ) ) {
 				$slug_raw = 'stage-' . time();
 			}
+			$landmark = sanitize_key( wp_unslash( $_POST['landmark'] ?? 'barn' ) );
+			if ( ! array_key_exists( $landmark, self::$landmarks ) ) {
+				$landmark = 'barn';
+			}
 
 			$data = array(
+				'term_id'            => max( 1, absint( $_POST['term_id'] ?? 1 ) ),
 				'slug'               => $slug_raw,
 				'stage_number'       => max( 1, absint( $_POST['stage_number'] ?? 1 ) ),
 				'title'              => sanitize_text_field( wp_unslash( $_POST['title'] ?? '' ) ),
 				'short_goal'         => sanitize_text_field( wp_unslash( $_POST['short_goal'] ?? '' ) ),
+				'story_caption'      => sanitize_textarea_field( wp_unslash( $_POST['story_caption'] ?? '' ) ),
+				'landmark'           => $landmark,
 				'skill'              => sanitize_text_field( wp_unslash( $_POST['skill'] ?? 'recognition' ) ),
 				'columns_count'      => max( 1, min( 4, absint( $_POST['columns_count'] ?? 1 ) ) ),
 				'unlock_requirement' => sanitize_title( wp_unslash( $_POST['unlock_requirement'] ?? '' ) ),
@@ -202,6 +299,7 @@ class KN_Admin {
 			$op  = sanitize_text_field( wp_unslash( $_POST['operation'] ?? '' ) );
 
 			$data = array(
+				'term_id'        => absint( $_POST['term_id'] ?? 0 ),
 				'skill'          => sanitize_text_field( wp_unslash( $_POST['skill'] ?? 'recognition' ) ),
 				'difficulty'     => max( 1, min( 5, absint( $_POST['difficulty'] ?? 1 ) ) ),
 				'columns_count'  => max( 1, min( 4, absint( $_POST['columns_count'] ?? 1 ) ) ),
@@ -266,15 +364,32 @@ class KN_Admin {
 					'difficulty_level' => max( 1, min( 5, absint( $_POST['difficulty_level'] ?? 1 ) ) ),
 				);
 				if ( ! empty( $_POST['reset_progress'] ) ) {
-					$update['total_stars']     = 0;
-					$update['total_correct']   = 0;
-					$update['total_attempts']  = 0;
-					$update['lessons_json']    = wp_json_encode( new stdClass() );
-					$update['skills_json']     = wp_json_encode( KN_DB::default_skills_map() );
+					$update['total_stars']    = 0;
+					$update['total_correct']  = 0;
+					$update['total_attempts'] = 0;
+					$update['lessons_json']   = wp_json_encode( new stdClass() );
+					$update['skills_json']    = wp_json_encode( KN_DB::default_skills_map() );
 				}
 				$wpdb->update( KN_DB::table_profiles(), $update, array( 'id' => $profile_db_id ) );
 			}
 			self::redirect_with_notice( 'kn-soroban-users', 'امتیاز و مشخصات کودک ذخیره شد.' );
+		}
+
+		// 8B. Grant or Revoke Term Entitlement for a WP User
+		if ( $action === 'admin_toggle_entitlement' && check_admin_referer( 'kn_admin_toggle_entitlement' ) ) {
+			$target_uid = absint( $_POST['target_user_id'] ?? 0 );
+			$term_db_id = absint( $_POST['term_id'] ?? 0 );
+			$mode       = sanitize_key( wp_unslash( $_POST['entitlement_mode'] ?? 'grant' ) );
+
+			if ( $target_uid > 0 && $term_db_id > 0 ) {
+				if ( $mode === 'revoke' ) {
+					KN_DB::revoke_term_entitlement( $target_uid, $term_db_id );
+					self::redirect_with_notice( 'kn-soroban-users', 'دسترسی کاربر به ترم لغو شد.' );
+				} else {
+					KN_DB::grant_term_entitlement( $target_uid, $term_db_id, 'admin', 0 );
+					self::redirect_with_notice( 'kn-soroban-users', 'ترم برای کاربر با موفقیت فعال شد!' );
+				}
+			}
 		}
 
 		// 9. Save Headless Settings
@@ -349,16 +464,21 @@ class KN_Admin {
 	 */
 	public static function render_dashboard_page() {
 		global $wpdb;
-		$t_stages    = KN_DB::table_stages();
-		$t_steps     = KN_DB::table_steps();
-		$t_questions = KN_DB::table_questions();
-		$t_profiles  = KN_DB::table_profiles();
+		$t_terms        = KN_DB::table_terms();
+		$t_stages       = KN_DB::table_stages();
+		$t_steps        = KN_DB::table_steps();
+		$t_questions    = KN_DB::table_questions();
+		$t_profiles     = KN_DB::table_profiles();
+		$t_entitlements = KN_DB::table_entitlements();
 
+		$terms_count     = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t_terms}" );
 		$stages_count    = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t_stages}" );
 		$steps_count     = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t_steps}" );
 		$questions_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t_questions}" );
 		$profiles_count  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t_profiles}" );
 		$total_stars     = (int) $wpdb->get_var( "SELECT COALESCE(SUM(total_stars), 0) FROM {$t_profiles}" );
+		$ent_count       = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t_entitlements}" );
+		$woo_active      = KN_Woo::is_woo_active();
 
 		$top_learners = $wpdb->get_results(
 			"SELECT p.*, u.user_email, u.user_login FROM {$t_profiles} p LEFT JOIN {$wpdb->users} u ON p.user_id = u.ID ORDER BY p.total_stars DESC, p.total_correct DESC LIMIT 10",
@@ -366,21 +486,21 @@ class KN_Admin {
 		);
 		?>
 		<div class="kn-wrap">
-			<?php self::render_header( 'داشبورد مدیریت «کودک نابغه»', 'کنترل کامل جاده آموزش چرتکه سوروبان، بانک سوالات، کاربران و پیشرفت کودکان' ); ?>
+			<?php self::render_header( 'داشبورد مدیریت «کودک نابغه»', 'کنترل کامل ترم‌های آموزشی، نقشه‌های داستانی، ووکامرس، بانک سوالات و پیشرفت کودکان' ); ?>
 
 			<div class="kn-kpi-grid">
+				<div class="kn-kpi-card">
+					<div class="kn-kpi-badge kn-bg-violet">📚</div>
+					<div>
+						<div class="kn-kpi-num"><?php echo esc_html( number_format_i18n( $terms_count ) ); ?></div>
+						<div class="kn-kpi-label">ترم‌های داستانی</div>
+					</div>
+				</div>
 				<div class="kn-kpi-card">
 					<div class="kn-kpi-badge kn-bg-blue">🗺️</div>
 					<div>
 						<div class="kn-kpi-num"><?php echo esc_html( number_format_i18n( $stages_count ) ); ?></div>
-						<div class="kn-kpi-label">مراحل جاده یادگیری</div>
-					</div>
-				</div>
-				<div class="kn-kpi-card">
-					<div class="kn-kpi-badge kn-bg-violet">👣</div>
-					<div>
-						<div class="kn-kpi-num"><?php echo esc_html( number_format_i18n( $steps_count ) ); ?></div>
-						<div class="kn-kpi-label">گام‌های آموزشی تعاملی</div>
+						<div class="kn-kpi-label">مراحل کل (<?php echo esc_html( number_format_i18n( $steps_count ) ); ?> گام)</div>
 					</div>
 				</div>
 				<div class="kn-kpi-card">
@@ -394,14 +514,14 @@ class KN_Admin {
 					<div class="kn-kpi-badge kn-bg-pink">👧</div>
 					<div>
 						<div class="kn-kpi-num"><?php echo esc_html( number_format_i18n( $profiles_count ) ); ?></div>
-						<div class="kn-kpi-label">پروفایل کودکان فعال</div>
+						<div class="kn-kpi-label">کودکان (<?php echo esc_html( number_format_i18n( $total_stars ) ); ?> ⭐)</div>
 					</div>
 				</div>
 				<div class="kn-kpi-card">
-					<div class="kn-kpi-badge kn-bg-amber">⭐</div>
+					<div class="kn-kpi-badge kn-bg-amber">🛒</div>
 					<div>
-						<div class="kn-kpi-num"><?php echo esc_html( number_format_i18n( $total_stars ) ); ?></div>
-						<div class="kn-kpi-label">کل ستاره‌های کسب‌شده</div>
+						<div class="kn-kpi-num"><?php echo $woo_active ? 'متصل' : 'غیرفعال'; ?></div>
+						<div class="kn-kpi-label">ووکامرس (<?php echo esc_html( number_format_i18n( $ent_count ) ); ?> دسترسی ترم)</div>
 					</div>
 				</div>
 			</div>
@@ -410,14 +530,18 @@ class KN_Admin {
 				<div class="kn-card-header">
 					<h2>دسترسی سریع مدیریت</h2>
 					<div style="display:flex;gap:8px;flex-wrap:wrap;">
-						<a class="kn-btn kn-btn-primary" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-stages' ) ); ?>">مدیریت جاده و مراحل</a>
-						<a class="kn-btn kn-btn-green" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-questions' ) ); ?>">افزودن سوال تمرینی</a>
-						<a class="kn-btn kn-btn-amber" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-users' ) ); ?>">کاربران و امتیازات</a>
-						<a class="kn-btn kn-btn-ghost" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-settings' ) ); ?>">تنظیمات هدلس</a>
+						<a class="kn-btn kn-btn-primary" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-terms' ) ); ?>">ترم‌ها و اتصال ووکامرس</a>
+						<a class="kn-btn kn-btn-green" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-stages' ) ); ?>">مدیریت جاده‌ها و مراحل</a>
+						<a class="kn-btn kn-btn-amber" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-questions' ) ); ?>">بانک سوالات</a>
+						<a class="kn-btn kn-btn-ghost" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-users' ) ); ?>">کاربران و دسترسی ترم‌ها</a>
 					</div>
 				</div>
 				<p style="margin:0;font-size:13px;color:#5c3a1f;">
-					هر تغییری که در «جاده و مراحل» یا «بانک سوالات» ذخیره کنید، بلافاصله در جاده یادگیری و صفحه تمرین اپلیکیشن کودک نابغه نمایش داده می‌شود.
+					<?php if ( $woo_active ) : ?>
+						✅ <strong>ووکامرس فعال است:</strong> می‌توانید در صفحه «ترم‌ها و ووکامرس» هر ترم پولی را به محصول ووکامرس متصل کنید تا پس از پرداخت موفق، به‌طور خودکار برای کاربر باز شود.
+					<?php else : ?>
+						⚠️ <strong>توجه:</strong> افزونه <strong>WooCommerce</strong> هنوز روی این سایت نصب یا فعال نشده است. تا زمان فعال‌سازی ووکامرس، می‌توانید دسترسی ترم‌ها را به‌صورت دستی از بخش «کاربران و دسترسی ترم‌ها» فعال کنید.
+					<?php endif; ?>
 				</p>
 			</div>
 
@@ -426,7 +550,7 @@ class KN_Admin {
 					<h2>برترین قهرمانان چرتکه (جدول امتیازات)</h2>
 				</div>
 				<?php if ( empty( $top_learners ) ) : ?>
-					<p>هنوز کودکی ثبت نشده است. از بخش «کاربران و امتیازات» یا اپلیکیشن ثبت‌نام کنید.</p>
+					<p>هنوز کودکی ثبت نشده است. از بخش «کاربران و دسترسی ترم‌ها» یا اپلیکیشن ثبت‌نام کنید.</p>
 				<?php else : ?>
 					<table class="kn-table">
 						<thead>
@@ -464,13 +588,245 @@ class KN_Admin {
 	}
 
 	/**
-	 * Page 2: Road & Stages Builder (Full CRUD for Stages + Steps)
+	 * Page 2: Terms & WooCommerce Product Connection Manager
 	 */
-	public static function render_stages_page() {
-		$stages = KN_DB::get_curriculum( false );
+	public static function render_terms_page() {
+		$terms        = KN_DB::get_terms_curriculum( false, 0 );
+		$woo_active   = KN_Woo::is_woo_active();
+		$woo_products = $woo_active ? KN_Woo::get_admin_products_list() : array();
 		?>
 		<div class="kn-wrap">
-			<?php self::render_header( 'مدیریت جاده یادگیری و مراحل', 'مراحل جاده، ترتیب قرارگیری، شرط بازشدن، رنگ و گام‌های آموزشی هر مرحله را بسازید و ویرایش کنید.' ); ?>
+			<?php self::render_header( 'مدیریت ترم‌های داستانی و فروش با ووکامرس', 'هر ترم یک نقشه ماجراجویی و داستان اختصاصی دارد. ترم اول رایگان است و ترم‌های بعدی را می‌توانید به محصولات ووکامرس متصل کنید.' ); ?>
+
+			<div class="kn-card">
+				<div class="kn-card-header">
+					<h2>افزودن ترم جدید</h2>
+					<button type="button" class="kn-btn kn-btn-primary" data-kn-toggle="kn-new-term-form">+ ترم جدید</button>
+				</div>
+				<div id="kn-new-term-form" class="kn-collapsible <?php echo empty( $terms ) ? 'is-open' : ''; ?>">
+					<form method="post">
+						<?php wp_nonce_field( 'kn_save_term' ); ?>
+						<input type="hidden" name="kn_action" value="save_term" />
+						<div class="kn-grid-3">
+							<div class="kn-field">
+								<label>عنوان ترم</label>
+								<input type="text" name="title" required placeholder="مثلاً: ترم ۴: ایستگاه فضایی محاسبه سریع" />
+							</div>
+							<div class="kn-field">
+								<label>شناسه یکتا (Slug انگلیسی)</label>
+								<input type="text" name="slug" dir="ltr" placeholder="term-4-space" />
+							</div>
+							<div class="kn-field">
+								<label>شماره ترتیب ترم</label>
+								<input type="number" name="term_number" value="<?php echo esc_attr( count( $terms ) + 1 ); ?>" min="1" />
+							</div>
+						</div>
+
+						<div class="kn-grid-2">
+							<div class="kn-field">
+								<label>زیرعنوان کوتاه</label>
+								<input type="text" name="subtitle" required placeholder="خلاصه مهارت‌های این ترم" />
+							</div>
+							<div class="kn-field">
+								<label>عنوان داستان نقشه</label>
+								<input type="text" name="story_title" required placeholder="مثلاً: سفر فضایی کیا به سیاره اعداد" />
+							</div>
+						</div>
+
+						<div class="kn-field">
+							<label>متن داستان کودکانه (با صدای کیا هم خوانده می‌شود)</label>
+							<textarea name="story_description" rows="2" required placeholder="داستان کوتاه و جذاب برای شروع نقشه این ترم..."></textarea>
+						</div>
+
+						<div class="kn-grid-3">
+							<div class="kn-field">
+								<label>تم دنیای نقشه (Biome)</label>
+								<select name="biome">
+									<?php foreach ( self::$biomes as $k => $lbl ) : ?>
+										<option value="<?php echo esc_attr( $k ); ?>"><?php echo esc_html( $lbl ); ?></option>
+									<?php endforeach; ?>
+								</select>
+							</div>
+							<div class="kn-field">
+								<label>رنگ تاکیدی</label>
+								<input type="color" name="accent_color" value="#5472EB" style="height:40px;" />
+							</div>
+							<div class="kn-field" style="padding-top:22px;">
+								<label style="margin-left:14px;"><input type="checkbox" name="is_free" value="1" /> ترم رایگان است</label>
+								<label><input type="checkbox" name="is_active" value="1" checked /> فعال در اپ</label>
+							</div>
+						</div>
+
+						<div class="kn-grid-3">
+							<div class="kn-field">
+								<label>مبلغ نمایشی (در صورت عدم انتخاب محصول ووکامرس)</label>
+								<input type="number" name="price_amount" value="250000" min="0" />
+							</div>
+							<div class="kn-field">
+								<label>محصول مرتبط در ووکامرس</label>
+								<?php if ( $woo_active && ! empty( $woo_products ) ) : ?>
+									<select name="woo_product_id">
+										<option value="0">— انتخاب محصول ووکامرس —</option>
+										<?php foreach ( $woo_products as $wp_prod ) : ?>
+											<option value="<?php echo esc_attr( $wp_prod['id'] ); ?>">
+												#<?php echo esc_html( $wp_prod['id'] . ' — ' . $wp_prod['name'] . ' (' . $wp_prod['price'] . ')' ); ?>
+											</option>
+										<?php endforeach; ?>
+									</select>
+								<?php else : ?>
+									<input type="number" name="woo_product_id" value="0" min="0" placeholder="شناسه محصول ووکامرس (Product ID)" />
+								<?php endif; ?>
+							</div>
+							<div class="kn-field">
+								<label>لینک پرداخت اختصاصی (اختیاری)</label>
+								<input type="text" name="checkout_url_override" dir="ltr" placeholder="https://yoursite.com/checkout/?add-to-cart=..." />
+							</div>
+						</div>
+
+						<button type="submit" class="kn-btn kn-btn-green">ایجاد ترم جدید</button>
+					</form>
+				</div>
+			</div>
+
+			<?php foreach ( $terms as $term ) : ?>
+				<div class="kn-stage-item">
+					<div class="kn-stage-head">
+						<div>
+							<span class="kn-pill kn-pill-blue">ترم <?php echo esc_html( $term['termNumber'] ); ?></span>
+							<span class="kn-pill <?php echo $term['isFree'] ? 'kn-pill-green' : 'kn-pill-amber'; ?>">
+								<?php echo $term['isFree'] ? 'رایگان (استارتر)' : 'پولی: ' . esc_html( $term['priceFormatted'] ); ?>
+							</span>
+							<?php if ( ! $term['isFree'] && ! empty( $term['wooProductId'] ) ) : ?>
+								<span class="kn-pill kn-pill-blue">محصول ووکامرس #<?php echo esc_html( $term['wooProductId'] ); ?></span>
+							<?php endif; ?>
+							<strong style="font-size:16px;margin-right:6px;"><?php echo esc_html( $term['title'] ); ?></strong>
+							<div style="font-size:12px;color:#7c5b43;margin-top:4px;">
+								داستان: <strong><?php echo esc_html( $term['storyTitle'] ); ?></strong> · دنیا: <?php echo esc_html( self::$biomes[ $term['biome'] ] ?? $term['biome'] ); ?> · تعداد مراحل جاده: <?php echo esc_html( count( $term['stages'] ) ); ?>
+							</div>
+						</div>
+						<div style="display:flex;gap:8px;flex-wrap:wrap;">
+							<button type="button" class="kn-btn kn-btn-ghost" data-kn-toggle="kn-edit-term-<?php echo esc_attr( $term['dbId'] ); ?>">ویرایش ترم</button>
+							<a class="kn-btn kn-btn-amber" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-stages&filter_term=' . $term['dbId'] ) ); ?>">مدیریت مراحل این جاده</a>
+							<form method="post" style="display:inline;" onsubmit="return confirm('این ترم حذف شود؟');">
+								<?php wp_nonce_field( 'kn_delete_term' ); ?>
+								<input type="hidden" name="kn_action" value="delete_term" />
+								<input type="hidden" name="term_id" value="<?php echo esc_attr( $term['dbId'] ); ?>" />
+								<button type="submit" class="kn-btn kn-btn-danger">حذف</button>
+							</form>
+						</div>
+					</div>
+
+					<div id="kn-edit-term-<?php echo esc_attr( $term['dbId'] ); ?>" class="kn-collapsible">
+						<form method="post">
+							<?php wp_nonce_field( 'kn_save_term' ); ?>
+							<input type="hidden" name="kn_action" value="save_term" />
+							<input type="hidden" name="term_id" value="<?php echo esc_attr( $term['dbId'] ); ?>" />
+							<div class="kn-grid-3">
+								<div class="kn-field">
+									<label>عنوان ترم</label>
+									<input type="text" name="title" value="<?php echo esc_attr( $term['title'] ); ?>" required />
+								</div>
+								<div class="kn-field">
+									<label>شناسه (Slug)</label>
+									<input type="text" name="slug" dir="ltr" value="<?php echo esc_attr( $term['id'] ); ?>" required />
+								</div>
+								<div class="kn-field">
+									<label>ترتیب</label>
+									<input type="number" name="term_number" value="<?php echo esc_attr( $term['termNumber'] ); ?>" min="1" />
+								</div>
+							</div>
+							<div class="kn-grid-2">
+								<div class="kn-field">
+									<label>زیرعنوان</label>
+									<input type="text" name="subtitle" value="<?php echo esc_attr( $term['subtitle'] ); ?>" />
+								</div>
+								<div class="kn-field">
+									<label>عنوان داستان</label>
+									<input type="text" name="story_title" value="<?php echo esc_attr( $term['storyTitle'] ); ?>" />
+								</div>
+							</div>
+							<div class="kn-field">
+								<label>متن داستان کودکانه</label>
+								<textarea name="story_description" rows="2"><?php echo esc_textarea( $term['storyDescription'] ); ?></textarea>
+							</div>
+							<div class="kn-grid-3">
+								<div class="kn-field">
+									<label>تم دنیای نقشه</label>
+									<select name="biome">
+										<?php foreach ( self::$biomes as $k => $lbl ) : ?>
+											<option value="<?php echo esc_attr( $k ); ?>" <?php selected( $term['biome'], $k ); ?>><?php echo esc_html( $lbl ); ?></option>
+										<?php endforeach; ?>
+									</select>
+								</div>
+								<div class="kn-field">
+									<label>رنگ</label>
+									<input type="color" name="accent_color" value="<?php echo esc_attr( $term['accentColor'] ); ?>" style="height:40px;" />
+								</div>
+								<div class="kn-field" style="padding-top:22px;">
+									<label style="margin-left:14px;"><input type="checkbox" name="is_free" value="1" <?php checked( $term['isFree'] ); ?> /> رایگان</label>
+									<label><input type="checkbox" name="is_active" value="1" <?php checked( $term['isActive'] ); ?> /> فعال</label>
+								</div>
+							</div>
+							<div class="kn-grid-3">
+								<div class="kn-field">
+									<label>قیمت پایه (تومان)</label>
+									<input type="number" name="price_amount" value="<?php echo esc_attr( $term['priceAmount'] ); ?>" min="0" />
+								</div>
+								<div class="kn-field">
+									<label>شناسه / محصول ووکامرس</label>
+									<?php if ( $woo_active && ! empty( $woo_products ) ) : ?>
+										<select name="woo_product_id">
+											<option value="0">— بدون محصول متصل —</option>
+											<?php foreach ( $woo_products as $wp_prod ) : ?>
+												<option value="<?php echo esc_attr( $wp_prod['id'] ); ?>" <?php selected( (int) $term['wooProductId'], (int) $wp_prod['id'] ); ?>>
+													#<?php echo esc_html( $wp_prod['id'] . ' — ' . $wp_prod['name'] . ' (' . $wp_prod['price'] . ')' ); ?>
+												</option>
+											<?php endforeach; ?>
+										</select>
+									<?php else : ?>
+										<input type="number" name="woo_product_id" value="<?php echo esc_attr( $term['wooProductId'] ); ?>" min="0" />
+									<?php endif; ?>
+								</div>
+								<div class="kn-field">
+									<label>لینک پرداخت جایگزین (اختیاری)</label>
+									<input type="text" name="checkout_url_override" dir="ltr" value="<?php echo esc_attr( $term['checkoutUrlOverride'] ?? '' ); ?>" />
+								</div>
+							</div>
+							<button type="submit" class="kn-btn kn-btn-primary">ذخیره تغییرات ترم</button>
+						</form>
+					</div>
+				</div>
+			<?php endforeach; ?>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Page 3: Road & Stages Builder (Scoped by Term + Landmarks + Story Captions + Steps)
+	 */
+	public static function render_stages_page() {
+		$terms       = KN_DB::get_terms_list( false );
+		$filter_term = absint( $_GET['filter_term'] ?? 0 );
+		$stages      = KN_DB::get_curriculum( false, $filter_term );
+		?>
+		<div class="kn-wrap">
+			<?php self::render_header( 'مدیریت جاده یادگیری و مراحل', 'برای هر ترم، مراحل جاده، مکان داستانی نقشه (انبار، آسیاب، کلبه درختی، صندوقچه گنج و...) و گام‌های آموزشی را بسازید.' ); ?>
+
+			<!-- Filter by Term -->
+			<div class="kn-card" style="padding:14px 20px;">
+				<form method="get" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+					<input type="hidden" name="page" value="kn-soroban-stages" />
+					<strong>فیلتر مراحل بر اساس ترم:</strong>
+					<select name="filter_term" onchange="this.form.submit()" style="min-width:260px;padding:6px 10px;border-radius:10px;border:2px solid #eedcc5;">
+						<option value="0">همه ترم‌ها</option>
+						<?php foreach ( $terms as $tm ) : ?>
+							<option value="<?php echo esc_attr( $tm['id'] ); ?>" <?php selected( $filter_term, (int) $tm['id'] ); ?>>
+								<?php echo esc_html( $tm['title'] ); ?>
+							</option>
+						<?php endforeach; ?>
+					</select>
+				</form>
+			</div>
 
 			<!-- Add New Stage Form -->
 			<div class="kn-card">
@@ -484,25 +840,49 @@ class KN_Admin {
 						<input type="hidden" name="kn_action" value="save_stage" />
 						<div class="kn-grid-3">
 							<div class="kn-field">
+								<label>متعلق به ترم</label>
+								<select name="term_id">
+									<?php foreach ( $terms as $tm ) : ?>
+										<option value="<?php echo esc_attr( $tm['id'] ); ?>" <?php selected( $filter_term, (int) $tm['id'] ); ?>>
+											<?php echo esc_html( $tm['title'] ); ?>
+										</option>
+									<?php endforeach; ?>
+								</select>
+							</div>
+							<div class="kn-field">
 								<label>عنوان مرحله</label>
-								<input type="text" name="title" required placeholder="مثلاً: جمع دو رقمی با دوست ۱۰" />
+								<input type="text" name="title" required placeholder="مثلاً: کلبه درختی دوستان ۵" />
 							</div>
 							<div class="kn-field">
 								<label>شناسه یکتا (انگلیسی / Slug)</label>
-								<input type="text" name="slug" dir="ltr" placeholder="stage-7-advanced" />
-							</div>
-							<div class="kn-field">
-								<label>شماره ترتیب روی جاده</label>
-								<input type="number" name="stage_number" value="<?php echo esc_attr( count( $stages ) + 1 ); ?>" min="1" />
+								<input type="text" name="slug" dir="ltr" placeholder="stage-10-custom" />
 							</div>
 						</div>
 
-						<div class="kn-field">
-							<label>توضیح کوتاه و هدف مرحله</label>
-							<input type="text" name="short_goal" required placeholder="کودک در این مرحله چه مهارتی یاد می‌گیرد؟" />
+						<div class="kn-grid-2">
+							<div class="kn-field">
+								<label>توضیح کوتاه و هدف مرحله</label>
+								<input type="text" name="short_goal" required placeholder="کودک در این مرحله چه مهارتی یاد می‌گیرد؟" />
+							</div>
+							<div class="kn-field">
+								<label>متن داستانی روی نقشه</label>
+								<input type="text" name="story_caption" placeholder="مثلاً: کنار آسیاب بادی گندم‌ها را بشماریم!" />
+							</div>
 						</div>
 
 						<div class="kn-grid-3">
+							<div class="kn-field">
+								<label>مکان داستانی نقشه (Landmark)</label>
+								<select name="landmark">
+									<?php foreach ( self::$landmarks as $k => $lbl ) : ?>
+										<option value="<?php echo esc_attr( $k ); ?>"><?php echo esc_html( $lbl ); ?></option>
+									<?php endforeach; ?>
+								</select>
+							</div>
+							<div class="kn-field">
+								<label>شماره ترتیب روی جاده ترم</label>
+								<input type="number" name="stage_number" value="<?php echo esc_attr( count( $stages ) + 1 ); ?>" min="1" />
+							</div>
 							<div class="kn-field">
 								<label>مهارت مرتبط</label>
 								<select name="skill">
@@ -511,6 +891,9 @@ class KN_Admin {
 									<?php endforeach; ?>
 								</select>
 							</div>
+						</div>
+
+						<div class="kn-grid-3">
 							<div class="kn-field">
 								<label>تعداد ستون چرتکه</label>
 								<input type="number" name="columns_count" value="2" min="1" max="4" />
@@ -524,24 +907,21 @@ class KN_Admin {
 									<?php endforeach; ?>
 								</select>
 							</div>
+							<div class="kn-field">
+								<label>آیکن و رنگ</label>
+								<div style="display:flex;gap:6px;">
+									<select name="icon_name">
+										<?php foreach ( self::$icons as $k => $lbl ) : ?>
+											<option value="<?php echo esc_attr( $k ); ?>"><?php echo esc_html( $lbl ); ?></option>
+										<?php endforeach; ?>
+									</select>
+									<input type="color" name="accent_color" value="#5472EB" style="height:40px;width:64px;" />
+								</div>
+							</div>
 						</div>
 
-						<div class="kn-grid-3">
-							<div class="kn-field">
-								<label>آیکن پین جاده</label>
-								<select name="icon_name">
-									<?php foreach ( self::$icons as $k => $lbl ) : ?>
-										<option value="<?php echo esc_attr( $k ); ?>"><?php echo esc_html( $lbl ); ?></option>
-									<?php endforeach; ?>
-								</select>
-							</div>
-							<div class="kn-field">
-								<label>رنگ تاکیدی</label>
-								<input type="color" name="accent_color" value="#5472EB" style="height:40px;" />
-							</div>
-							<div class="kn-field" style="display:flex;align-items:center;padding-top:22px;">
-								<label><input type="checkbox" name="is_active" value="1" checked /> فعال در جاده اپلیکیشن</label>
-							</div>
+						<div class="kn-field">
+							<label><input type="checkbox" name="is_active" value="1" checked /> فعال در جاده اپلیکیشن</label>
 						</div>
 
 						<button type="submit" class="kn-btn kn-btn-green">ذخیره مرحله جدید</button>
@@ -554,13 +934,14 @@ class KN_Admin {
 				<div class="kn-stage-item">
 					<div class="kn-stage-head">
 						<div>
+							<span class="kn-pill kn-pill-amber"><?php echo esc_html( $stage['termTitle'] ?? 'ترم' ); ?></span>
 							<span class="kn-pill kn-pill-blue">مرحله <?php echo esc_html( $stage['stageNumber'] ); ?></span>
 							<span class="kn-pill <?php echo $stage['isActive'] ? 'kn-pill-green' : 'kn-pill-slate'; ?>">
 								<?php echo $stage['isActive'] ? 'فعال' : 'پیش‌نویس'; ?>
 							</span>
 							<strong style="font-size:15px;margin-right:6px;"><?php echo esc_html( $stage['title'] ); ?></strong>
 							<div style="font-size:12px;color:#7c5b43;margin-top:4px;">
-								<?php echo esc_html( $stage['shortGoal'] ); ?> · ستون‌ها: <?php echo esc_html( $stage['columns'] ); ?> · تعداد گام‌ها: <?php echo esc_html( count( $stage['steps'] ) ); ?>
+								مکان نقشه: <strong><?php echo esc_html( self::$landmarks[ $stage['landmark'] ?? 'barn' ] ?? 'انبار' ); ?></strong> · <?php echo esc_html( $stage['shortGoal'] ); ?> · گام‌ها: <?php echo esc_html( count( $stage['steps'] ) ); ?>
 							</div>
 						</div>
 						<div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -583,6 +964,16 @@ class KN_Admin {
 							<input type="hidden" name="stage_id" value="<?php echo esc_attr( $stage['dbId'] ); ?>" />
 							<div class="kn-grid-3">
 								<div class="kn-field">
+									<label>ترم مرتبط</label>
+									<select name="term_id">
+										<?php foreach ( $terms as $tm ) : ?>
+											<option value="<?php echo esc_attr( $tm['id'] ); ?>" <?php selected( (int) ( $stage['termDbId'] ?? 0 ), (int) $tm['id'] ); ?>>
+												<?php echo esc_html( $tm['title'] ); ?>
+											</option>
+										<?php endforeach; ?>
+									</select>
+								</div>
+								<div class="kn-field">
 									<label>عنوان مرحله</label>
 									<input type="text" name="title" value="<?php echo esc_attr( $stage['title'] ); ?>" required />
 								</div>
@@ -590,16 +981,30 @@ class KN_Admin {
 									<label>شناسه (Slug)</label>
 									<input type="text" name="slug" dir="ltr" value="<?php echo esc_attr( $stage['id'] ); ?>" required />
 								</div>
+							</div>
+							<div class="kn-grid-2">
 								<div class="kn-field">
-									<label>ترتیب</label>
-									<input type="number" name="stage_number" value="<?php echo esc_attr( $stage['stageNumber'] ); ?>" min="1" />
+									<label>هدف کوتاه</label>
+									<input type="text" name="short_goal" value="<?php echo esc_attr( $stage['shortGoal'] ); ?>" required />
+								</div>
+								<div class="kn-field">
+									<label>متن داستانی روی نقشه</label>
+									<input type="text" name="story_caption" value="<?php echo esc_attr( $stage['storyCaption'] ?? '' ); ?>" />
 								</div>
 							</div>
-							<div class="kn-field">
-								<label>هدف کوتاه</label>
-								<input type="text" name="short_goal" value="<?php echo esc_attr( $stage['shortGoal'] ); ?>" required />
-							</div>
 							<div class="kn-grid-3">
+								<div class="kn-field">
+									<label>مکان داستانی نقشه</label>
+									<select name="landmark">
+										<?php foreach ( self::$landmarks as $k => $lbl ) : ?>
+											<option value="<?php echo esc_attr( $k ); ?>" <?php selected( $stage['landmark'] ?? 'barn', $k ); ?>><?php echo esc_html( $lbl ); ?></option>
+										<?php endforeach; ?>
+									</select>
+								</div>
+								<div class="kn-field">
+									<label>ترتیب در ترم</label>
+									<input type="number" name="stage_number" value="<?php echo esc_attr( $stage['stageNumber'] ); ?>" min="1" />
+								</div>
 								<div class="kn-field">
 									<label>مهارت</label>
 									<select name="skill">
@@ -608,6 +1013,8 @@ class KN_Admin {
 										<?php endforeach; ?>
 									</select>
 								</div>
+							</div>
+							<div class="kn-grid-3">
 								<div class="kn-field">
 									<label>ستون چرتکه</label>
 									<input type="number" name="columns_count" value="<?php echo esc_attr( $stage['columns'] ); ?>" min="1" max="4" />
@@ -625,23 +1032,20 @@ class KN_Admin {
 										<?php endforeach; ?>
 									</select>
 								</div>
+								<div class="kn-field">
+									<label>آیکن و رنگ</label>
+									<div style="display:flex;gap:6px;">
+										<select name="icon_name">
+											<?php foreach ( self::$icons as $k => $lbl ) : ?>
+												<option value="<?php echo esc_attr( $k ); ?>" <?php selected( $stage['iconName'], $k ); ?>><?php echo esc_html( $lbl ); ?></option>
+											<?php endforeach; ?>
+										</select>
+										<input type="color" name="accent_color" value="<?php echo esc_attr( $stage['accentColor'] ); ?>" style="height:40px;width:64px;" />
+									</div>
+								</div>
 							</div>
-							<div class="kn-grid-3">
-								<div class="kn-field">
-									<label>آیکن</label>
-									<select name="icon_name">
-										<?php foreach ( self::$icons as $k => $lbl ) : ?>
-											<option value="<?php echo esc_attr( $k ); ?>" <?php selected( $stage['iconName'], $k ); ?>><?php echo esc_html( $lbl ); ?></option>
-										<?php endforeach; ?>
-									</select>
-								</div>
-								<div class="kn-field">
-									<label>رنگ</label>
-									<input type="color" name="accent_color" value="<?php echo esc_attr( $stage['accentColor'] ); ?>" style="height:40px;" />
-								</div>
-								<div class="kn-field" style="padding-top:22px;">
-									<label><input type="checkbox" name="is_active" value="1" <?php checked( $stage['isActive'] ); ?> /> فعال در اپلیکیشن</label>
-								</div>
+							<div class="kn-field">
+								<label><input type="checkbox" name="is_active" value="1" <?php checked( $stage['isActive'] ); ?> /> فعال در اپلیکیشن</label>
 							</div>
 							<button type="submit" class="kn-btn kn-btn-primary">ذخیره تغییرات مرحله</button>
 						</form>
@@ -788,14 +1192,15 @@ class KN_Admin {
 	}
 
 	/**
-	 * Page 3: Dynamic Practice Question Bank
+	 * Page 4: Dynamic Practice Question Bank
 	 */
 	public static function render_questions_page() {
+		$terms        = KN_DB::get_terms_list( false );
 		$filter_skill = sanitize_text_field( wp_unslash( $_GET['filter_skill'] ?? '' ) );
-		$questions    = KN_DB::get_questions( $filter_skill, 0, false );
+		$questions    = KN_DB::get_questions( $filter_skill, 0, false, 0 );
 		?>
 		<div class="kn-wrap">
-			<?php self::render_header( 'بانک سوالات و تمرین‌های داینامیک', 'سوالات دلخواه خود را برای هر مهارت و سطح سختی بسازید تا کودک در بخش تمرین با آن‌ها کار کند.' ); ?>
+			<?php self::render_header( 'بانک سوالات و تمرین‌های داینامیک', 'سوالات دلخواه خود را برای هر ترم، مهارت و سطح سختی بسازید.' ); ?>
 
 			<div class="kn-card">
 				<div class="kn-card-header">
@@ -809,6 +1214,15 @@ class KN_Admin {
 						<input type="hidden" name="kn_action" value="save_question" />
 						<div class="kn-grid-3">
 							<div class="kn-field">
+								<label>متعلق به ترم (اختیاری)</label>
+								<select name="term_id">
+									<option value="0">عمومی (همه ترم‌ها)</option>
+									<?php foreach ( $terms as $tm ) : ?>
+										<option value="<?php echo esc_attr( $tm['id'] ); ?>"><?php echo esc_html( $tm['title'] ); ?></option>
+									<?php endforeach; ?>
+								</select>
+							</div>
+							<div class="kn-field">
 								<label>مهارت</label>
 								<select name="skill">
 									<?php foreach ( self::$skills as $k => $lbl ) : ?>
@@ -817,12 +1231,11 @@ class KN_Admin {
 								</select>
 							</div>
 							<div class="kn-field">
-								<label>سطح سختی (۱ تا ۵)</label>
-								<input type="number" name="difficulty" value="1" min="1" max="5" />
-							</div>
-							<div class="kn-field">
-								<label>تعداد ستون چرتکه</label>
-								<input type="number" name="columns_count" value="2" min="1" max="4" />
+								<label>سطح سختی (۱ تا ۵) و ستون‌ها</label>
+								<div style="display:flex;gap:6px;">
+									<input type="number" name="difficulty" value="1" min="1" max="5" title="سطح سختی" />
+									<input type="number" name="columns_count" value="2" min="1" max="4" title="تعداد ستون چرتکه" />
+								</div>
 							</div>
 						</div>
 
@@ -953,7 +1366,7 @@ class KN_Admin {
 	}
 
 	/**
-	 * Page 4: Users, Child Profiles & Scores Manager
+	 * Page 5: Users, Child Profiles, Scores & Paid Term Access Manager
 	 */
 	public static function render_users_page() {
 		global $wpdb;
@@ -962,9 +1375,16 @@ class KN_Admin {
 			"SELECT p.*, u.user_email, u.user_login, u.display_name FROM {$t_profiles} p LEFT JOIN {$wpdb->users} u ON p.user_id = u.ID ORDER BY p.id DESC",
 			ARRAY_A
 		);
+		$paid_terms = array_filter(
+			KN_DB::get_terms_list( false ),
+			function ( $t ) {
+				return empty( $t['is_free'] );
+			}
+		);
+		$wp_users   = get_users( array( 'number' => 100, 'orderby' => 'ID', 'order' => 'DESC' ) );
 		?>
 		<div class="kn-wrap">
-			<?php self::render_header( 'مدیریت کاربران، کودکان و امتیازات', 'ایجاد کاربر جدید، مشاهده پیشرفت کودکان، ویرایش ستاره‌ها و تنظیم سطح سختی.' ); ?>
+			<?php self::render_header( 'مدیریت کاربران، دسترسی ترم‌ها و امتیازات', 'ایجاد کاربر جدید، اعطای دستی دسترسی به ترم‌های پولی، مشاهده پیشرفت کودکان و ویرایش ستاره‌ها.' ); ?>
 
 			<div class="kn-card">
 				<div class="kn-card-header">
@@ -1014,6 +1434,58 @@ class KN_Admin {
 					</form>
 				</div>
 			</div>
+
+			<?php if ( ! empty( $paid_terms ) ) : ?>
+				<div class="kn-card">
+					<div class="kn-card-header">
+						<h2>کنترل دسترسی کاربران به ترم‌های پولی (تکمیل‌کننده ووکامرس)</h2>
+					</div>
+					<table class="kn-table">
+						<thead>
+							<tr>
+								<th>کاربر / ایمیل</th>
+								<th>وضعیت ترم‌های پولی</th>
+							</tr>
+						</thead>
+						<tbody>
+							<?php foreach ( $wp_users as $u ) : ?>
+								<?php $ent_map = KN_DB::get_user_entitlement_map( $u->ID ); ?>
+								<tr>
+									<td>
+										<strong><?php echo esc_html( $u->display_name ?: $u->user_login ); ?></strong>
+										<div style="font-size:11px;color:#7c5b43;"><?php echo esc_html( $u->user_email ); ?></div>
+									</td>
+									<td>
+										<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+											<?php foreach ( $paid_terms as $pt ) : ?>
+												<?php
+												$tid      = (int) $pt['id'];
+												$unlocked = isset( $ent_map[ $tid ] );
+												?>
+												<form method="post" style="display:inline-flex;align-items:center;gap:4px;background:#fffaf3;padding:4px 8px;border-radius:10px;border:1px solid #eedcc5;">
+													<?php wp_nonce_field( 'kn_admin_toggle_entitlement' ); ?>
+													<input type="hidden" name="kn_action" value="admin_toggle_entitlement" />
+													<input type="hidden" name="target_user_id" value="<?php echo esc_attr( $u->ID ); ?>" />
+													<input type="hidden" name="term_id" value="<?php echo esc_attr( $tid ); ?>" />
+													<input type="hidden" name="entitlement_mode" value="<?php echo $unlocked ? 'revoke' : 'grant'; ?>" />
+													<span style="font-size:12px;font-weight:700;"><?php echo esc_html( $pt['title'] ); ?>:</span>
+													<?php if ( $unlocked ) : ?>
+														<span class="kn-pill kn-pill-green">فعال</span>
+														<button type="submit" class="kn-btn kn-btn-danger" style="padding:3px 8px;font-size:11px;">لغو</button>
+													<?php else : ?>
+														<span class="kn-pill kn-pill-slate">قفل</span>
+														<button type="submit" class="kn-btn kn-btn-green" style="padding:3px 8px;font-size:11px;">فعال‌سازی</button>
+													<?php endif; ?>
+												</form>
+											<?php endforeach; ?>
+										</div>
+									</td>
+								</tr>
+							<?php endforeach; ?>
+						</tbody>
+					</table>
+				</div>
+			<?php endif; ?>
 
 			<div class="kn-card">
 				<div class="kn-card-header">
@@ -1080,7 +1552,7 @@ class KN_Admin {
 	}
 
 	/**
-	 * Page 5: Headless & Default App Settings
+	 * Page 6: Headless & Default App Settings
 	 */
 	public static function render_settings_page() {
 		$s = get_option( 'kn_soroban_settings', array() );
@@ -1158,7 +1630,7 @@ class KN_Admin {
 				<form method="post">
 					<?php wp_nonce_field( 'kn_reseed_defaults' ); ?>
 					<input type="hidden" name="kn_action" value="reseed_defaults" />
-					<p style="font-size:13px;color:#5c3a1f;">در صورتی که جدول مراحل یا سوالات خالی شده باشد، با زدن این دکمه مراحل و سوالات نمونه اولیه ساخته می‌شوند.</p>
+					<p style="font-size:13px;color:#5c3a1f;">در صورتی که جدول ترم‌ها، مراحل یا سوالات خالی شده باشد، با زدن این دکمه داده‌های نمونه اولیه ساخته می‌شوند.</p>
 					<button type="submit" class="kn-btn kn-btn-amber">بررسی و ایجاد داده‌های اولیه</button>
 				</form>
 			</div>

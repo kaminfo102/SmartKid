@@ -23,10 +23,31 @@ export interface WordPressConfig {
   appTitle: string;
   dailyChallengeCount: number;
   allowRegistration: boolean;
+  termsCount?: number;
   stagesCount?: number;
   questionsCount?: number;
   siteName?: string;
+  wooActive?: boolean;
+  wooCurrency?: string;
 }
+
+export type TermBiome = 'farm' | 'forest' | 'island' | 'space';
+
+export type StageLandmark =
+  | 'barn'
+  | 'windmill'
+  | 'wheat'
+  | 'garden'
+  | 'treehouse'
+  | 'bridge'
+  | 'waterfall'
+  | 'owlcastle'
+  | 'boat'
+  | 'lighthouse'
+  | 'cave'
+  | 'chest'
+  | 'rocket'
+  | 'planet';
 
 export type KiaMood = 'idle' | 'happy' | 'cheering' | 'sad' | 'teaching';
 
@@ -119,9 +140,14 @@ export interface LessonStep {
 
 export interface LessonDefinition {
   id: string;
+  dbId?: number;
+  termId?: string;
+  termDbId?: number;
   stageNumber: number;
   title: string;
   shortGoal: string;
+  storyCaption?: string;
+  landmark?: StageLandmark;
   skill: SkillKey;
   columns: number;
   unlockRequirement?: string;
@@ -130,8 +156,29 @@ export interface LessonDefinition {
   steps: LessonStep[];
 }
 
+export interface TermDefinition {
+  id: string;
+  dbId?: number;
+  termNumber: number;
+  title: string;
+  subtitle: string;
+  storyTitle: string;
+  storyDescription: string;
+  biome: TermBiome;
+  accentColor: string;
+  isFree: boolean;
+  priceAmount: number;
+  priceFormatted: string;
+  wooProductId?: number;
+  checkoutUrl?: string;
+  unlocked: boolean;
+  unlockedSource?: 'free' | 'woocommerce' | 'admin' | null;
+  stages: LessonDefinition[];
+}
+
 export interface PracticeQuestion {
   id: string;
+  termDbId?: number;
   skill: SkillKey;
   difficulty?: number;
   columns: number;

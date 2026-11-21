@@ -71,11 +71,11 @@ export const LessonCard: React.FC<LessonCardProps> = ({
       aria-label={`مرحله ${formatNumber(lesson.stageNumber, digitMode)}: ${lesson.title}${
         unlocked ? '' : ' (قفل شده)'
       }`}
-      className={`w-full text-right rounded-3xl border-2 border-b-4 p-3.5 sm:p-4 flex items-center justify-between gap-3 transition-all ${
+      className={`w-full text-right rounded-2xl border-2 border-b-4 p-3.5 sm:p-4 flex items-center justify-between gap-3 transition-all ${
         unlocked
           ? isCurrentNext
-            ? 'bg-white dark:bg-slate-900 border-amber-400 border-b-amber-500 shadow-lg ring-4 ring-amber-200/70 dark:ring-amber-500/30 active:translate-y-0.5'
-            : 'bg-white dark:bg-slate-900 border-white/90 dark:border-slate-800 border-b-emerald-700/20 shadow-md hover:border-amber-300 active:translate-y-0.5'
+            ? 'bg-white dark:bg-slate-900 border-amber-400 border-b-amber-500 shadow-[0_10px_24px_-6px_rgba(245,158,11,0.28)] ring-4 ring-amber-200/70 dark:ring-amber-500/30 active:translate-y-0.5'
+            : 'bg-white dark:bg-slate-900 border-white/90 dark:border-slate-800 border-b-[#DFC6A8] shadow-[0_8px_20px_-6px_rgba(170,104,40,0.16)] hover:border-amber-300 active:translate-y-0.5'
           : 'bg-white/75 dark:bg-slate-900/60 border-white/60 dark:border-slate-800/60 border-b-slate-300/70 opacity-80 cursor-not-allowed'
       }`}
     >

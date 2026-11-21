@@ -69,7 +69,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   onBack();
                 }}
                 aria-label={`انتخاب پروفایل ${profile.name}`}
-                className={`min-h-[80px] p-4 rounded-3xl border-2 border-b-4 text-right flex items-center justify-between gap-3 transition-all ${
+                className={`min-h-[80px] p-4 rounded-2xl border-2 border-b-4 text-right flex items-center justify-between gap-3 shadow-[0_8px_20px_-6px_rgba(170,104,40,0.14)] transition-all ${
                   isActive
                     ? 'bg-sky-50 border-blue-500 border-b-blue-600 dark:bg-blue-950/50 dark:border-blue-500'
                     : 'bg-white border-[#EEDCC5] border-b-[#DFC6A8] hover:border-blue-300 dark:bg-slate-900 dark:border-slate-800 dark:hover:bg-slate-800'
@@ -107,7 +107,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <button
             type="button"
             onClick={() => setShowCreator(true)}
-            className="w-full min-h-[56px] rounded-3xl border-2 border-dashed border-[#D99B58] dark:border-blue-600 bg-white/80 dark:bg-blue-950/20 hover:bg-white text-[#8B4D17] dark:text-blue-300 font-extrabold text-base flex items-center justify-center gap-2 transition-colors shadow-xs"
+            className="w-full min-h-[56px] rounded-2xl border-2 border-dashed border-[#D99B58] dark:border-blue-600 bg-white/85 dark:bg-blue-950/20 hover:bg-white text-[#8B4D17] dark:text-blue-300 font-extrabold text-base flex items-center justify-center gap-2 transition-colors shadow-[0_8px_20px_-6px_rgba(170,104,40,0.12)]"
           >
             <Plus className="w-5 h-5" />
             <span>ساخت پروفایل کودک جدید</span>
@@ -115,7 +115,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         ) : (
           <form
             onSubmit={handleCreate}
-            className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-5 space-y-4 shadow-md"
+            className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-5 space-y-4 shadow-[0_14px_30px_-8px_rgba(170,104,40,0.2)]"
           >
             <h2 className="font-extrabold text-base text-slate-900 dark:text-white">
               ساخت پروفایل جدید

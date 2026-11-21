@@ -13,6 +13,7 @@ import {
 import type { AvatarId, DigitDisplayMode, WordPressUser } from '../types/app';
 import { AVATAR_OPTIONS, AvatarGraphic } from './MascotDana';
 import { KidIconTile } from './KidIconTile';
+import { CloudSyncIllustration } from './KidIllustrations';
 import { formatNumber } from '../lib/numbers';
 import {
   checkWordPressHealth,
@@ -196,12 +197,10 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
         )}
 
         {/* 1. WordPress Site URL Connector */}
-        <section className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 p-4 sm:p-5 space-y-3">
+        <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] p-4 sm:p-5 space-y-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-3">
-              <KidIconTile color="sky" size="md">
-                <Globe className="w-6 h-6" />
-              </KidIconTile>
+              <CloudSyncIllustration className="w-12 h-12 shrink-0" />
               <div>
                 <h2 className="font-extrabold text-sm sm:text-base text-[#3B2618] dark:text-white">
                   آدرس سرور وردپرس هدلس
@@ -250,7 +249,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
 
         {/* 2. Authenticated User Card OR Login/Register Tabs */}
         {wpUser ? (
-          <section className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 p-5 space-y-4">
+          <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] p-5 space-y-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-3">
                 <KidIconTile color="green" size="lg">
@@ -282,12 +281,12 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
             </p>
           </section>
         ) : (
-          <section className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 p-4 sm:p-5 space-y-4">
+          <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] p-4 sm:p-5 space-y-4">
             <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-[#FFF6EB] dark:bg-slate-800 border border-[#EEDCC5] dark:border-slate-700">
               <button
                 type="button"
                 onClick={() => setTab('login')}
-                className={`min-h-[44px] rounded-xl font-extrabold text-sm inline-flex items-center justify-center gap-1.5 transition-all ${
+                className={`min-h-[44px] rounded-2xl font-extrabold text-sm inline-flex items-center justify-center gap-1.5 transition-all ${
                   tab === 'login'
                     ? 'bg-[#5472EB] text-white shadow-xs'
                     : 'text-[#6B4A35] dark:text-slate-300'
@@ -299,7 +298,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
               <button
                 type="button"
                 onClick={() => setTab('register')}
-                className={`min-h-[44px] rounded-xl font-extrabold text-sm inline-flex items-center justify-center gap-1.5 transition-all ${
+                className={`min-h-[44px] rounded-2xl font-extrabold text-sm inline-flex items-center justify-center gap-1.5 transition-all ${
                   tab === 'register'
                     ? 'bg-[#4BB543] text-white shadow-xs'
                     : 'text-[#6B4A35] dark:text-slate-300'
@@ -468,7 +467,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
         )}
 
         {/* 3. Custom WordPress Plugin Download Card */}
-        <section className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 p-4 sm:p-5 space-y-3">
+        <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] p-4 sm:p-5 space-y-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-3">
               <KidIconTile color="violet" size="md">
@@ -479,7 +478,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                   پلاگین اختصاصی وردپرس «کودک نابغه»
                 </h2>
                 <p className="text-xs text-[#785942] dark:text-slate-400">
-                  فایل آماده نصب برای پیشخوان وردپرس (نسخه ۱.۰.۰)
+                  فایل آماده نصب برای پیشخوان وردپرس + ووکامرس (نسخه ۲.۱.۱)
                 </p>
               </div>
             </div>
@@ -497,7 +496,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
           <ol className="text-xs text-[#6B4A35] dark:text-slate-300 space-y-1.5 list-decimal pr-5 leading-relaxed">
             <li>فایل <strong>koodak-nabegheh-soroban.zip</strong> را با دکمه بالا دانلود کنید.</li>
             <li>در پیشخوان وردپرس به بخش <strong>افزونه‌ها ← افزودن افزونه ← بارگذاری افزونه</strong> بروید و فایل را نصب و فعال کنید.</li>
-            <li>منوی جدید <strong>«کودک نابغه»</strong> در وردپرس باز می‌شود که در آن می‌توانید مراحل جاده، سوالات، کاربران، امتیازات و تنظیمات را مدیریت کنید.</li>
+            <li>منوی جدید <strong>«کودک نابغه»</strong> در وردپرس باز می‌شود و خرید ترم‌ها با ورود خودکار یک‌بارمصرف و تسویه‌حساب سریع بدون فرم در ووکامرس انجام می‌شود.</li>
           </ol>
         </section>
       </main>

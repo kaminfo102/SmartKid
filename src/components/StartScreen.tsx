@@ -18,18 +18,21 @@ import type {
   ChildProfile,
   DigitDisplayMode,
   LessonDefinition,
+  TermDefinition,
   WordPressUser,
 } from '../types/app';
 import { formatNumber } from '../lib/numbers';
 import { AvatarGraphic } from './MascotDana';
 import { KiaAvatar } from './KiaAvatar';
 import { KidIconTile } from './KidIconTile';
+import { AbacusAdventureIllustration } from './KidIllustrations';
 import { AudioButton } from './AudioButton';
 import { PWAInstallButton } from './PWAInstallButton';
 import { BuyCoffeeButton } from './BuyCoffeeButton';
 import { audioEngine } from '../lib/audioEngine';
 
 interface StartScreenProps {
+  terms?: TermDefinition[];
   lessons: LessonDefinition[];
   activeProfile: ChildProfile;
   digitMode: DigitDisplayMode;
@@ -48,6 +51,7 @@ interface StartScreenProps {
 }
 
 export const StartScreen: React.FC<StartScreenProps> = ({
+  terms = [],
   lessons,
   activeProfile,
   digitMode,
@@ -91,16 +95,16 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   const quests = [
     {
       id: 'quest-map',
-      title: 'جاده یادگیری چرتکه',
-      subtitle: `${formatNumber(completedLessons, digitMode)} از ${formatNumber(
-        lessons.length,
+      title: 'نقشه ماجراجویی و ترم‌ها',
+      subtitle: `${formatNumber(Math.max(1, terms.length), digitMode)} ترم داستانی · ${formatNumber(
+        completedLessons,
         digitMode
-      )} مرحله کامل شده`,
+      )} از ${formatNumber(lessons.length, digitMode)} مرحله کامل شده`,
       done: completedLessons > 0,
       color: 'green' as const,
       icon: <Map className="w-8 h-8" />,
       onClick: onContinueMap,
-      ariaLabel: 'باز کردن جاده یادگیری مراحل',
+      ariaLabel: 'باز کردن نقشه ماجراجویی ترم‌ها',
     },
     {
       id: 'quest-games',
@@ -244,12 +248,10 @@ export const StartScreen: React.FC<StartScreenProps> = ({
           initial={reducedMotion ? false : { opacity: 0, y: 12 }}
           animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 shadow-[0_6px_0_rgba(213,182,143,0.45)] p-3.5 sm:p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3"
+          className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 shadow-[0_12px_28px_-8px_rgba(180,115,45,0.22)] p-3.5 sm:p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3"
         >
           <div className="flex items-center gap-3 min-w-0 flex-1">
-            <KidIconTile color="amber" size="lg">
-              <Zap className="w-7 h-7 fill-white" />
-            </KidIconTile>
+            <AbacusAdventureIllustration className="w-14 h-14 sm:w-16 sm:h-16 shrink-0" />
 
             <div className="min-w-0 flex-1 space-y-1.5">
               <div className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">
@@ -321,7 +323,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                   type="button"
                   onClick={q.onClick}
                   aria-label={q.ariaLabel}
-                  className="flex-1 min-w-0 rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] hover:border-blue-400 dark:hover:border-blue-500 p-3 sm:p-3.5 flex items-center justify-between gap-3 text-right shadow-xs active:translate-y-0.5 transition-all"
+                  className="flex-1 min-w-0 rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] hover:border-sky-400 dark:hover:border-blue-500 p-3 sm:p-3.5 flex items-center justify-between gap-3 text-right shadow-[0_8px_20px_-6px_rgba(170,104,40,0.16)] active:translate-y-0.5 transition-all"
                 >
                   <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
                     <KidIconTile color={q.color} size="lg">

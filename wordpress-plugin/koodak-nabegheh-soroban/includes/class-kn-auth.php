@@ -224,6 +224,58 @@ class KN_Auth {
 	}
 
 	/**
+	 * Issue a single-use, short-lived (5 min) SSO handoff token so an authenticated
+	 * headless app user lands on WooCommerce checkout already logged in.
+	 */
+	public static function issue_checkout_handoff( $user_id, $term_db_id = 0 ) {
+		$user_id    = absint( $user_id );
+		$term_db_id = absint( $term_db_id );
+		if ( $user_id <= 0 ) {
+			return '';
+		}
+
+		try {
+			$raw_token = bin2hex( random_bytes( 32 ) );
+		} catch ( Exception $e ) {
+			$raw_token = wp_generate_password( 48, false, false );
+		}
+
+		$token_hash = hash( 'sha256', $raw_token );
+		$payload    = array(
+			'user_id' => $user_id,
+			'term_id' => $term_db_id,
+			'issued'  => time(),
+		);
+
+		set_transient( 'kn_sso_' . $token_hash, $payload, 5 * MINUTE_IN_SECONDS );
+
+		return $raw_token;
+	}
+
+	/**
+	 * Validate and immediately consume a single-use checkout SSO handoff token.
+	 */
+	public static function consume_checkout_handoff( $raw_token ) {
+		$clean_token = preg_replace( '/[^a-zA-Z0-9]/', '', (string) $raw_token );
+		if ( strlen( $clean_token ) < 24 ) {
+			return null;
+		}
+
+		$transient_key = 'kn_sso_' . hash( 'sha256', $clean_token );
+		$payload       = get_transient( $transient_key );
+		delete_transient( $transient_key );
+
+		if ( ! is_array( $payload ) || empty( $payload['user_id'] ) ) {
+			return null;
+		}
+
+		return array(
+			'user_id' => absint( $payload['user_id'] ),
+			'term_id' => isset( $payload['term_id'] ) ? absint( $payload['term_id'] ) : 0,
+		);
+	}
+
+	/**
 	 * Format public user info for frontend.
 	 */
 	public static function format_user( WP_User $user ) {

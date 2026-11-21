@@ -36,8 +36,8 @@ export const PWAInstallButton: React.FC = () => {
         </button>
 
         {showIOSGuide && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="w-full max-w-sm rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-xl border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-xs p-4">
+            <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-slate-900 p-6 shadow-[0_20px_48px_-12px_rgba(140,80,20,0.28)] border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800">
               <h3 className="text-lg font-extrabold text-[#3B2618] dark:text-white">
                 نصب کودک نابغه در آیفون و آیپد
               </h3>
