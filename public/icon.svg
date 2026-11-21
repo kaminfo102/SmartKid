@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="112" fill="#2563EB"/>
+  <rect x="72" y="96" width="368" height="320" rx="36" fill="#D97706"/>
+  <rect x="96" y="120" width="320" height="272" rx="20" fill="#FEF3C7"/>
+  <!-- Rods -->
+  <rect x="164" y="120" width="12" height="272" fill="#94A3B8"/>
+  <rect x="250" y="120" width="12" height="272" fill="#94A3B8"/>
+  <rect x="336" y="120" width="12" height="272" fill="#94A3B8"/>
+  <!-- Beam -->
+  <rect x="96" y="212" width="320" height="20" fill="#92400E"/>
+  <!-- Heaven Beads (Value 5) -->
+  <ellipse cx="170" cy="176" rx="32" ry="20" fill="#F97316"/>
+  <ellipse cx="256" cy="156" rx="32" ry="20" fill="#F97316"/>
+  <ellipse cx="342" cy="176" rx="32" ry="20" fill="#F97316"/>
+  <!-- Earth Beads (Value 1) -->
+  <ellipse cx="170" cy="264" rx="32" ry="20" fill="#0EA5E9"/>
+  <ellipse cx="170" cy="346" rx="32" ry="20" fill="#0EA5E9"/>
+  <ellipse cx="256" cy="264" rx="32" ry="20" fill="#10B981"/>
+  <ellipse cx="256" cy="306" rx="32" ry="20" fill="#10B981"/>
+  <ellipse cx="342" cy="346" rx="32" ry="20" fill="#8B5CF6"/>
+</svg>

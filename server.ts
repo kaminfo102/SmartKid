@@ -1,0 +1,150 @@
+import 'dotenv/config';
+import express, { type Request, type Response } from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { GoogleGenAI } from '@google/genai';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const PORT = Number(process.env.PORT) || 3000;
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Simple bounded in-memory cache so repeated Persian lesson & cheer phrases play instantly
+const TTS_CACHE_MAX = 120;
+const ttsCache = new Map<string, string>();
+
+function getGeminiClient(): GoogleGenAI | null {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey) return null;
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
+    },
+  });
+}
+
+type VoiceTone = 'teach' | 'cheer' | 'encourage';
+
+const TONE_STYLES: Record<VoiceTone, string> = {
+  teach:
+    'Warm, gentle, cheerful Iranian female kindergarten teacher speaking clear, friendly Persian (fa-IR) warmly and slowly for children ages 4 to 10.',
+  cheer:
+    'Joyful, bright, encouraging Iranian female teacher speaking natural enthusiastic Persian (fa-IR) to celebrate a young child success.',
+  encourage:
+    'Kind, soft, reassuring Iranian female teacher speaking calm, gentle Persian (fa-IR) to kindly encourage a young child to try again.',
+};
+
+async function startServer() {
+  const app = express();
+  app.use(express.json({ limit: '16kb' }));
+
+  // Health endpoint
+  app.get('/api/health', (_req: Request, res: Response) => {
+    res.json({ ok: true });
+  });
+
+  // Persian Female Child-Friendly TTS endpoint powered by Gemini
+  app.post('/api/tts', async (req: Request, res: Response) => {
+    const rawText = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+    if (!rawText) {
+      res.status(400).json({ error: 'Text is required' });
+      return;
+    }
+
+    if (rawText.length > 400) {
+      res.status(400).json({ error: 'Text exceeds maximum length of 400 characters' });
+      return;
+    }
+
+    const rawTone = req.body?.tone;
+    const tone: VoiceTone =
+      rawTone === 'cheer' || rawTone === 'encourage' ? rawTone : 'teach';
+
+    const cacheKey = `${tone}:${rawText}`;
+    const cachedBase64 = ttsCache.get(cacheKey);
+    if (cachedBase64) {
+      res.json({ audioBase64: cachedBase64, mimeType: 'audio/wav', cached: true });
+      return;
+    }
+
+    const ai = getGeminiClient();
+    if (!ai) {
+      res.status(503).json({ error: 'TTS service not configured' });
+      return;
+    }
+
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash-lite-tts',
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: rawText,
+                speechMetadata: {
+                  style: TONE_STYLES[tone],
+                },
+              },
+            ],
+          },
+        ],
+        config: {
+          responseModalities: ['AUDIO'],
+          speechConfig: {
+            voiceConfig: {
+              // Kore: warm, expressive female voice suited for children's Persian guidance
+              prebuiltVoiceConfig: { voiceName: 'Kore' },
+            },
+          },
+        },
+      });
+
+      const base64Audio =
+        response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+
+      if (!base64Audio) {
+        res.status(502).json({ error: 'No audio returned from TTS model' });
+        return;
+      }
+
+      if (ttsCache.size >= TTS_CACHE_MAX) {
+        const oldestKey = ttsCache.keys().next().value;
+        if (oldestKey !== undefined) {
+          ttsCache.delete(oldestKey);
+        }
+      }
+      ttsCache.set(cacheKey, base64Audio);
+
+      res.json({ audioBase64: base64Audio, mimeType: 'audio/wav' });
+    } catch (err) {
+      console.error('TTS generation error:', err instanceof Error ? err.message : err);
+      res.status(500).json({ error: 'Failed to synthesize Persian guide voice' });
+    }
+  });
+
+  if (!isProduction) {
+    const { createServer: createViteServer } = await import('vite');
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distDir = path.resolve(__dirname, 'dist');
+    app.use(express.static(distDir));
+    app.get('*', (_req: Request, res: Response) => {
+      res.sendFile(path.join(distDir, 'index.html'));
+    });
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server listening on http://0.0.0.0:${PORT}`);
+  });
+}
+
+void startServer();
