@@ -37,27 +37,51 @@ interface PracticeScreenProps {
   profile: ChildProfile;
   settings: AppSettings;
   initialSkill?: SkillKey;
+  wpQuestions?: PracticeQuestion[];
+  totalQuestions?: number;
   onUpdateSettings: (patch: Partial<AppSettings>) => void;
   onRecordAnswer: (skill: SkillKey, correct: boolean) => void;
   onCompleteSession: (result: SessionResult) => void;
   onBack: () => void;
 }
 
-const TOTAL_QUESTIONS = 5;
+function pickPracticeQuestion(
+  skill: SkillKey,
+  level: number,
+  wpQuestions: PracticeQuestion[] = [],
+  usedIds: Set<string> = new Set()
+): PracticeQuestion {
+  const candidates = wpQuestions.filter(
+    (q) => q.skill === skill && !usedIds.has(q.id)
+  );
+  if (candidates.length > 0) {
+    const levelMatched = candidates.filter(
+      (q) => (q.difficulty ?? 1) <= level + 1
+    );
+    const pool = levelMatched.length > 0 ? levelMatched : candidates;
+    const picked = pool[Math.floor(Math.random() * pool.length)];
+    return picked;
+  }
+  return generatePracticeQuestion(skill, level);
+}
 
 export const PracticeScreen: React.FC<PracticeScreenProps> = ({
   profile,
   settings,
   initialSkill = 'recognition',
+  wpQuestions = [],
+  totalQuestions = 5,
   onUpdateSettings,
   onRecordAnswer,
   onCompleteSession,
   onBack,
 }) => {
+  const totalCount = Math.max(1, totalQuestions);
   const [selectedSkill, setSelectedSkill] = useState<SkillKey>(initialSkill);
   const [questionIdx, setQuestionIdx] = useState(0);
+  const [usedQuestionIds, setUsedQuestionIds] = useState<Set<string>>(new Set());
   const [question, setQuestion] = useState<PracticeQuestion>(() =>
-    generatePracticeQuestion(initialSkill, profile.difficultyLevel)
+    pickPracticeQuestion(initialSkill, profile.difficultyLevel, wpQuestions)
   );
   const [abacusState, setAbacusState] = useState<SorobanState>(() =>
     numberToSorobanState(question.startValue, question.columns)
@@ -75,8 +99,12 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
     subtitle?: string;
   } | null>(null);
 
-  const loadQuestion = (skill: SkillKey, level: number) => {
-    const q = generatePracticeQuestion(skill, level);
+  const loadQuestion = (skill: SkillKey, level: number, nextUsed?: Set<string>) => {
+    const usedSet = nextUsed ?? usedQuestionIds;
+    const q = pickPracticeQuestion(skill, level, wpQuestions, usedSet);
+    const updatedUsed = new Set(usedSet);
+    updatedUsed.add(q.id);
+    setUsedQuestionIds(updatedUsed);
     setQuestion(q);
     setAbacusState(numberToSorobanState(q.startValue, q.columns));
     setFailsOnCurrent(0);
@@ -90,6 +118,7 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
   };
 
   useEffect(() => {
+    setUsedQuestionIds(new Set([question.id]));
     audioEngine.speakPersian(question.spokenText);
     return () => audioEngine.stopSpeech();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -159,18 +188,19 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
 
   const handleNext = () => {
     audioEngine.play('uiTap');
-    if (questionIdx + 1 < TOTAL_QUESTIONS) {
+    if (questionIdx + 1 < totalCount) {
       setQuestionIdx((i) => i + 1);
       loadQuestion(selectedSkill, profile.difficultyLevel);
     } else {
       audioEngine.play('levelComplete');
-      const stars = correctCount >= 4 ? 3 : correctCount >= 2 ? 2 : 1;
+      const ratio = correctCount / totalCount;
+      const stars = ratio >= 0.8 ? 3 : ratio >= 0.4 ? 2 : 1;
       onCompleteSession({
         title: 'تمرین عالی تمام شد!',
         skill: selectedSkill,
         stars,
         correctCount,
-        totalCount: TOTAL_QUESTIONS,
+        totalCount,
         message: 'هر تمرین تو را در حساب ذهنی قوی‌تر می‌کند!',
         nextAction: 'practice',
       });
@@ -217,7 +247,7 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
               setSelectedSkill(sk);
               setQuestionIdx(0);
               setCorrectCount(0);
-              loadQuestion(sk, profile.difficultyLevel);
+              loadQuestion(sk, profile.difficultyLevel, new Set());
             }}
             className="min-h-[40px] px-2.5 rounded-2xl bg-white/95 dark:bg-slate-800 text-xs sm:text-sm font-extrabold text-[#4A2E1B] dark:text-slate-100 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-700"
           >
@@ -229,7 +259,7 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
           </select>
 
           <span className="px-2.5 py-1 rounded-xl bg-white/90 dark:bg-slate-800 text-xs font-extrabold text-[#783F1D] dark:text-slate-200 whitespace-nowrap tabular-nums">
-            {formatNumber(questionIdx + 1, settings.digitMode)}/{formatNumber(TOTAL_QUESTIONS, settings.digitMode)}
+            {formatNumber(questionIdx + 1, settings.digitMode)}/{formatNumber(totalCount, settings.digitMode)}
           </span>
         </div>
 
@@ -362,7 +392,7 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
               onClick={handleNext}
               className="w-full min-h-[52px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-base flex items-center justify-center gap-2 transition-all"
             >
-              <span>{questionIdx + 1 < TOTAL_QUESTIONS ? 'سؤال بعدی' : 'دیدن نتیجه'}</span>
+              <span>{questionIdx + 1 < totalCount ? 'سؤال بعدی' : 'دیدن نتیجه'}</span>
               <ChevronLeft className="w-5 h-5" />
             </button>
           )}

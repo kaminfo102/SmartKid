@@ -1,5 +1,6 @@
 export type ScreenId =
   | 'start'
+  | 'auth'
   | 'profiles'
   | 'map'
   | 'lesson'
@@ -8,6 +9,24 @@ export type ScreenId =
   | 'simulator'
   | 'result'
   | 'parents';
+
+export interface WordPressUser {
+  id: number;
+  username: string;
+  email: string;
+  displayName: string;
+  roles: string[];
+  isAdmin: boolean;
+}
+
+export interface WordPressConfig {
+  appTitle: string;
+  dailyChallengeCount: number;
+  allowRegistration: boolean;
+  stagesCount?: number;
+  questionsCount?: number;
+  siteName?: string;
+}
 
 export type KiaMood = 'idle' | 'happy' | 'cheering' | 'sad' | 'teaching';
 
@@ -114,6 +133,7 @@ export interface LessonDefinition {
 export interface PracticeQuestion {
   id: string;
   skill: SkillKey;
+  difficulty?: number;
   columns: number;
   promptText: string;
   spokenText: string;

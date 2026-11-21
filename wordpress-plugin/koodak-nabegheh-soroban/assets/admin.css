@@ -1,0 +1,332 @@
+/* کودک نابغه — استایل پنل مدیریت اختصاصی وردپرس */
+.kn-wrap {
+  direction: rtl;
+  font-family: Tahoma, "Vazirmatn", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  margin: 18px 0 32px 18px;
+  color: #2f1f14;
+}
+
+.kn-hero {
+  background: linear-gradient(135deg, #f49a67 0%, #f7b684 55%, #fce0be 100%);
+  border: 2px solid #e6b88d;
+  border-bottom: 5px solid #d39b6a;
+  border-radius: 22px;
+  padding: 22px 26px;
+  color: #3b2210;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+  box-shadow: 0 8px 24px rgba(173, 102, 43, 0.14);
+}
+
+.kn-hero h1 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 800;
+  color: #ffffff;
+  text-shadow: 0 2px 0 rgba(140, 64, 18, 0.45);
+}
+
+.kn-hero p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #5a2c0e;
+}
+
+.kn-api-box {
+  background: rgba(255, 255, 255, 0.95);
+  border: 2px solid #eedcc5;
+  border-bottom: 4px solid #dfc6a8;
+  border-radius: 16px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.kn-api-box code {
+  direction: ltr;
+  background: #fff6eb;
+  color: #5472eb;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.kn-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.kn-kpi-card {
+  background: #ffffff;
+  border: 2px solid #eedcc5;
+  border-bottom: 4px solid #dfc6a8;
+  border-radius: 18px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.kn-kpi-badge {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 20px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.kn-bg-blue { background: #5472eb; border-bottom: 3px solid #354eb8; }
+.kn-bg-green { background: #4bb543; border-bottom: 3px solid #2e8228; }
+.kn-bg-amber { background: #f59e0b; border-bottom: 3px solid #b45309; }
+.kn-bg-pink { background: #ec5e95; border-bottom: 3px solid #be185d; }
+.kn-bg-violet { background: #8e63eb; border-bottom: 3px solid #5b21b6; }
+
+.kn-kpi-num {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: #2f1f14;
+}
+
+.kn-kpi-label {
+  font-size: 12px;
+  color: #7c5b43;
+  margin-top: 3px;
+  font-weight: 600;
+}
+
+.kn-card {
+  background: #ffffff;
+  border: 2px solid #eedcc5;
+  border-bottom: 4px solid #dfc6a8;
+  border-radius: 20px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.kn-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  border-bottom: 2px solid #f8efe4;
+}
+
+.kn-card-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #3b2618;
+}
+
+.kn-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.kn-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.kn-field {
+  margin-bottom: 12px;
+}
+
+.kn-field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #5c3a1f;
+  margin-bottom: 5px;
+}
+
+.kn-field input[type="text"],
+.kn-field input[type="email"],
+.kn-field input[type="password"],
+.kn-field input[type="number"],
+.kn-field input[type="color"],
+.kn-field select,
+.kn-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 2px solid #eedcc5;
+  border-radius: 12px;
+  padding: 8px 12px;
+  background: #fffaf3;
+  font-size: 13px;
+  color: #2f1f14;
+}
+
+.kn-field input:focus,
+.kn-field select:focus,
+.kn-field textarea:focus {
+  outline: none;
+  border-color: #5472eb;
+  background: #ffffff;
+}
+
+.kn-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  border-radius: 12px;
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+
+.kn-btn:hover { opacity: 0.94; }
+.kn-btn:active { transform: translateY(1px); }
+
+.kn-btn-primary {
+  background: #5472eb;
+  border-bottom: 3px solid #354eb8;
+  color: #ffffff;
+}
+
+.kn-btn-green {
+  background: #4bb543;
+  border-bottom: 3px solid #2e8228;
+  color: #ffffff;
+}
+
+.kn-btn-amber {
+  background: #ffdc5e;
+  border-bottom: 3px solid #dfad19;
+  color: #5c3a00;
+}
+
+.kn-btn-danger {
+  background: #ef4444;
+  border-bottom: 3px solid #b91c1c;
+  color: #ffffff;
+}
+
+.kn-btn-ghost {
+  background: #fff6eb;
+  border: 2px solid #eedcc5;
+  color: #5c3a1f;
+}
+
+.kn-stage-item {
+  border: 2px solid #eedcc5;
+  border-bottom: 4px solid #dfc6a8;
+  border-radius: 18px;
+  padding: 16px;
+  margin-bottom: 14px;
+  background: #fffdf9;
+}
+
+.kn-stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.kn-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.kn-pill-green { background: #e7f9e5; color: #1e6b19; }
+.kn-pill-slate { background: #f1f5f9; color: #475569; }
+.kn-pill-blue  { background: #e0e7ff; color: #3730a3; }
+.kn-pill-amber { background: #fef3c7; color: #92400e; }
+
+.kn-steps-list {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 2px dashed #eedcc5;
+}
+
+.kn-step-row {
+  background: #ffffff;
+  border: 1px solid #e7d5be;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.kn-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.kn-table th {
+  text-align: right;
+  padding: 10px 12px;
+  background: #fff6eb;
+  color: #5c3a1f;
+  border-bottom: 2px solid #eedcc5;
+  font-weight: 800;
+}
+
+.kn-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f5eadb;
+  vertical-align: middle;
+}
+
+.kn-notice {
+  background: #e7f9e5;
+  border: 2px solid #8ee086;
+  color: #1e6b19;
+  border-radius: 14px;
+  padding: 12px 16px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+.kn-notice-error {
+  background: #fee2e2;
+  border: 2px solid #fca5a5;
+  color: #991b1b;
+}
+
+.kn-collapsible {
+  display: none;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #eedcc5;
+}
+
+.kn-collapsible.is-open {
+  display: block;
+}

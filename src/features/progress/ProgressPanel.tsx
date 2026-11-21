@@ -1,6 +1,11 @@
 import React from 'react';
 import { Award, CheckCircle2, Clock, Star } from 'lucide-react';
-import type { ChildProfile, DigitDisplayMode, SkillKey } from '../../types/app';
+import type {
+  ChildProfile,
+  DigitDisplayMode,
+  LessonDefinition,
+  SkillKey,
+} from '../../types/app';
 import { LESSONS, SKILL_LABELS } from '../../data/lessons';
 import { formatNumber } from '../../lib/numbers';
 import { KidIconTile } from '../../components/KidIconTile';
@@ -8,10 +13,15 @@ import { KidIconTile } from '../../components/KidIconTile';
 interface ProgressPanelProps {
   profile: ChildProfile;
   digitMode: DigitDisplayMode;
+  lessons?: LessonDefinition[];
 }
 
-export const ProgressPanel: React.FC<ProgressPanelProps> = ({ profile, digitMode }) => {
-  const completedLessons = LESSONS.filter((l) => profile.lessons[l.id]?.completed).length;
+export const ProgressPanel: React.FC<ProgressPanelProps> = ({
+  profile,
+  digitMode,
+  lessons = LESSONS,
+}) => {
+  const completedLessons = lessons.filter((l) => profile.lessons[l.id]?.completed).length;
   const accuracy =
     profile.totalAttempts > 0
       ? Math.round((profile.totalCorrect / profile.totalAttempts) * 100)
@@ -39,7 +49,7 @@ export const ProgressPanel: React.FC<ProgressPanelProps> = ({ profile, digitMode
               درس‌های کامل
             </div>
             <div className="text-lg font-extrabold text-slate-900 dark:text-white tabular-nums">
-              {formatNumber(completedLessons, digitMode)} / {formatNumber(LESSONS.length, digitMode)}
+              {formatNumber(completedLessons, digitMode)} / {formatNumber(lessons.length, digitMode)}
             </div>
           </div>
         </div>

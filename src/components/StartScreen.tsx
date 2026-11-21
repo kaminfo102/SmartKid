@@ -12,9 +12,14 @@ import {
   Check,
   ChevronLeft,
   Zap,
+  Cloud,
 } from 'lucide-react';
-import type { ChildProfile, DigitDisplayMode } from '../types/app';
-import { LESSONS } from '../data/lessons';
+import type {
+  ChildProfile,
+  DigitDisplayMode,
+  LessonDefinition,
+  WordPressUser,
+} from '../types/app';
 import { formatNumber } from '../lib/numbers';
 import { AvatarGraphic } from './MascotDana';
 import { KiaAvatar } from './KiaAvatar';
@@ -25,37 +30,45 @@ import { BuyCoffeeButton } from './BuyCoffeeButton';
 import { audioEngine } from '../lib/audioEngine';
 
 interface StartScreenProps {
+  lessons: LessonDefinition[];
   activeProfile: ChildProfile;
   digitMode: DigitDisplayMode;
   reducedMotion: boolean;
   hasProgress: boolean;
+  wpUser?: WordPressUser | null;
+  wpConnected?: boolean;
   onStartFirstLesson: () => void;
   onContinueMap: () => void;
   onOpenPractice: () => void;
   onOpenGames: () => void;
   onOpenSimulator: () => void;
   onOpenProfiles: () => void;
+  onOpenAuth: () => void;
   onOpenParents: () => void;
 }
 
 export const StartScreen: React.FC<StartScreenProps> = ({
+  lessons,
   activeProfile,
   digitMode,
   reducedMotion,
   hasProgress,
+  wpUser,
+  wpConnected = false,
   onStartFirstLesson,
   onContinueMap,
   onOpenPractice,
   onOpenGames,
   onOpenSimulator,
   onOpenProfiles,
+  onOpenAuth,
   onOpenParents,
 }) => {
   const [kiaBubble, setKiaBubble] = useState<string>(
     `سلام ${activeProfile.name}! من کیا هستم، آماده‌ای با هم چرتکه بازی کنیم؟`
   );
 
-  const completedLessons = LESSONS.filter(
+  const completedLessons = lessons.filter(
     (l) => activeProfile.lessons[l.id]?.completed
   ).length;
   const maxStarsGoal = Math.max(10, Math.ceil((activeProfile.totalStars + 5) / 10) * 10);
@@ -80,7 +93,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
       id: 'quest-map',
       title: 'جاده یادگیری چرتکه',
       subtitle: `${formatNumber(completedLessons, digitMode)} از ${formatNumber(
-        LESSONS.length,
+        lessons.length,
         digitMode
       )} مرحله کامل شده`,
       done: completedLessons > 0,
@@ -112,7 +125,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
     {
       id: 'quest-sim',
       title: 'آموزش انیمیشنی با کیا',
-      subtitle: 'نمایش حرکت قدم‌به‌قدم مهره‌ها با فلش',
+      subtitle: 'نمایش حرکت قدم‌به‌گام مهره‌ها با فلش',
       done: false,
       color: 'sky' as const,
       icon: <PlayCircle className="w-8 h-8" />,
@@ -163,10 +176,22 @@ export const StartScreen: React.FC<StartScreenProps> = ({
           </button>
 
           <div className="flex items-center gap-2">
-            <div className="min-h-[46px] inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-[#FFDC5E] dark:bg-amber-900/70 border-b-4 border-[#DFAD19] dark:border-amber-700 text-[#5C3A00] dark:text-amber-100 text-sm font-extrabold tabular-nums shadow-sm">
+            <div className="min-h-[46px] inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-[#FFDC5E] dark:bg-amber-900/70 border-b-4 border-[#DFAD19] dark:border-amber-700 text-[#5C3A00] dark:text-amber-100 text-sm font-extrabold tabular-nums shadow-sm">
               <Star className="w-4 h-4 fill-[#F59E0B] text-[#B45309]" />
               <span>{formatNumber(activeProfile.totalStars, digitMode)}</span>
             </div>
+
+            <button
+              type="button"
+              onClick={onOpenAuth}
+              aria-label="حساب کاربری و اتصال به وردپرس هدلس"
+              className="min-h-[46px] min-w-[46px] inline-flex items-center gap-1.5 rounded-2xl bg-white/95 dark:bg-slate-900 border-b-4 border-[#E5D3BE] dark:border-slate-800 px-3 py-2 text-xs font-extrabold text-slate-800 dark:text-slate-100 shadow-sm hover:bg-white transition-all active:translate-y-0.5"
+            >
+              <Cloud className={`w-4 h-4 ${wpUser || wpConnected ? 'text-[#4BB543]' : 'text-[#5472EB]'}`} />
+              <span className="hidden sm:inline">
+                {wpUser ? wpUser.displayName : 'ورود / وردپرس'}
+              </span>
+            </button>
 
             <button
               type="button"
@@ -175,7 +200,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               className="min-h-[46px] min-w-[46px] inline-flex items-center gap-1.5 rounded-2xl bg-white/95 dark:bg-slate-900 border-b-4 border-[#E5D3BE] dark:border-slate-800 px-3 py-2 text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-100 shadow-sm hover:bg-white transition-all active:translate-y-0.5"
             >
               <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <span className="hidden sm:inline">بخش والدین</span>
+              <span className="hidden sm:inline">والدین</span>
             </button>
           </div>
         </header>

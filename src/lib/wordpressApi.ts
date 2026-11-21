@@ -1,0 +1,285 @@
+import type {
+  AppSettings,
+  AvatarId,
+  ChildProfile,
+  LessonDefinition,
+  PracticeQuestion,
+  SkillKey,
+  WordPressConfig,
+  WordPressUser,
+} from '../types/app';
+
+const WP_SITE_URL_STORAGE_KEY = 'koodak_nabegheh_wp_url';
+const WP_API_BASE_PATH = '/wp-json/koodak-nabegheh/v1';
+
+/**
+ * Auth Bearer token is kept strictly in JS memory (never written to localStorage/sessionStorage).
+ */
+let memoryBearerToken: string | null = null;
+
+export function setMemoryBearerToken(token: string | null): void {
+  memoryBearerToken = token && token.trim() ? token.trim() : null;
+}
+
+export function hasMemoryBearerToken(): boolean {
+  return Boolean(memoryBearerToken);
+}
+
+/**
+ * Normalize and validate a WordPress site URL (restricts to http: / https:).
+ */
+export function normalizeWordPressUrl(raw: string): string {
+  const trimmed = raw.trim().replace(/\/+$/, '');
+  if (!trimmed) return '';
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return '';
+    }
+    return parsed.origin + (parsed.pathname === '/' ? '' : parsed.pathname.replace(/\/+$/, ''));
+  } catch {
+    return '';
+  }
+}
+
+export function getSavedWordPressUrl(): string {
+  const envUrl = import.meta.env.VITE_WORDPRESS_URL;
+  if (typeof window === 'undefined') {
+    return typeof envUrl === 'string' ? normalizeWordPressUrl(envUrl) : '';
+  }
+  try {
+    const stored = window.localStorage.getItem(WP_SITE_URL_STORAGE_KEY);
+    if (stored) {
+      const normalized = normalizeWordPressUrl(stored);
+      if (normalized) return normalized;
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return typeof envUrl === 'string' ? normalizeWordPressUrl(envUrl) : '';
+}
+
+export function saveWordPressUrl(rawUrl: string): string {
+  const normalized = normalizeWordPressUrl(rawUrl);
+  if (typeof window !== 'undefined') {
+    try {
+      if (normalized) {
+        window.localStorage.setItem(WP_SITE_URL_STORAGE_KEY, normalized);
+      } else {
+        window.localStorage.removeItem(WP_SITE_URL_STORAGE_KEY);
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }
+  return normalized;
+}
+
+async function wpRequest<T>(
+  siteUrl: string,
+  endpoint: string,
+  options: RequestInit = {},
+  requireAuth = false
+): Promise<T> {
+  const base = normalizeWordPressUrl(siteUrl);
+  if (!base) {
+    throw new Error('آدرس سایت وردپرس معتبر نیست (باید با https:// یا http:// شروع شود).');
+  }
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string> | undefined),
+  };
+
+  if (requireAuth) {
+    if (!memoryBearerToken) {
+      throw new Error('لطفاً ابتدا وارد حساب کاربری خود شوید.');
+    }
+    headers['Authorization'] = `Bearer ${memoryBearerToken}`;
+  } else if (memoryBearerToken) {
+    headers['Authorization'] = `Bearer ${memoryBearerToken}`;
+  }
+
+  const res = await fetch(`${base}${WP_API_BASE_PATH}${endpoint}`, {
+    ...options,
+    headers,
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg =
+      typeof data?.message === 'string' && data.message
+        ? data.message
+        : `خطا در ارتباط با وردپرس (${res.status})`;
+    throw new Error(msg);
+  }
+  return data as T;
+}
+
+export interface WordPressHealthResponse {
+  ok: boolean;
+  pluginVersion: string;
+  siteName: string;
+  appTitle: string;
+  allowRegistration: boolean;
+  dailyChallengeCount: number;
+  stagesCount: number;
+  questionsCount: number;
+}
+
+export async function checkWordPressHealth(
+  siteUrl: string
+): Promise<WordPressHealthResponse> {
+  return wpRequest<WordPressHealthResponse>(siteUrl, '/health', { method: 'GET' });
+}
+
+export interface WordPressCurriculumResponse {
+  stages: LessonDefinition[];
+  config?: {
+    appTitle?: string;
+    dailyChallengeCount?: number;
+    defaultSettings?: Partial<AppSettings>;
+  };
+}
+
+export async function fetchWordPressCurriculum(siteUrl: string): Promise<{
+  stages: LessonDefinition[];
+  config: Partial<WordPressConfig>;
+  defaultSettings?: Partial<AppSettings>;
+}> {
+  const data = await wpRequest<WordPressCurriculumResponse>(siteUrl, '/curriculum', {
+    method: 'GET',
+  });
+  return {
+    stages: Array.isArray(data.stages) ? data.stages : [],
+    config: {
+      appTitle: data.config?.appTitle,
+      dailyChallengeCount: data.config?.dailyChallengeCount,
+    },
+    defaultSettings: data.config?.defaultSettings,
+  };
+}
+
+export async function fetchWordPressQuestions(
+  siteUrl: string,
+  skill?: SkillKey,
+  difficulty?: number
+): Promise<PracticeQuestion[]> {
+  const params = new URLSearchParams();
+  if (skill) params.set('skill', skill);
+  if (difficulty && difficulty > 0) params.set('difficulty', String(difficulty));
+  const qs = params.toString();
+  const data = await wpRequest<{ questions: PracticeQuestion[] }>(
+    siteUrl,
+    `/questions${qs ? `?${qs}` : ''}`,
+    { method: 'GET' }
+  );
+  return Array.isArray(data.questions) ? data.questions : [];
+}
+
+export interface WordPressAuthResponse {
+  token: string;
+  expiresAt: number;
+  user: WordPressUser;
+  profiles: ChildProfile[];
+  settings: AppSettings;
+}
+
+export async function loginWordPress(
+  siteUrl: string,
+  identifier: string,
+  password: string
+): Promise<WordPressAuthResponse> {
+  const data = await wpRequest<WordPressAuthResponse>(siteUrl, '/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({
+      identifier,
+      password,
+      deviceLabel: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 60) : 'Web',
+    }),
+  });
+  setMemoryBearerToken(data.token);
+  return data;
+}
+
+export async function registerWordPress(
+  siteUrl: string,
+  payload: {
+    email: string;
+    password: string;
+    displayName: string;
+    childName: string;
+    childAge: number;
+    childAvatar: AvatarId;
+  }
+): Promise<WordPressAuthResponse> {
+  const data = await wpRequest<WordPressAuthResponse>(siteUrl, '/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...payload,
+      deviceLabel: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 60) : 'Web',
+    }),
+  });
+  setMemoryBearerToken(data.token);
+  return data;
+}
+
+export async function logoutWordPress(siteUrl: string): Promise<void> {
+  try {
+    if (siteUrl && memoryBearerToken) {
+      await wpRequest(siteUrl, '/auth/logout', { method: 'POST' }, true);
+    }
+  } finally {
+    setMemoryBearerToken(null);
+  }
+}
+
+export async function syncProfileToWordPress(
+  siteUrl: string,
+  profile: ChildProfile
+): Promise<ChildProfile[]> {
+  if (!siteUrl || !memoryBearerToken) return [];
+  const data = await wpRequest<{ profiles: ChildProfile[] }>(
+    siteUrl,
+    `/profiles/${encodeURIComponent(profile.id)}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(profile),
+    },
+    true
+  );
+  return Array.isArray(data.profiles) ? data.profiles : [];
+}
+
+export async function createProfileInWordPress(
+  siteUrl: string,
+  profile: ChildProfile
+): Promise<ChildProfile[]> {
+  if (!siteUrl || !memoryBearerToken) return [];
+  const data = await wpRequest<{ profiles: ChildProfile[] }>(
+    siteUrl,
+    '/profiles',
+    {
+      method: 'POST',
+      body: JSON.stringify(profile),
+    },
+    true
+  );
+  return Array.isArray(data.profiles) ? data.profiles : [];
+}
+
+export async function syncSettingsToWordPress(
+  siteUrl: string,
+  settings: AppSettings
+): Promise<void> {
+  if (!siteUrl || !memoryBearerToken) return;
+  await wpRequest(
+    siteUrl,
+    '/settings',
+    {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    },
+    true
+  );
+}

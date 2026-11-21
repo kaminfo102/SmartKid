@@ -8,8 +8,16 @@ import {
   Trash2,
   Globe,
   MessageSquare,
+  Cloud,
+  Download,
+  RefreshCw,
 } from 'lucide-react';
-import type { AppSettings, ChildProfile } from '../../types/app';
+import type {
+  AppSettings,
+  ChildProfile,
+  LessonDefinition,
+  WordPressUser,
+} from '../../types/app';
 import { ProgressPanel } from './ProgressPanel';
 import { PWAInstallButton } from '../../components/PWAInstallButton';
 import { BuyCoffeeButton } from '../../components/BuyCoffeeButton';
@@ -18,6 +26,12 @@ import { KidIconTile, type KidTileColor } from '../../components/KidIconTile';
 interface SettingsPanelProps {
   profile: ChildProfile;
   settings: AppSettings;
+  lessons?: LessonDefinition[];
+  wpUrl?: string;
+  wpUser?: WordPressUser | null;
+  wpConnected?: boolean;
+  onOpenWordPressAuth: () => void;
+  onRefreshWordPress?: () => void;
   onUpdateSettings: (patch: Partial<AppSettings>) => void;
   onClearAllData: () => void;
   onBack: () => void;
@@ -26,6 +40,12 @@ interface SettingsPanelProps {
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   profile,
   settings,
+  lessons,
+  wpUrl = '',
+  wpUser = null,
+  wpConnected = false,
+  onOpenWordPressAuth,
+  onRefreshWordPress,
   onUpdateSettings,
   onClearAllData,
   onBack,
@@ -86,7 +106,59 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       </header>
 
       <main className="flex-1 w-full max-w-3xl mx-auto p-4 space-y-5 pb-10">
-        <ProgressPanel profile={profile} digitMode={settings.digitMode} />
+        <ProgressPanel profile={profile} digitMode={settings.digitMode} lessons={lessons} />
+
+        {/* Headless WordPress & Plugin Card */}
+        <section className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-4 sm:p-5 space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3 min-w-0">
+              <KidIconTile color="sky" size="md">
+                <Cloud className="w-6 h-6" />
+              </KidIconTile>
+              <div className="min-w-0">
+                <h2 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white">
+                  بک‌اند وردپرس هدلس و دانلود پلاگین
+                </h2>
+                <p className="text-xs text-slate-600 dark:text-slate-400 truncate">
+                  {wpConnected
+                    ? `متصل به ${wpUrl}${wpUser ? ` (${wpUser.displayName})` : ''}`
+                    : 'اتصال به وردپرس برای مدیریت داینامیک جاده مراحل، سوالات و حساب کاربران'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={onOpenWordPressAuth}
+                className="min-h-[44px] px-4 rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] text-white font-extrabold text-xs inline-flex items-center gap-1.5"
+              >
+                <Cloud className="w-4 h-4" />
+                <span>{wpUser ? 'مدیریت حساب وردپرس' : 'اتصال و ورود به وردپرس'}</span>
+              </button>
+
+              {wpConnected && onRefreshWordPress && (
+                <button
+                  type="button"
+                  onClick={onRefreshWordPress}
+                  className="min-h-[44px] px-3 rounded-2xl bg-[#FFDC5E] hover:bg-[#F5CE3D] border-b-4 border-[#DFAD19] text-[#5C3A00] font-extrabold text-xs inline-flex items-center gap-1.5"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>به‌روزرسانی جاده</span>
+                </button>
+              )}
+
+              <a
+                href="/downloads/koodak-nabegheh-soroban.zip"
+                download="koodak-nabegheh-soroban.zip"
+                className="min-h-[44px] px-3.5 rounded-2xl bg-[#8E63EB] hover:bg-[#7A4EE0] border-b-4 border-[#6339C4] text-white font-extrabold text-xs inline-flex items-center gap-1.5"
+              >
+                <Download className="w-4 h-4" />
+                <span>دانلود پلاگین (ZIP)</span>
+              </a>
+            </div>
+          </div>
+        </section>
 
         {/* Parent Support Banner */}
         <BuyCoffeeButton variant="card" reducedMotion={settings.reducedMotion} />

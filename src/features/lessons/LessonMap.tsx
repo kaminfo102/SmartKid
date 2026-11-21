@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'motion/react';
 import {
   ArrowRight,
@@ -9,9 +9,9 @@ import {
   Lock,
   Check,
   Zap,
+  RefreshCw,
 } from 'lucide-react';
 import type { ChildProfile, DigitDisplayMode, LessonDefinition } from '../../types/app';
-import { LESSONS } from '../../data/lessons';
 import { formatNumber } from '../../lib/numbers';
 import { LessonCard, renderLessonIcon } from './LessonCard';
 import { KiaAvatar } from '../../components/KiaAvatar';
@@ -19,9 +19,14 @@ import { KidIconTile, MeadowDecorFlower } from '../../components/KidIconTile';
 import { BuyCoffeeButton } from '../../components/BuyCoffeeButton';
 
 interface LessonMapProps {
+  lessons: LessonDefinition[];
   profile: ChildProfile;
   digitMode: DigitDisplayMode;
   reducedMotion?: boolean;
+  dailyChallengeCount?: number;
+  wpConnected?: boolean;
+  isRefreshing?: boolean;
+  onRefreshCurriculum?: () => void;
   onSelectLesson: (lesson: LessonDefinition) => void;
   onOpenPractice: () => void;
   onOpenGames: () => void;
@@ -65,30 +70,63 @@ const PIN_COLORS: Record<
   },
 };
 
+function buildDynamicRoadPath(count: number): { path: string; height: number } {
+  const safeCount = Math.max(2, count);
+  const segH = 160;
+  const totalH = safeCount * segH;
+  const rightX = 285;
+  const leftX = 115;
+
+  let d = `M ${rightX} 20`;
+  for (let i = 0; i < safeCount - 1; i++) {
+    const startX = i % 2 === 0 ? rightX : leftX;
+    const endX = (i + 1) % 2 === 0 ? rightX : leftX;
+    const startY = 20 + i * segH;
+    const endY = startY + segH;
+    const midY1 = startY + segH * 0.55;
+    const midY2 = startY + segH * 0.45;
+    d += ` C ${startX} ${midY1}, ${endX} ${midY2}, ${endX} ${endY}`;
+  }
+  const lastY = 20 + (safeCount - 1) * segH;
+  d += ` L ${((safeCount - 1) % 2 === 0 ? rightX : leftX)} ${lastY + 90}`;
+
+  return { path: d, height: totalH };
+}
+
 export const LessonMap: React.FC<LessonMapProps> = ({
+  lessons,
   profile,
   digitMode,
   reducedMotion = false,
+  dailyChallengeCount = 5,
+  wpConnected = false,
+  isRefreshing = false,
+  onRefreshCurriculum,
   onSelectLesson,
   onOpenPractice,
   onOpenGames,
   onOpenSimulator,
   onBack,
 }) => {
-  const completedCount = LESSONS.filter(
+  const completedCount = lessons.filter(
     (l) => profile.lessons[l.id]?.completed
   ).length;
-  const progressPct = Math.max(
-    10,
-    Math.round((completedCount / LESSONS.length) * 100)
-  );
+  const progressPct =
+    lessons.length > 0
+      ? Math.max(10, Math.round((completedCount / lessons.length) * 100))
+      : 0;
 
   const nextActiveLessonId =
-    LESSONS.find((l) => {
+    lessons.find((l) => {
       const req = l.unlockRequirement;
       const unlocked = !req || Boolean(profile.lessons[req]?.completed);
       return unlocked && !profile.lessons[l.id]?.completed;
-    })?.id ?? LESSONS[0].id;
+    })?.id ?? lessons[0]?.id;
+
+  const roadGeometry = useMemo(
+    () => buildDynamicRoadPath(lessons.length),
+    [lessons.length]
+  );
 
   return (
     <div className="min-h-screen flex flex-col bg-[#66B22D] dark:bg-slate-950">
@@ -146,47 +184,60 @@ export const LessonMap: React.FC<LessonMapProps> = ({
                 style={{ width: `${progressPct}%` }}
               />
             </div>
-            <p className="text-center text-xs font-extrabold text-emerald-950 dark:text-emerald-200 mt-1">
-              {formatNumber(completedCount, digitMode)} از{' '}
-              {formatNumber(LESSONS.length, digitMode)} مرحله با موفقیت طی شده!
+            <p className="text-center text-xs font-extrabold text-emerald-950 dark:text-emerald-200 mt-1 flex items-center justify-center gap-2 flex-wrap">
+              <span>
+                {formatNumber(completedCount, digitMode)} از{' '}
+                {formatNumber(lessons.length, digitMode)} مرحله با موفقیت طی شده!
+              </span>
+              {wpConnected && onRefreshCurriculum && (
+                <button
+                  type="button"
+                  onClick={onRefreshCurriculum}
+                  aria-label="به‌روزرسانی مراحل از وردپرس"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white/80 hover:bg-white text-emerald-900 text-[11px] font-extrabold border border-emerald-300"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  <span>همگام‌سازی جاده</span>
+                </button>
+              )}
             </p>
           </div>
         </div>
       </header>
 
-      {/* Rolling Meadow with Winding Sandy-Gold Road & Teardrop Stage Pins */}
+      {/* Rolling Meadow with Dynamic Winding Sandy-Gold Road & Teardrop Stage Pins */}
       <main className="relative flex-1 w-full bg-gradient-to-b from-[#92D254] via-[#78C23B] to-[#62AD2A] dark:from-emerald-950 dark:to-slate-950 pt-4 pb-10">
         <div className="relative max-w-xl mx-auto px-3 sm:px-5">
-          {/* Winding Sandy-Gold S-Curve SVG Road behind the 6 stages */}
+          {/* Dynamic Winding Sandy-Gold S-Curve SVG Road behind any number of stages */}
           <svg
             aria-hidden="true"
-            viewBox="0 0 400 960"
+            viewBox={`0 0 400 ${roadGeometry.height}`}
             preserveAspectRatio="none"
             className="pointer-events-none absolute inset-0 w-full h-full opacity-95 dark:opacity-35"
           >
             <path
-              d="M 285 20 C 285 110, 115 150, 115 240 C 115 330, 285 310, 285 400 C 285 490, 115 470, 115 560 C 115 650, 285 630, 285 720 C 285 810, 115 790, 115 880 L 115 950"
+              d={roadGeometry.path}
               fill="none"
               stroke="#539821"
               strokeWidth="84"
               strokeLinecap="round"
             />
             <path
-              d="M 285 20 C 285 110, 115 150, 115 240 C 115 330, 285 310, 285 400 C 285 490, 115 470, 115 560 C 115 650, 285 630, 285 720 C 285 810, 115 790, 115 880 L 115 950"
+              d={roadGeometry.path}
               fill="none"
               stroke="#D89B3C"
               strokeWidth="68"
               strokeLinecap="round"
             />
             <path
-              d="M 285 20 C 285 110, 115 150, 115 240 C 115 330, 285 310, 285 400 C 285 490, 115 470, 115 560 C 115 650, 285 630, 285 720 C 285 810, 115 790, 115 880 L 115 950"
+              d={roadGeometry.path}
               fill="none"
               stroke="#F8D892"
               strokeWidth="56"
               strokeLinecap="round"
             />
             <path
-              d="M 285 20 C 285 110, 115 150, 115 240 C 115 330, 285 310, 285 400 C 285 490, 115 470, 115 560 C 115 650, 285 630, 285 720 C 285 810, 115 790, 115 880 L 115 950"
+              d={roadGeometry.path}
               fill="none"
               stroke="#FFF7E2"
               strokeWidth="4"
@@ -213,16 +264,16 @@ export const LessonMap: React.FC<LessonMapProps> = ({
             className="pointer-events-none absolute top-[78%] right-3 w-12 h-12 sm:w-14 sm:h-14"
           />
 
-          {/* 6 Road Stage Stations */}
+          {/* Dynamic Road Stage Stations */}
           <div className="relative z-10 space-y-6">
-            {LESSONS.map((lesson, idx) => {
+            {lessons.map((lesson, idx) => {
               const req = lesson.unlockRequirement;
               const unlocked = !req || Boolean(profile.lessons[req]?.completed);
               const progress = profile.lessons[lesson.id];
               const isCompleted = Boolean(progress?.completed);
               const isActive = lesson.id === nextActiveLessonId;
               const alignOpposite = idx % 2 === 1;
-              const pinTheme = PIN_COLORS[lesson.iconName];
+              const pinTheme = PIN_COLORS[lesson.iconName] ?? PIN_COLORS.sparkles;
 
               return (
                 <div
@@ -329,7 +380,7 @@ export const LessonMap: React.FC<LessonMapProps> = ({
               <span>چالش روزانه</span>
             </h2>
             <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-xl">
-              ۵ سؤال شاد
+              {formatNumber(dailyChallengeCount, digitMode)} سؤال شاد
             </span>
           </div>
 
