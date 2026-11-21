@@ -163,7 +163,7 @@ export const KiaTutorialGuide: React.FC<KiaTutorialGuideProps> = ({
       aria-label="راهنمای تصویری و انیمیشنی کیا"
     >
       {/* RTL Kia Tutorial Instruction Card */}
-      <div className="shrink-0 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-3 py-2.5 shadow-xs space-y-2">
+      <div className="shrink-0 rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 px-3 py-2.5 shadow-sm space-y-2">
         <div className="flex items-center gap-3">
           {/* Required Kia <img> using optimized /assets/kia_269d7c8e.png */}
           <motion.div
@@ -179,10 +179,10 @@ export const KiaTutorialGuide: React.FC<KiaTutorialGuideProps> = ({
               repeat: Infinity,
               ease: 'easeInOut',
             }}
-            className={`relative w-14 h-14 sm:w-16 sm:h-16 shrink-0 rounded-2xl flex items-center justify-center p-1 ${
+            className={`relative w-14 h-14 sm:w-16 sm:h-16 shrink-0 rounded-2xl flex items-center justify-center p-1 border-2 ${
               isFinished
-                ? 'bg-emerald-50 dark:bg-emerald-950/50 ring-2 ring-emerald-400/60'
-                : 'bg-sky-50 dark:bg-sky-950/50 ring-1 ring-sky-200 dark:ring-sky-800'
+                ? 'bg-[#E7F9E5] border-[#8EE086] dark:bg-emerald-950/50 dark:border-emerald-700'
+                : 'bg-[#FFF6EB] border-[#EEDCC5] dark:bg-sky-950/50 dark:border-sky-800'
             }`}
           >
             <img
@@ -199,11 +199,11 @@ export const KiaTutorialGuide: React.FC<KiaTutorialGuideProps> = ({
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">
+                <span className="text-xs font-extrabold text-[#2E8228] dark:text-emerald-300">
                   راهنمای مرحله‌به‌مرحله کیا
                 </span>
                 {steps.length > 0 && (
-                  <span className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg tabular-nums">
+                  <span className="text-[11px] font-extrabold text-[#783F1D] dark:text-slate-300 bg-[#FFF6EB] border border-[#EEDCC5] dark:bg-slate-800 dark:border-slate-700 px-2 py-0.5 rounded-xl tabular-nums">
                     گام {formatNumber(Math.min(currentStepIndex + 1, steps.length), digitMode)} از{' '}
                     {formatNumber(steps.length, digitMode)}
                   </span>
@@ -211,7 +211,7 @@ export const KiaTutorialGuide: React.FC<KiaTutorialGuideProps> = ({
                 {activeStep?.formulaLabel && (
                   <span
                     dir="ltr"
-                    className="text-xs font-extrabold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-950/60 px-2 py-0.5 rounded-lg"
+                    className="text-xs font-extrabold text-[#58289C] dark:text-violet-300 bg-[#EAD8FF] border border-[#C7A6F5] dark:bg-violet-950/60 dark:border-violet-800 px-2 py-0.5 rounded-xl"
                   >
                     {activeStep.formulaLabel}
                   </span>
@@ -221,14 +221,14 @@ export const KiaTutorialGuide: React.FC<KiaTutorialGuideProps> = ({
               <AudioButton textToSpeak={narrationText} label="تکرار صدا" size="sm" />
             </div>
 
-            <p className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 leading-relaxed">
+            <p className="text-xs sm:text-sm font-extrabold text-[#3B2618] dark:text-slate-100 leading-relaxed">
               {narrationText}
             </p>
           </div>
         </div>
 
         {/* Step Chips + Action Controls */}
-        <div className="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between gap-2 flex-wrap pt-1.5 border-t border-[#F4E7D7] dark:border-slate-800">
           {steps.length > 0 && (
             <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-0.5">
               {steps.map((s, idx) => {
@@ -249,19 +249,19 @@ export const KiaTutorialGuide: React.FC<KiaTutorialGuideProps> = ({
                       onSelectStep?.(idx);
                     }}
                     disabled={!onSelectStep}
-                    className={`min-h-[36px] px-2.5 py-1 rounded-xl border text-[11px] sm:text-xs font-bold inline-flex items-center gap-1 shrink-0 transition-all ${
+                    className={`min-h-[38px] px-2.5 py-1 rounded-xl border-2 text-[11px] sm:text-xs font-extrabold inline-flex items-center gap-1 shrink-0 transition-all ${
                       isCurrent
-                        ? 'bg-amber-100 border-amber-400 text-amber-950 ring-2 ring-amber-300 dark:bg-amber-900/60 dark:border-amber-500 dark:text-amber-100'
+                        ? 'bg-[#FFDC5E] border-[#DFAD19] border-b-4 text-[#5C3A00] dark:bg-amber-900/60 dark:border-amber-500 dark:text-amber-100'
                         : isDone
-                        ? 'bg-emerald-50 border-emerald-300 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-200'
-                        : 'bg-slate-50 border-slate-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300'
+                        ? 'bg-[#E7F9E5] border-[#8EE086] text-[#1E6B19] dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-200'
+                        : 'bg-[#FFF9F2] border-[#EEDCC5] text-[#6B4A35] dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300'
                     }`}
                   >
                     <span className="tabular-nums">{formatNumber(idx + 1, digitMode)}</span>
                     {goingUp ? (
-                      <ArrowUp className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                      <ArrowUp className="w-3.5 h-3.5 text-[#5472EB] dark:text-blue-400" />
                     ) : (
-                      <ArrowDown className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
+                      <ArrowDown className="w-3.5 h-3.5 text-[#E06A2E] dark:text-orange-400" />
                     )}
                     <span>{getPlaceName(s.move.columnIndex)}</span>
                   </button>
@@ -276,7 +276,7 @@ export const KiaTutorialGuide: React.FC<KiaTutorialGuideProps> = ({
                 type="button"
                 onClick={() => setIsPlaying((p) => !p)}
                 aria-label={isPlaying ? 'توقف پخش خودکار' : 'پخش خودکار مراحل'}
-                className="min-h-[44px] px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 font-bold text-xs inline-flex items-center gap-1.5"
+                className="min-h-[44px] px-3 rounded-2xl bg-[#FFF6EB] hover:bg-[#FCEBD6] dark:bg-slate-800 dark:hover:bg-slate-700 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-700 active:border-b-2 active:translate-y-0.5 text-[#5C3A00] dark:text-slate-100 font-extrabold text-xs inline-flex items-center gap-1.5 transition-all"
               >
                 {isPlaying ? (
                   <>
@@ -296,13 +296,13 @@ export const KiaTutorialGuide: React.FC<KiaTutorialGuideProps> = ({
               <button
                 type="button"
                 onClick={handleManualStep}
-                className="min-h-[44px] px-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs sm:text-sm inline-flex items-center gap-1.5 shadow-xs"
+                className="min-h-[44px] px-3.5 rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-xs sm:text-sm inline-flex items-center gap-1.5 shadow-xs transition-all"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 <span>انجام این گام</span>
               </button>
             ) : (
-              <span className="min-h-[40px] px-3 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-200 font-extrabold text-xs inline-flex items-center gap-1.5">
+              <span className="min-h-[40px] px-3 rounded-2xl bg-[#E7F9E5] border-2 border-[#8EE086] dark:bg-emerald-950/60 dark:border-emerald-700 text-[#1E6B19] dark:text-emerald-200 font-extrabold text-xs inline-flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4" />
                 <span>پایان آموزش</span>
               </span>
@@ -312,7 +312,7 @@ export const KiaTutorialGuide: React.FC<KiaTutorialGuideProps> = ({
       </div>
 
       {/* Wrapped Abacus Visual + Absolute Directional Arrows & Bead Highlights Overlay */}
-      <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden rounded-2xl">
+      <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden rounded-3xl border-2 border-[#EEDCC5] dark:border-slate-800">
         {children}
 
         {overlayCoords && activeStep && (

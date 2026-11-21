@@ -164,9 +164,9 @@ export const SorobanStepSimulator: React.FC<SorobanStepSimulatorProps> = ({
   )}`;
 
   return (
-    <div className="h-[100dvh] flex flex-col bg-[#F7F9FC] dark:bg-slate-950 overflow-hidden">
+    <div className="h-[100dvh] flex flex-col bg-[#F5E4CE] dark:bg-slate-950 overflow-hidden">
       {/* Compact Header */}
-      <header className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3 h-14 flex items-center justify-between gap-2">
+      <header className="shrink-0 bg-gradient-to-b from-[#F49A67] to-[#F8BA88] dark:from-slate-900 dark:to-slate-900 border-b-2 border-[#E3B488] dark:border-slate-800 px-3 h-14 flex items-center justify-between gap-2">
         {onClose ? (
           <button
             type="button"
@@ -175,7 +175,7 @@ export const SorobanStepSimulator: React.FC<SorobanStepSimulatorProps> = ({
               onClose();
             }}
             aria-label="بازگشت"
-            className="min-h-[44px] min-w-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-200"
+            className="min-h-[44px] min-w-[44px] rounded-2xl bg-white/95 hover:bg-white dark:bg-slate-800 border-b-4 border-[#DFC6A8] dark:border-slate-700 active:border-b-0 active:translate-y-0.5 flex items-center justify-center text-[#783F1D] dark:text-slate-200 transition-all"
           >
             <ArrowRight className="w-5 h-5" />
           </button>
@@ -184,21 +184,21 @@ export const SorobanStepSimulator: React.FC<SorobanStepSimulatorProps> = ({
         )}
 
         <div className="text-center min-w-0">
-          <h1 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white truncate">
+          <h1 className="text-xs sm:text-sm font-extrabold text-white drop-shadow-[0_1px_0_rgba(148,70,22,0.45)] truncate">
             {title}
           </h1>
-          <div className="text-xs font-extrabold text-blue-600 dark:text-blue-400 tabular-nums">
+          <div className="inline-block mt-0.5 px-2.5 py-0.5 rounded-xl bg-white/95 dark:bg-slate-800 text-[11px] sm:text-xs font-extrabold text-[#5472EB] dark:text-blue-300 tabular-nums">
             {problemEquation}
           </div>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={handleStepBack}
             disabled={currentStepIndex <= 0}
             aria-label="گام قبلی"
-            className="min-h-[44px] min-w-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center disabled:opacity-40"
+            className="min-h-[44px] min-w-[44px] rounded-2xl bg-white/95 hover:bg-white dark:bg-slate-800 border-b-4 border-[#DFC6A8] dark:border-slate-700 active:border-b-0 active:translate-y-0.5 text-[#783F1D] dark:text-slate-200 flex items-center justify-center disabled:opacity-45 transition-all"
           >
             <ChevronRight className="w-5 h-5" />
           </button>
@@ -206,7 +206,7 @@ export const SorobanStepSimulator: React.FC<SorobanStepSimulatorProps> = ({
             type="button"
             onClick={handleResetReplay}
             aria-label="شروع دوباره مراحل"
-            className="min-h-[44px] min-w-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center"
+            className="min-h-[44px] min-w-[44px] rounded-2xl bg-white/95 hover:bg-white dark:bg-slate-800 border-b-4 border-[#DFC6A8] dark:border-slate-700 active:border-b-0 active:translate-y-0.5 text-[#783F1D] dark:text-slate-200 flex items-center justify-center transition-all"
           >
             <RotateCcw className="w-4 h-4" />
           </button>
@@ -215,7 +215,7 @@ export const SorobanStepSimulator: React.FC<SorobanStepSimulatorProps> = ({
 
       {/* Preset Complex Problems Strip */}
       {allowProblemPicker && (
-        <div className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3 py-2 overflow-x-auto">
+        <div className="shrink-0 bg-[#FFF9F2] dark:bg-slate-900 border-b-2 border-[#EEDCC5] dark:border-slate-800 px-3 py-2 overflow-x-auto">
           <div className="max-w-4xl mx-auto flex items-center gap-2">
             {COMPLEX_PROBLEM_PRESETS.map((preset) => {
               const active = selectedPresetId === preset.id;
@@ -224,13 +224,13 @@ export const SorobanStepSimulator: React.FC<SorobanStepSimulatorProps> = ({
                   key={preset.id}
                   type="button"
                   onClick={() => handleSelectPreset(preset)}
-                  className={`min-h-[40px] px-3 py-1.5 rounded-xl border text-right shrink-0 transition-colors ${
+                  className={`min-h-[42px] px-3 py-1.5 rounded-2xl border-2 text-right shrink-0 transition-all ${
                     active
-                      ? 'bg-blue-600 border-blue-600 text-white'
-                      : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-100'
+                      ? 'bg-[#5472EB] border-[#354EB8] border-b-4 text-white'
+                      : 'bg-white dark:bg-slate-800 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-700 text-[#4A2E1B] dark:text-slate-200 hover:bg-[#FFF6EB]'
                   }`}
                 >
-                  <div className="text-[10px] opacity-80">{preset.category}</div>
+                  <div className="text-[10px] opacity-85 font-bold">{preset.category}</div>
                   <div className="text-xs font-extrabold tabular-nums">
                     {formatNumber(preset.label, settings.digitMode)}
                   </div>

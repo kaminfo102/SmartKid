@@ -194,8 +194,8 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
   }
 
   return (
-    <div className="h-[100dvh] flex flex-col bg-[#F7F9FC] dark:bg-slate-950 overflow-hidden">
-      <header className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3 h-14 flex items-center justify-between gap-2">
+    <div className="h-[100dvh] flex flex-col bg-[#F5E4CE] dark:bg-slate-950 overflow-hidden">
+      <header className="shrink-0 bg-gradient-to-b from-[#F49A67] to-[#F8BA88] dark:from-slate-900 dark:to-slate-900 border-b-2 border-[#E3B488] dark:border-slate-800 px-3 h-14 flex items-center justify-between gap-2">
         <button
           type="button"
           onClick={() => {
@@ -203,7 +203,7 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
             onBack();
           }}
           aria-label="بازگشت"
-          className="min-h-[44px] min-w-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-200"
+          className="min-h-[44px] min-w-[44px] rounded-2xl bg-white/95 hover:bg-white dark:bg-slate-800 border-b-4 border-[#DFC6A8] dark:border-slate-700 active:border-b-0 active:translate-y-0.5 flex items-center justify-center text-[#783F1D] dark:text-slate-200 transition-all"
         >
           <ArrowRight className="w-5 h-5" />
         </button>
@@ -219,7 +219,7 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
               setCorrectCount(0);
               loadQuestion(sk, profile.difficultyLevel);
             }}
-            className="min-h-[40px] px-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700"
+            className="min-h-[40px] px-2.5 rounded-2xl bg-white/95 dark:bg-slate-800 text-xs sm:text-sm font-extrabold text-[#4A2E1B] dark:text-slate-100 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-700"
           >
             {(Object.keys(SKILL_LABELS) as SkillKey[]).map((sk) => (
               <option key={sk} value={sk}>
@@ -228,7 +228,7 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
             ))}
           </select>
 
-          <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400 whitespace-nowrap tabular-nums">
+          <span className="px-2.5 py-1 rounded-xl bg-white/90 dark:bg-slate-800 text-xs font-extrabold text-[#783F1D] dark:text-slate-200 whitespace-nowrap tabular-nums">
             {formatNumber(questionIdx + 1, settings.digitMode)}/{formatNumber(TOTAL_QUESTIONS, settings.digitMode)}
           </span>
         </div>
@@ -237,7 +237,7 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
       </header>
 
       {/* Question Prompt Card with Expressive KiaAvatar */}
-      <div className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-2.5">
+      <div className="shrink-0 bg-[#FFF9F2] dark:bg-slate-900 border-b-2 border-[#EEDCC5] dark:border-slate-800 px-4 py-2.5">
         <div className="max-w-3xl mx-auto flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2.5 min-w-0">
             <KiaAvatar
@@ -247,7 +247,7 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
               reducedMotion={settings.reducedMotion}
             />
             <div className="min-w-0">
-              <h1 className="text-base sm:text-xl font-extrabold text-slate-900 dark:text-white">
+              <h1 className="text-base sm:text-xl font-extrabold text-[#3B2618] dark:text-white">
                 {question.promptText}
               </h1>
               {question.visualType === 'objects' && question.visualEmoji && (
@@ -257,7 +257,7 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
                   ))}
                   {question.operation === '+' && (
                     <>
-                      <span className="font-extrabold text-blue-600 mx-1">+</span>
+                      <span className="font-extrabold text-[#5472EB] mx-1">+</span>
                       {Array.from({ length: question.visualCountB ?? 0 }).map((_, i) => (
                         <CartoonObjectIcon key={`b_${i}`} type={question.visualEmoji!} className="w-6 h-6" />
                       ))}
@@ -273,7 +273,7 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
               type="button"
               onClick={() => setShowStepSim(true)}
               aria-label="نمایش انیمیشن حل گام به گام"
-              className="min-h-[44px] px-3 rounded-xl bg-violet-100 hover:bg-violet-200 dark:bg-violet-900/40 text-violet-900 dark:text-violet-100 text-xs font-bold inline-flex items-center gap-1.5"
+              className="min-h-[44px] px-3 rounded-2xl bg-[#EAD8FF] hover:bg-[#DFC6FF] dark:bg-violet-900/50 border-b-4 border-[#C7A6F5] dark:border-violet-800 active:border-b-0 active:translate-y-0.5 text-[#58289C] dark:text-violet-100 text-xs font-extrabold inline-flex items-center gap-1.5 transition-all"
             >
               <PlayCircle className="w-4 h-4" />
               <span>روش حل</span>
@@ -283,7 +283,7 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
               type="button"
               onClick={() => setShowHint((h) => !h)}
               aria-label="نمایش راهنمای حرکت مهره"
-              className="min-h-[44px] px-3 rounded-xl bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 text-xs font-bold inline-flex items-center gap-1.5"
+              className="min-h-[44px] px-3 rounded-2xl bg-[#FFDC5E] hover:bg-[#F5CE3D] dark:bg-amber-900/50 border-b-4 border-[#DFAD19] dark:border-amber-800 active:border-b-0 active:translate-y-0.5 text-[#5C3A00] dark:text-amber-100 text-xs font-extrabold inline-flex items-center gap-1.5 transition-all"
             >
               <HelpCircle className="w-4 h-4" />
               <span>راهنما</span>
@@ -295,7 +295,7 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
       {/* Dominant Abacus */}
       <div className="relative flex-1 min-h-0 flex flex-col">
         {flashHidden && !solved && (
-          <div className="px-4 py-2 bg-violet-100 dark:bg-violet-950 text-violet-900 dark:text-violet-100 text-xs sm:text-sm font-bold text-center flex items-center justify-center gap-3">
+          <div className="px-4 py-2 bg-[#EAD8FF] dark:bg-violet-950 border-b-2 border-[#C7A6F5] dark:border-violet-800 text-[#58289C] dark:text-violet-100 text-xs sm:text-sm font-extrabold text-center flex items-center justify-center gap-3">
             <span>حالا در ذهن تصور کن و عدد نهایی را بساز!</span>
             <button
               type="button"
@@ -336,7 +336,7 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
         />
       </div>
 
-      <footer className="shrink-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-4 py-2.5 pb-safe space-y-2">
+      <footer className="shrink-0 bg-[#FFF9F2] dark:bg-slate-900 border-t-2 border-[#EEDCC5] dark:border-slate-800 px-4 py-2.5 pb-safe space-y-2">
         <div className="max-w-3xl mx-auto space-y-2">
           {feedback && (
             <FeedbackMessage
@@ -351,7 +351,7 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
             <button
               type="button"
               onClick={handleCheck}
-              className="w-full min-h-[52px] rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-base flex items-center justify-center gap-2"
+              className="w-full min-h-[52px] rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-base flex items-center justify-center gap-2 transition-all"
             >
               <CheckCircle2 className="w-5 h-5" />
               <span>بررسی پاسخ</span>
@@ -360,7 +360,7 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
             <button
               type="button"
               onClick={handleNext}
-              className="w-full min-h-[52px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-base flex items-center justify-center gap-2"
+              className="w-full min-h-[52px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-base flex items-center justify-center gap-2 transition-all"
             >
               <span>{questionIdx + 1 < TOTAL_QUESTIONS ? 'سؤال بعدی' : 'دیدن نتیجه'}</span>
               <ChevronLeft className="w-5 h-5" />

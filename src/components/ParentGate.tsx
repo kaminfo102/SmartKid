@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Lock, ArrowRight } from 'lucide-react';
 import { toEnglishDigits, toPersianDigits } from '../lib/numbers';
+import { KidIconTile } from './KidIconTile';
 
 interface ParentGateProps {
   onUnlock: () => void;
@@ -62,20 +63,20 @@ export const ParentGate: React.FC<ParentGateProps> = ({ onUnlock, onCancel }) =>
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-[#F7F9FC] dark:bg-slate-950">
-      <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-[#F5E4CE] dark:bg-slate-950">
+      <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-6 shadow-lg">
         <div className="flex items-center justify-between mb-4">
           <button
             type="button"
             onClick={onCancel}
             aria-label="بازگشت"
-            className="min-h-[44px] min-w-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200"
+            className="min-h-[44px] min-w-[44px] rounded-2xl bg-[#FFF6EB] hover:bg-amber-50 dark:bg-slate-800 border-b-4 border-[#DFC6A8] dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200"
           >
             <ArrowRight className="w-5 h-5" />
           </button>
-          <div className="w-12 h-12 rounded-2xl bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+          <KidIconTile color="violet" size="md">
             <Lock className="w-6 h-6" />
-          </div>
+          </KidIconTile>
           <div className="w-11" />
         </div>
 
@@ -100,20 +101,20 @@ export const ParentGate: React.FC<ParentGateProps> = ({ onUnlock, onCancel }) =>
             }}
             placeholder="پاسخ را بنویسید..."
             aria-label="پاسخ سؤال والدین"
-            className="w-full min-h-[48px] px-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-center text-lg font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full min-h-[48px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-center text-lg font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           {hint && (
-            <p className="text-xs text-amber-700 dark:text-amber-300 text-center">{hint}</p>
+            <p className="text-xs font-bold text-amber-700 dark:text-amber-300 text-center">{hint}</p>
           )}
           <button
             type="submit"
-            className="w-full min-h-[48px] rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-base transition-colors"
+            className="w-full min-h-[50px] rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-base transition-all"
           >
             تایید و ورود
           </button>
         </form>
 
-        <div className="mt-5 pt-5 border-t border-slate-200 dark:border-slate-800">
+        <div className="mt-5 pt-5 border-t border-[#EFE0CE] dark:border-slate-800">
           <button
             type="button"
             onPointerDown={startHold}
@@ -121,10 +122,10 @@ export const ParentGate: React.FC<ParentGateProps> = ({ onUnlock, onCancel }) =>
             onPointerLeave={stopHold}
             onPointerCancel={stopHold}
             aria-label="دکمه را ۲ ثانیه نگه دارید تا بخش والدین باز شود"
-            className="relative w-full min-h-[48px] rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold text-sm overflow-hidden select-none"
+            className="relative w-full min-h-[50px] rounded-2xl bg-[#FFF6EB] dark:bg-slate-800 border-2 border-[#EEDCC5] dark:border-slate-700 text-slate-800 dark:text-slate-200 font-bold text-sm overflow-hidden select-none"
           >
             <div
-              className="absolute inset-y-0 right-0 bg-blue-500/25 transition-all duration-75"
+              className="absolute inset-y-0 right-0 bg-emerald-400/35 transition-all duration-75"
               style={{ width: `${holdProgress}%` }}
             />
             <span className="relative z-10">

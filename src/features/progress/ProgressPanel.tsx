@@ -3,6 +3,7 @@ import { Award, CheckCircle2, Clock, Star } from 'lucide-react';
 import type { ChildProfile, DigitDisplayMode, SkillKey } from '../../types/app';
 import { LESSONS, SKILL_LABELS } from '../../data/lessons';
 import { formatNumber } from '../../lib/numbers';
+import { KidIconTile } from '../../components/KidIconTile';
 
 interface ProgressPanelProps {
   profile: ChildProfile;
@@ -27,57 +28,73 @@ export const ProgressPanel: React.FC<ProgressPanelProps> = ({ profile, digitMode
 
   return (
     <div className="space-y-4">
-      {/* Top 4 Metrics */}
+      {/* Top 4 Metrics with Colorful KidIconTiles */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5">
-          <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-            <span>درس‌های کامل‌شده</span>
-          </div>
-          <div className="text-xl font-extrabold text-slate-900 dark:text-white mt-1 tabular-nums">
-            {formatNumber(completedLessons, digitMode)} / {formatNumber(LESSONS.length, digitMode)}
-          </div>
-        </div>
-
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5">
-          <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-            <Clock className="w-4 h-4 text-blue-500" />
-            <span>زمان تمرین</span>
-          </div>
-          <div className="text-xl font-extrabold text-slate-900 dark:text-white mt-1 tabular-nums">
-            {formatNumber(Math.max(1, profile.practiceMinutes), digitMode)} دقیقه
+        <div className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-3.5 flex items-center gap-3">
+          <KidIconTile color="green" size="md">
+            <CheckCircle2 className="w-6 h-6" />
+          </KidIconTile>
+          <div className="min-w-0">
+            <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">
+              درس‌های کامل
+            </div>
+            <div className="text-lg font-extrabold text-slate-900 dark:text-white tabular-nums">
+              {formatNumber(completedLessons, digitMode)} / {formatNumber(LESSONS.length, digitMode)}
+            </div>
           </div>
         </div>
 
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5">
-          <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-            <Award className="w-4 h-4 text-violet-500" />
-            <span>پاسخ‌های صحیح</span>
-          </div>
-          <div className="text-xl font-extrabold text-slate-900 dark:text-white mt-1 tabular-nums">
-            {formatNumber(profile.totalCorrect, digitMode)} (%{formatNumber(accuracy, digitMode)})
+        <div className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-3.5 flex items-center gap-3">
+          <KidIconTile color="sky" size="md">
+            <Clock className="w-6 h-6" />
+          </KidIconTile>
+          <div className="min-w-0">
+            <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">
+              زمان تمرین
+            </div>
+            <div className="text-lg font-extrabold text-slate-900 dark:text-white tabular-nums">
+              {formatNumber(Math.max(1, profile.practiceMinutes), digitMode)} دقیقه
+            </div>
           </div>
         </div>
 
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5">
-          <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-            <Star className="w-4 h-4 text-amber-500" />
-            <span>مجموع ستاره‌ها</span>
+        <div className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-3.5 flex items-center gap-3">
+          <KidIconTile color="violet" size="md">
+            <Award className="w-6 h-6" />
+          </KidIconTile>
+          <div className="min-w-0">
+            <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">
+              پاسخ درست
+            </div>
+            <div className="text-lg font-extrabold text-slate-900 dark:text-white tabular-nums">
+              {formatNumber(profile.totalCorrect, digitMode)} (%{formatNumber(accuracy, digitMode)})
+            </div>
           </div>
-          <div className="text-xl font-extrabold text-slate-900 dark:text-white mt-1 tabular-nums">
-            {formatNumber(profile.totalStars, digitMode)}
+        </div>
+
+        <div className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-3.5 flex items-center gap-3">
+          <KidIconTile color="amber" size="md">
+            <Star className="w-6 h-6 fill-white" />
+          </KidIconTile>
+          <div className="min-w-0">
+            <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">
+              ستاره‌ها
+            </div>
+            <div className="text-lg font-extrabold text-slate-900 dark:text-white tabular-nums">
+              {formatNumber(profile.totalStars, digitMode)}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Strong & Weak Skills Analysis */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 space-y-3">
+      <div className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-4 space-y-3">
         <h2 className="font-extrabold text-sm text-slate-900 dark:text-white">
           تحلیل مهارت‌های {profile.name}
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-          <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 p-3">
+          <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-3">
             <div className="font-bold text-emerald-800 dark:text-emerald-200 mb-1">
               نقاط قوت:
             </div>
@@ -96,7 +113,7 @@ export const ProgressPanel: React.FC<ProgressPanelProps> = ({ profile, digitMode
             )}
           </div>
 
-          <div className="rounded-xl bg-amber-50 dark:bg-amber-950/40 p-3">
+          <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 p-3">
             <div className="font-bold text-amber-900 dark:text-amber-200 mb-1">
               نیازمند تمرین بیشتر:
             </div>

@@ -28,7 +28,8 @@ import { AbacusStage } from '../abacus/AbacusStage';
 import { AudioButton } from '../../components/AudioButton';
 import { FeedbackMessage } from '../../components/FeedbackMessage';
 import { CartoonObjectIcon } from '../../components/MascotDana';
-import { KiaMascot } from '../../components/KiaMascot';
+import { KiaAvatar } from '../../components/KiaAvatar';
+import { KidIconTile, type KidTileColor } from '../../components/KidIconTile';
 import { audioEngine } from '../../lib/audioEngine';
 import { formatNumber } from '../../lib/numbers';
 
@@ -136,36 +137,36 @@ const GAME_CATALOG: {
   id: GameModeId;
   title: string;
   desc: string;
-  color: string;
+  tileColor: KidTileColor;
   icon: React.ReactNode;
 }[] = [
   {
     id: 'build',
     title: 'عدد را بساز',
     desc: 'عدد گفته‌شده را با مهره‌ها بساز',
-    color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-100',
-    icon: <Sparkles className="w-6 h-6" />,
+    tileColor: 'blue',
+    icon: <Sparkles className="w-8 h-8" />,
   },
   {
     id: 'find-number',
     title: 'عدد درست کدام است؟',
     desc: 'چرتکه را بخوان و کارت درست را بزن',
-    color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-100',
-    icon: <Search className="w-6 h-6" />,
+    tileColor: 'green',
+    icon: <Search className="w-8 h-8" />,
   },
   {
     id: 'count-add',
     title: 'بشمار و جمع کن',
     desc: 'اشیای کارتونی را با چرتکه جمع کن',
-    color: 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-100',
-    icon: <Apple className="w-6 h-6" />,
+    tileColor: 'pink',
+    icon: <Apple className="w-8 h-8" />,
   },
   {
     id: 'spot-mistake',
     title: 'پیدا کردن اشتباه',
     desc: 'عدد اشتباه روی چرتکه را درست کن',
-    color: 'bg-violet-100 text-violet-800 dark:bg-violet-900/50 dark:text-violet-100',
-    icon: <Wrench className="w-6 h-6" />,
+    tileColor: 'amber',
+    icon: <Wrench className="w-8 h-8" />,
   },
 ];
 
@@ -288,45 +289,45 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     }
   };
 
-  // Game Hub Selector with Kia
+  // Game Hub Selector with Kia & Large Colorful Kid Tiles
   if (!activeMode || !round) {
     return (
-      <div className="min-h-screen bg-[#F7F9FC] dark:bg-slate-950 flex flex-col">
-        <header className="sticky top-0 z-20 bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-slate-800 px-4 h-14 flex items-center justify-between">
+      <div className="min-h-screen bg-[#F5E4CE] dark:bg-slate-950 flex flex-col">
+        <header className="sticky top-0 z-20 bg-gradient-to-b from-[#F49A67] to-[#F8BA88] dark:from-slate-900 dark:to-slate-900 border-b-2 border-[#E3B488] dark:border-slate-800 px-4 h-16 flex items-center justify-between">
           <button
             type="button"
             onClick={onBack}
             aria-label="بازگشت"
-            className="min-h-[44px] min-w-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-200"
+            className="min-h-[44px] min-w-[44px] rounded-2xl bg-white/95 hover:bg-white dark:bg-slate-800 border-b-4 border-[#DFC6A8] dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200"
           >
             <ArrowRight className="w-5 h-5" />
           </button>
-          <h1 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-            <Gamepad2 className="w-5 h-5 text-amber-500" />
+          <h1 className="text-lg sm:text-xl font-extrabold text-white drop-shadow-[0_2px_0_rgba(148,70,22,0.45)] flex items-center gap-2">
+            <Gamepad2 className="w-6 h-6" />
             <span>بازی‌های چرتکه</span>
           </h1>
           <div className="w-11" />
         </header>
 
         <main className="flex-1 w-full max-w-2xl mx-auto p-4 space-y-4">
-          <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 flex items-center gap-3">
-            <KiaMascot
+          <div className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-4 flex items-center gap-3 shadow-xs">
+            <KiaAvatar
               mood="happy"
               interactive
-              className="w-16 h-16 shrink-0"
+              className="w-16 h-16 sm:w-20 sm:h-20 shrink-0"
               reducedMotion={settings.reducedMotion}
             />
             <div>
               <p className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white">
                 کیا می‌گه: کدوم بازی رو با هم شروع کنیم؟
               </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                بدون عجله و با شادی بازی کن و ستاره بگیر!
+              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-0.5">
+                روی یکی از کارت‌های رنگارنگ بزن تا بازی و ستاره‌گیری شروع بشه!
               </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             {GAME_CATALOG.map((g, idx) => (
               <motion.button
                 key={g.id}
@@ -335,16 +336,16 @@ export const GameScreen: React.FC<GameScreenProps> = ({
                 animate={settings.reducedMotion ? undefined : { opacity: 1, y: 0 }}
                 transition={{ delay: settings.reducedMotion ? 0 : idx * 0.05 }}
                 onClick={() => startGameMode(g.id)}
-                className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-400 text-right flex items-center gap-4 shadow-xs transition-all active:scale-[0.99]"
+                className="p-4 rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] hover:border-blue-400 text-right flex items-center gap-3.5 shadow-xs transition-all active:translate-y-0.5"
               >
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${g.color}`}>
+                <KidIconTile color={g.tileColor} size="xl">
                   {g.icon}
-                </div>
-                <div>
+                </KidIconTile>
+                <div className="min-w-0">
                   <h2 className="font-extrabold text-base text-slate-900 dark:text-white">
                     {g.title}
                   </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{g.desc}</p>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">{g.desc}</p>
                 </div>
               </motion.button>
             ))}
@@ -355,8 +356,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   }
 
   return (
-    <div className="h-[100dvh] flex flex-col bg-[#F7F9FC] dark:bg-slate-950 overflow-hidden">
-      <header className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3 h-14 flex items-center justify-between gap-2">
+    <div className="h-[100dvh] flex flex-col bg-[#F5E4CE] dark:bg-slate-950 overflow-hidden">
+      <header className="shrink-0 bg-gradient-to-b from-[#F49A67] to-[#F8BA88] dark:from-slate-900 dark:to-slate-900 border-b-2 border-[#E3B488] dark:border-slate-800 px-3 h-14 flex items-center justify-between gap-2">
         <button
           type="button"
           onClick={() => {
@@ -364,12 +365,12 @@ export const GameScreen: React.FC<GameScreenProps> = ({
             setActiveMode(null);
           }}
           aria-label="بازگشت به فهرست بازی‌ها"
-          className="min-h-[44px] min-w-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-200"
+          className="min-h-[44px] min-w-[44px] rounded-2xl bg-white/95 hover:bg-white dark:bg-slate-800 border-b-4 border-[#DFC6A8] dark:border-slate-700 active:border-b-0 active:translate-y-0.5 flex items-center justify-center text-[#783F1D] dark:text-slate-200 transition-all"
         >
           <ArrowRight className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-2 text-sm font-extrabold text-slate-900 dark:text-white tabular-nums">
+        <div className="px-3.5 py-1 rounded-2xl bg-white/95 dark:bg-slate-800 border-b-2 border-[#DFC6A8] dark:border-slate-700 flex items-center gap-1.5 text-xs sm:text-sm font-extrabold text-[#4A2E1B] dark:text-white tabular-nums">
           <Star className="w-4 h-4 fill-amber-400 text-amber-500" />
           <span>
             مرحله {formatNumber(roundIdx + 1, settings.digitMode)} از{' '}
@@ -381,8 +382,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       </header>
 
       {/* Game Prompt */}
-      <div className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-2.5 text-center">
-        <h1 className="text-base sm:text-xl font-extrabold text-slate-900 dark:text-white">
+      <div className="shrink-0 bg-[#FFF9F2] dark:bg-slate-900 border-b-2 border-[#EEDCC5] dark:border-slate-800 px-4 py-2.5 text-center">
+        <h1 className="text-base sm:text-xl font-extrabold text-[#3B2618] dark:text-white">
           {formatNumber(round.prompt, settings.digitMode)}
         </h1>
 
@@ -391,7 +392,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
             {Array.from({ length: round.addA ?? 0 }).map((_, idx) => (
               <CartoonObjectIcon key={`ga_${idx}`} type={round.emoji!} className="w-7 h-7" />
             ))}
-            <span className="text-lg font-extrabold text-blue-600 mx-1.5">+</span>
+            <span className="text-lg font-extrabold text-[#5472EB] mx-1.5">+</span>
             {Array.from({ length: round.addB ?? 0 }).map((_, idx) => (
               <CartoonObjectIcon key={`gb_${idx}`} type={round.emoji!} className="w-7 h-7" />
             ))}
@@ -430,7 +431,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       </div>
 
       {/* Bottom Controls */}
-      <footer className="shrink-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-4 py-2.5 pb-safe space-y-2">
+      <footer className="shrink-0 bg-[#FFF9F2] dark:bg-slate-900 border-t-2 border-[#EEDCC5] dark:border-slate-800 px-4 py-2.5 pb-safe space-y-2">
         <div className="max-w-3xl mx-auto space-y-2">
           {feedback && (
             <FeedbackMessage
@@ -448,7 +449,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
                   key={c}
                   type="button"
                   onClick={() => handlePickChoice(c)}
-                  className="min-h-[52px] rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xl tabular-nums shadow-xs"
+                  className="min-h-[52px] rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-xl tabular-nums shadow-xs transition-all"
                 >
                   {formatNumber(c, settings.digitMode)}
                 </button>
@@ -458,7 +459,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
             <button
               type="button"
               onClick={handleCheckAbacus}
-              className="w-full min-h-[52px] rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-base flex items-center justify-center gap-2"
+              className="w-full min-h-[52px] rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-base flex items-center justify-center gap-2 transition-all"
             >
               <CheckCircle2 className="w-5 h-5" />
               <span>بررسی پاسخ</span>

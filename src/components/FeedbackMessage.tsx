@@ -24,10 +24,10 @@ export const FeedbackMessage: React.FC<FeedbackMessageProps> = ({
 }) => {
   const styles =
     type === 'success'
-      ? 'bg-emerald-50 border-emerald-200 text-emerald-900 dark:bg-emerald-950/60 dark:border-emerald-800 dark:text-emerald-100'
+      ? 'bg-[#E7F9E5] border-[#8EE086] border-b-[#5CCB52] text-[#1E6B19] dark:bg-emerald-950/60 dark:border-emerald-800 dark:text-emerald-100'
       : type === 'encourage'
-      ? 'bg-amber-50 border-amber-200 text-amber-950 dark:bg-amber-950/60 dark:border-amber-800 dark:text-amber-100'
-      : 'bg-sky-50 border-sky-200 text-sky-900 dark:bg-sky-950/60 dark:border-sky-800 dark:text-sky-100';
+      ? 'bg-[#FFF3CC] border-[#F3D27A] border-b-[#DFAD19] text-[#5C3A00] dark:bg-amber-950/60 dark:border-amber-800 dark:text-amber-100'
+      : 'bg-[#DDF2FF] border-[#B2DEFA] border-b-[#6DC0F5] text-[#1E6BA8] dark:bg-sky-950/60 dark:border-sky-800 dark:text-sky-100';
 
   const kiaMood =
     type === 'success' ? 'happy' : type === 'encourage' ? 'sad' : 'teaching';
@@ -39,7 +39,7 @@ export const FeedbackMessage: React.FC<FeedbackMessageProps> = ({
       initial={reducedMotion ? false : { opacity: 0, y: 10, scale: 0.97 }}
       animate={reducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
       transition={{ type: 'spring', stiffness: 360, damping: 24 }}
-      className={`w-full rounded-2xl border px-3 py-2 flex items-center gap-3 ${styles}`}
+      className={`w-full rounded-2xl border-2 border-b-4 px-3 py-2 flex items-center gap-3 ${styles}`}
     >
       <div className="shrink-0">
         <KiaAvatar

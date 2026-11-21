@@ -161,9 +161,9 @@ export const LessonScreen: React.FC<LessonScreenProps> = ({
   }
 
   return (
-    <div className="h-[100dvh] flex flex-col bg-[#F7F9FC] dark:bg-slate-950 overflow-hidden">
+    <div className="h-[100dvh] flex flex-col bg-[#F5E4CE] dark:bg-slate-950 overflow-hidden">
       {/* Compact Header */}
-      <header className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3 h-14 flex items-center justify-between gap-2">
+      <header className="shrink-0 bg-gradient-to-b from-[#F49A67] to-[#F8BA88] dark:from-slate-900 dark:to-slate-900 border-b-2 border-[#E3B488] dark:border-slate-800 px-3 h-14 flex items-center justify-between gap-2">
         <button
           type="button"
           onClick={() => {
@@ -171,25 +171,25 @@ export const LessonScreen: React.FC<LessonScreenProps> = ({
             onBack();
           }}
           aria-label="بازگشت به نقشه آموزش"
-          className="min-h-[44px] min-w-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-200"
+          className="min-h-[44px] min-w-[44px] rounded-2xl bg-white/95 hover:bg-white dark:bg-slate-800 border-b-4 border-[#DFC6A8] dark:border-slate-700 active:border-b-0 active:translate-y-0.5 flex items-center justify-center text-[#783F1D] dark:text-slate-200 transition-all"
         >
           <ArrowRight className="w-5 h-5" />
         </button>
 
         <div className="min-w-0 flex-1 text-center">
-          <div className="text-xs font-bold text-slate-500 dark:text-slate-400 truncate">
+          <div className="text-xs sm:text-sm font-extrabold text-white drop-shadow-[0_1px_0_rgba(148,70,22,0.45)] truncate">
             {lesson.title}
           </div>
           <div className="flex items-center justify-center gap-1.5 mt-1">
             {lesson.steps.map((st, idx) => (
               <span
                 key={st.id}
-                className={`h-2 rounded-full transition-all ${
+                className={`h-2.5 rounded-full transition-all ${
                   idx === stepIdx
-                    ? 'w-6 bg-blue-600'
+                    ? 'w-7 bg-[#FFDC5E] border border-[#DFAD19]'
                     : idx < stepIdx
-                    ? 'w-2 bg-emerald-500'
-                    : 'w-2 bg-slate-300 dark:bg-slate-700'
+                    ? 'w-2.5 bg-[#4BB543] border border-[#2E8228]'
+                    : 'w-2.5 bg-white/65 dark:bg-slate-700'
                 }`}
               />
             ))}
@@ -200,7 +200,7 @@ export const LessonScreen: React.FC<LessonScreenProps> = ({
       </header>
 
       {/* Instruction Bar with Interactive KiaAvatar */}
-      <div className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3 sm:px-4 py-2">
+      <div className="shrink-0 bg-[#FFF9F2] dark:bg-slate-900 border-b-2 border-[#EEDCC5] dark:border-slate-800 px-3 sm:px-4 py-2">
         <div className="max-w-3xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
             <KiaAvatar
@@ -211,16 +211,16 @@ export const LessonScreen: React.FC<LessonScreenProps> = ({
             />
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
+                <h1 className="text-sm sm:text-base font-extrabold text-[#3B2618] dark:text-white">
                   {currentStep.title}
                 </h1>
                 {currentStep.targetValue !== undefined && (
-                  <span className="text-xs font-extrabold text-blue-600 dark:text-blue-400">
-                    · هدف: {formatNumber(currentStep.targetValue, settings.digitMode)}
+                  <span className="px-2 py-0.5 rounded-xl bg-[#DDF2FF] dark:bg-sky-950/60 border border-[#B2DEFA] dark:border-sky-800 text-xs font-extrabold text-[#1E6BA8] dark:text-sky-300">
+                    هدف: {formatNumber(currentStep.targetValue, settings.digitMode)}
                   </span>
                 )}
               </div>
-              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-0.5 leading-relaxed">
+              <p className="text-xs sm:text-sm text-[#6B4A35] dark:text-slate-300 mt-0.5 leading-relaxed">
                 {currentStep.instruction}
               </p>
             </div>
@@ -234,7 +234,7 @@ export const LessonScreen: React.FC<LessonScreenProps> = ({
                 setShowSimulatorModal(true);
               }}
               aria-label="نمایش انیمیشن حل مرحله به مرحله"
-              className="min-h-[44px] shrink-0 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-violet-100 hover:bg-violet-200 dark:bg-violet-900/50 dark:hover:bg-violet-900/70 text-violet-900 dark:text-violet-100 font-bold text-xs sm:text-sm transition-colors"
+              className="min-h-[44px] shrink-0 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-2xl bg-[#EAD8FF] hover:bg-[#DFC6FF] dark:bg-violet-900/50 dark:hover:bg-violet-900/70 border-b-4 border-[#C7A6F5] dark:border-violet-800 active:border-b-0 active:translate-y-0.5 text-[#58289C] dark:text-violet-100 font-extrabold text-xs sm:text-sm transition-all"
             >
               <PlayCircle className="w-4 h-4" />
               <span>نمایش انیمیشن حل</span>
@@ -276,7 +276,7 @@ export const LessonScreen: React.FC<LessonScreenProps> = ({
       </div>
 
       {/* Bottom Feedback + Primary Thumb Action */}
-      <footer className="shrink-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-4 py-2.5 pb-safe space-y-2">
+      <footer className="shrink-0 bg-[#FFF9F2] dark:bg-slate-900 border-t-2 border-[#EEDCC5] dark:border-slate-800 px-4 py-2.5 pb-safe space-y-2">
         <div className="max-w-3xl mx-auto space-y-2">
           {feedback && (
             <FeedbackMessage
@@ -291,7 +291,7 @@ export const LessonScreen: React.FC<LessonScreenProps> = ({
             <button
               type="button"
               onClick={handleCheckAnswer}
-              className="w-full min-h-[52px] rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-extrabold text-base flex items-center justify-center gap-2 shadow-sm"
+              className="w-full min-h-[52px] rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-base flex items-center justify-center gap-2 shadow-sm transition-all"
             >
               <CheckCircle2 className="w-5 h-5" />
               <span>بررسی پاسخ</span>
@@ -300,7 +300,7 @@ export const LessonScreen: React.FC<LessonScreenProps> = ({
             <button
               type="button"
               onClick={handleNextStep}
-              className="w-full min-h-[52px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-extrabold text-base flex items-center justify-center gap-2 shadow-sm"
+              className="w-full min-h-[52px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-base flex items-center justify-center gap-2 shadow-sm transition-all"
             >
               <Sparkles className="w-5 h-5" />
               <span>

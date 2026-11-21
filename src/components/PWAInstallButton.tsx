@@ -14,7 +14,7 @@ export const PWAInstallButton: React.FC = () => {
         type="button"
         onClick={install}
         aria-label="نصب اپلیکیشن کودک نابغه روی گوشی"
-        className="min-h-[44px] inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm font-bold transition-colors"
+        className="min-h-[44px] inline-flex items-center gap-2 rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] active:border-b-0 active:translate-y-0.5 text-white px-4 py-2 text-xs sm:text-sm font-extrabold transition-all shadow-xs"
       >
         <Download className="w-4 h-4" />
         <span>نصب برنامه</span>
@@ -29,7 +29,7 @@ export const PWAInstallButton: React.FC = () => {
           type="button"
           onClick={() => setShowIOSGuide(true)}
           aria-label="راهنمای نصب در آیفون و آیپد"
-          className="min-h-[44px] inline-flex items-center gap-2 rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+          className="min-h-[44px] inline-flex items-center gap-2 rounded-2xl bg-white hover:bg-[#FFF6EB] dark:bg-slate-800 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-700 px-3 py-2 text-xs font-extrabold text-[#5C3A00] dark:text-slate-200 transition-all"
         >
           <Download className="w-4 h-4" />
           <span>نصب در آیفون</span>
@@ -37,11 +37,11 @@ export const PWAInstallButton: React.FC = () => {
 
         {showIOSGuide && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="w-full max-w-sm rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-xl border border-slate-200 dark:border-slate-800">
-              <h3 className="text-lg font-extrabold text-slate-900 dark:text-white">
+            <div className="w-full max-w-sm rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-xl border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800">
+              <h3 className="text-lg font-extrabold text-[#3B2618] dark:text-white">
                 نصب کودک نابغه در آیفون و آیپد
               </h3>
-              <p className="mt-3 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+              <p className="mt-3 text-sm text-[#6B4A35] dark:text-slate-300 leading-relaxed">
                 ۱. دکمه <strong>Share</strong> (اشتراک‌گذاری) در نوار پایین سافاری را بزنید.
                 <br />
                 ۲. گزینه <strong>Add to Home Screen</strong> را انتخاب کنید.
@@ -49,7 +49,7 @@ export const PWAInstallButton: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowIOSGuide(false)}
-                className="mt-5 w-full min-h-[44px] rounded-xl bg-blue-600 text-white font-bold text-sm"
+                className="mt-5 w-full min-h-[48px] rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-sm transition-all"
               >
                 متوجه شدم
               </button>
@@ -82,7 +82,7 @@ export const OfflineIndicator: React.FC = () => {
   if (isOnline) return null;
 
   return (
-    <div className="fixed bottom-4 left-4 z-50 flex items-center gap-2 rounded-xl bg-amber-500 px-3 py-2 text-xs font-bold text-white shadow-lg">
+    <div className="fixed bottom-4 left-4 z-50 flex items-center gap-2 rounded-2xl bg-[#FFDC5E] border-2 border-[#DFAD19] border-b-4 px-3.5 py-2 text-xs font-extrabold text-[#5C3A00] shadow-lg">
       <WifiOff className="w-4 h-4" />
       <span>حالت آفلاین فعال است</span>
     </div>

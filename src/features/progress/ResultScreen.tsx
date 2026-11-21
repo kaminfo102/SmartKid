@@ -34,12 +34,12 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
   const kiaMood = result.stars >= 2 ? 'cheering' : 'happy';
 
   return (
-    <div className="min-h-screen bg-[#F7F9FC] dark:bg-slate-950 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#F5E4CE] dark:bg-slate-950 flex items-center justify-center p-4">
       <motion.div
         initial={reducedMotion ? false : { opacity: 0, scale: 0.94, y: 14 }}
         animate={reducedMotion ? undefined : { opacity: 1, scale: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 320, damping: 24 }}
-        className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 text-center shadow-sm space-y-4"
+        className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-6 text-center shadow-lg space-y-4"
       >
         <div className="flex justify-center">
           <KiaMascot
@@ -57,7 +57,7 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
         </h1>
         <p className="text-sm text-slate-600 dark:text-slate-300">{result.message}</p>
 
-        <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/70 p-4 space-y-2 text-sm">
+        <div className="rounded-2xl bg-[#FFF6EB] dark:bg-slate-800/70 border border-[#EFE0CE] dark:border-slate-700 p-4 space-y-2 text-sm">
           <div className="flex items-center justify-between">
             <span className="text-slate-500 dark:text-slate-400">مهارت تمرین‌شده:</span>
             <span className="font-bold text-slate-900 dark:text-white">
@@ -77,7 +77,7 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
           <button
             type="button"
             onClick={onNext}
-            className="w-full min-h-[52px] rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-base flex items-center justify-center gap-2"
+            className="w-full min-h-[54px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] active:border-b-0 active:translate-y-1 text-white font-extrabold text-base flex items-center justify-center gap-2 transition-all"
           >
             <span>مرحله بعد</span>
             <ChevronLeft className="w-5 h-5" />

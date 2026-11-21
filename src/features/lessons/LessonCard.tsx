@@ -9,32 +9,44 @@ import {
   Lock,
   Star,
   Play,
+  CheckCircle2,
 } from 'lucide-react';
 import type { DigitDisplayMode, LessonDefinition, LessonProgress } from '../../types/app';
 import { formatNumber } from '../../lib/numbers';
+import { KidIconTile, type KidTileColor } from '../../components/KidIconTile';
 
 interface LessonCardProps {
   lesson: LessonDefinition;
   progress?: LessonProgress;
   unlocked: boolean;
+  isCurrentNext?: boolean;
   digitMode: DigitDisplayMode;
   onStart: () => void;
 }
 
-function renderIcon(name: LessonDefinition['iconName']) {
+const STAGE_TILE_COLORS: Record<LessonDefinition['iconName'], KidTileColor> = {
+  sparkles: 'sky',
+  layers: 'green',
+  plus: 'blue',
+  minus: 'amber',
+  puzzle: 'violet',
+  brain: 'pink',
+};
+
+export function renderLessonIcon(name: LessonDefinition['iconName'], sizeClass = 'w-7 h-7') {
   switch (name) {
     case 'sparkles':
-      return <Sparkles className="w-6 h-6" />;
+      return <Sparkles className={sizeClass} />;
     case 'layers':
-      return <Layers className="w-6 h-6" />;
+      return <Layers className={sizeClass} />;
     case 'plus':
-      return <Plus className="w-6 h-6" />;
+      return <Plus className={sizeClass} />;
     case 'minus':
-      return <Minus className="w-6 h-6" />;
+      return <Minus className={sizeClass} />;
     case 'puzzle':
-      return <Puzzle className="w-6 h-6" />;
+      return <Puzzle className={sizeClass} />;
     case 'brain':
-      return <Brain className="w-6 h-6" />;
+      return <Brain className={sizeClass} />;
   }
 }
 
@@ -42,10 +54,14 @@ export const LessonCard: React.FC<LessonCardProps> = ({
   lesson,
   progress,
   unlocked,
+  isCurrentNext = false,
   digitMode,
   onStart,
 }) => {
   const stars = progress?.stars ?? 0;
+  const tileColor: KidTileColor = unlocked
+    ? STAGE_TILE_COLORS[lesson.iconName]
+    : 'slate';
 
   return (
     <button
@@ -55,25 +71,29 @@ export const LessonCard: React.FC<LessonCardProps> = ({
       aria-label={`مرحله ${formatNumber(lesson.stageNumber, digitMode)}: ${lesson.title}${
         unlocked ? '' : ' (قفل شده)'
       }`}
-      className={`w-full text-right rounded-3xl border p-4 flex items-center justify-between gap-3 transition-all ${
+      className={`w-full text-right rounded-3xl border-2 border-b-4 p-3.5 sm:p-4 flex items-center justify-between gap-3 transition-all ${
         unlocked
-          ? 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-blue-400 shadow-xs active:scale-[0.99]'
-          : 'bg-slate-100/80 dark:bg-slate-900/40 border-slate-200/70 dark:border-slate-800/60 opacity-75 cursor-not-allowed'
+          ? isCurrentNext
+            ? 'bg-white dark:bg-slate-900 border-amber-400 border-b-amber-500 shadow-lg ring-4 ring-amber-200/70 dark:ring-amber-500/30 active:translate-y-0.5'
+            : 'bg-white dark:bg-slate-900 border-white/90 dark:border-slate-800 border-b-emerald-700/20 shadow-md hover:border-amber-300 active:translate-y-0.5'
+          : 'bg-white/75 dark:bg-slate-900/60 border-white/60 dark:border-slate-800/60 border-b-slate-300/70 opacity-80 cursor-not-allowed'
       }`}
     >
-      <div className="flex items-center gap-3.5 min-w-0">
-        <div
-          className="w-14 h-14 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-xs"
-          style={{ backgroundColor: unlocked ? lesson.accentColor : '#94A3B8' }}
-        >
-          {unlocked ? renderIcon(lesson.iconName) : <Lock className="w-6 h-6" />}
-        </div>
+      <div className="flex items-center gap-3 min-w-0">
+        <KidIconTile color={tileColor} size="lg">
+          {unlocked ? renderLessonIcon(lesson.iconName, 'w-7 h-7') : <Lock className="w-7 h-7" />}
+        </KidIconTile>
 
         <div className="min-w-0">
-          <div className="text-xs font-bold text-slate-500 dark:text-slate-400">
-            مرحله {formatNumber(lesson.stageNumber, digitMode)}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] font-extrabold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-lg">
+              مرحله {formatNumber(lesson.stageNumber, digitMode)}
+            </span>
+            {progress?.completed && (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            )}
           </div>
-          <h2 className="font-extrabold text-base text-slate-900 dark:text-white truncate">
+          <h2 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white mt-0.5 truncate">
             {lesson.title}
           </h2>
           <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 line-clamp-1">
@@ -97,8 +117,14 @@ export const LessonCard: React.FC<LessonCardProps> = ({
         </div>
 
         {unlocked && (
-          <span className="inline-flex items-center gap-1 text-xs font-extrabold text-blue-600 dark:text-blue-400">
-            <Play className="w-3.5 h-3.5 fill-current" />
+          <span
+            className={`px-3 py-1 rounded-xl text-xs font-extrabold inline-flex items-center gap-1 ${
+              isCurrentNext
+                ? 'bg-[#46B849] text-white shadow-xs'
+                : 'bg-sky-100 text-sky-900 dark:bg-sky-900/50 dark:text-sky-100'
+            }`}
+          >
+            <Play className="w-3 h-3 fill-current" />
             <span>{progress?.completed ? 'مرور' : 'شروع'}</span>
           </span>
         )}

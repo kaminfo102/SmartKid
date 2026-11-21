@@ -35,24 +35,24 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F9FC] dark:bg-slate-950 flex flex-col">
-      <header className="sticky top-0 z-20 bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-slate-800 px-4 h-14 flex items-center justify-between">
+    <div className="min-h-screen bg-[#F5E4CE] dark:bg-slate-950 flex flex-col">
+      <header className="sticky top-0 z-20 bg-gradient-to-b from-[#F49A67] to-[#F8BA88] dark:from-slate-900 dark:to-slate-900 border-b-2 border-[#E3B488] dark:border-slate-800 px-4 h-16 flex items-center justify-between">
         <button
           type="button"
           onClick={onBack}
           aria-label="بازگشت"
-          className="min-h-[44px] min-w-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200"
+          className="min-h-[44px] min-w-[44px] rounded-2xl bg-white/95 hover:bg-white dark:bg-slate-800 border-b-4 border-[#DFC6A8] dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200"
         >
           <ArrowRight className="w-5 h-5" />
         </button>
-        <h1 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
+        <h1 className="text-lg font-extrabold text-white drop-shadow-[0_2px_0_rgba(148,70,22,0.45)]">
           انتخاب کودک
         </h1>
         <div className="w-11" />
       </header>
 
       <main className="flex-1 w-full max-w-2xl mx-auto p-4 space-y-5">
-        <p className="text-sm text-slate-600 dark:text-slate-300 text-center">
+        <p className="text-sm font-bold text-[#6A4523] dark:text-slate-300 text-center">
           پروفایل خودت را انتخاب کن یا یک قهرمان جدید بساز!
         </p>
 
@@ -69,10 +69,10 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   onBack();
                 }}
                 aria-label={`انتخاب پروفایل ${profile.name}`}
-                className={`min-h-[76px] p-4 rounded-2xl border text-right flex items-center justify-between gap-3 transition-colors ${
+                className={`min-h-[80px] p-4 rounded-3xl border-2 border-b-4 text-right flex items-center justify-between gap-3 transition-all ${
                   isActive
-                    ? 'bg-blue-50 border-blue-500 dark:bg-blue-950/50 dark:border-blue-500'
-                    : 'bg-white border-slate-200 hover:bg-slate-50 dark:bg-slate-900 dark:border-slate-800 dark:hover:bg-slate-800'
+                    ? 'bg-sky-50 border-blue-500 border-b-blue-600 dark:bg-blue-950/50 dark:border-blue-500'
+                    : 'bg-white border-[#EEDCC5] border-b-[#DFC6A8] hover:border-blue-300 dark:bg-slate-900 dark:border-slate-800 dark:hover:bg-slate-800'
                 }`}
               >
                 <div className="flex items-center gap-3 min-w-0">
@@ -107,7 +107,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <button
             type="button"
             onClick={() => setShowCreator(true)}
-            className="w-full min-h-[54px] rounded-2xl border-2 border-dashed border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/20 hover:bg-blue-50 text-blue-700 dark:text-blue-300 font-bold text-base flex items-center justify-center gap-2 transition-colors"
+            className="w-full min-h-[56px] rounded-3xl border-2 border-dashed border-[#D99B58] dark:border-blue-600 bg-white/80 dark:bg-blue-950/20 hover:bg-white text-[#8B4D17] dark:text-blue-300 font-extrabold text-base flex items-center justify-center gap-2 transition-colors shadow-xs"
           >
             <Plus className="w-5 h-5" />
             <span>ساخت پروفایل کودک جدید</span>
@@ -115,7 +115,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         ) : (
           <form
             onSubmit={handleCreate}
-            className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 space-y-4 shadow-sm"
+            className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-5 space-y-4 shadow-md"
           >
             <h2 className="font-extrabold text-base text-slate-900 dark:text-white">
               ساخت پروفایل جدید
@@ -132,7 +132,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="مثلاً سارا یا امیر..."
-                className="w-full min-h-[48px] px-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full min-h-[48px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-slate-900 dark:text-white font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
@@ -146,10 +146,10 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                     key={ageOpt}
                     type="button"
                     onClick={() => setNewAge(ageOpt)}
-                    className={`min-h-[44px] min-w-[44px] rounded-xl font-bold text-sm transition-colors ${
+                    className={`min-h-[44px] min-w-[44px] rounded-2xl font-bold text-sm transition-colors ${
                       newAge === ageOpt
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                        ? 'bg-[#5472EB] border-b-4 border-[#354EB8] text-white'
+                        : 'bg-[#FFF6EB] dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                     }`}
                   >
                     {formatNumber(ageOpt, digitMode)}
@@ -168,14 +168,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                     key={opt.id}
                     type="button"
                     onClick={() => setNewAvatar(opt.id)}
-                    className={`min-h-[64px] p-2 rounded-2xl border flex flex-col items-center justify-center gap-1 transition-all ${
+                    className={`min-h-[68px] p-2 rounded-2xl border-2 flex flex-col items-center justify-center gap-1 transition-all ${
                       newAvatar === opt.id
-                        ? 'border-blue-600 bg-blue-50 dark:bg-blue-950/50 ring-2 ring-blue-400'
-                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'
+                        ? 'border-blue-600 bg-sky-50 dark:bg-blue-950/50 ring-2 ring-blue-400'
+                        : 'border-[#EFE0CE] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800'
                     }`}
                   >
-                    <AvatarGraphic avatar={opt.id} className="w-9 h-9" />
-                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                    <AvatarGraphic avatar={opt.id} className="w-10 h-10" />
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
                       {opt.label}
                     </span>
                   </button>
@@ -186,14 +186,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             <div className="flex items-center gap-2 pt-2">
               <button
                 type="submit"
-                className="flex-1 min-h-[48px] rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-base"
+                className="flex-1 min-h-[50px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] text-white font-extrabold text-base"
               >
                 ذخیره پروفایل
               </button>
               <button
                 type="button"
                 onClick={() => setShowCreator(false)}
-                className="min-h-[48px] px-4 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-sm"
+                className="min-h-[50px] px-4 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-sm"
               >
                 انصراف
               </button>

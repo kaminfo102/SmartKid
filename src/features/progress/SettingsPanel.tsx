@@ -13,6 +13,7 @@ import type { AppSettings, ChildProfile } from '../../types/app';
 import { ProgressPanel } from './ProgressPanel';
 import { PWAInstallButton } from '../../components/PWAInstallButton';
 import { BuyCoffeeButton } from '../../components/BuyCoffeeButton';
+import { KidIconTile, type KidTileColor } from '../../components/KidIconTile';
 
 interface SettingsPanelProps {
   profile: ChildProfile;
@@ -36,16 +37,17 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     desc: string,
     checked: boolean,
     onChange: (val: boolean) => void,
-    icon: React.ReactNode
+    icon: React.ReactNode,
+    tileColor: KidTileColor
   ) => (
-    <div className="flex items-center justify-between gap-3 py-3 border-b border-slate-100 dark:border-slate-800 last:border-b-0">
+    <div className="flex items-center justify-between gap-3 py-3 border-b border-[#EFE0CE] dark:border-slate-800 last:border-b-0">
       <div className="flex items-center gap-3 min-w-0">
-        <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-200 shrink-0">
+        <KidIconTile color={tileColor} size="md">
           {icon}
-        </div>
+        </KidIconTile>
         <div className="min-w-0">
-          <div className="font-bold text-sm text-slate-900 dark:text-white">{label}</div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">{desc}</div>
+          <div className="font-extrabold text-sm text-slate-900 dark:text-white">{label}</div>
+          <div className="text-xs text-slate-600 dark:text-slate-400">{desc}</div>
         </div>
       </div>
 
@@ -55,8 +57,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         aria-checked={checked}
         aria-label={label}
         onClick={() => onChange(!checked)}
-        className={`min-h-[44px] min-w-[60px] px-1 rounded-full flex items-center transition-colors shrink-0 ${
-          checked ? 'bg-blue-600 justify-end' : 'bg-slate-300 dark:bg-slate-700 justify-start'
+        className={`min-h-[44px] min-w-[64px] px-1 rounded-full flex items-center transition-colors shrink-0 border-2 ${
+          checked
+            ? 'bg-[#46B849] border-[#2E8D30] justify-end'
+            : 'bg-slate-200 border-slate-300 dark:bg-slate-700 dark:border-slate-600 justify-start'
         }`}
       >
         <span className="w-8 h-8 rounded-full bg-white shadow-sm block" />
@@ -65,17 +69,17 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   );
 
   return (
-    <div className="min-h-screen bg-[#F7F9FC] dark:bg-slate-950 flex flex-col">
-      <header className="sticky top-0 z-20 bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-slate-800 px-4 h-14 flex items-center justify-between">
+    <div className="min-h-screen bg-[#F5E4CE] dark:bg-slate-950 flex flex-col">
+      <header className="sticky top-0 z-20 bg-gradient-to-b from-[#F49A67] to-[#F8BA88] dark:from-slate-900 dark:to-slate-900 border-b-2 border-[#E3B488] dark:border-slate-800 px-4 h-16 flex items-center justify-between">
         <button
           type="button"
           onClick={onBack}
           aria-label="بازگشت"
-          className="min-h-[44px] min-w-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-200"
+          className="min-h-[44px] min-w-[44px] rounded-2xl bg-white/95 hover:bg-white dark:bg-slate-800 border-b-4 border-[#DFC6A8] dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200"
         >
           <ArrowRight className="w-5 h-5" />
         </button>
-        <h1 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
+        <h1 className="text-lg font-extrabold text-white drop-shadow-[0_2px_0_rgba(148,70,22,0.45)]">
           بخش والدین و تنظیمات
         </h1>
         <div className="w-11" />
@@ -88,7 +92,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         <BuyCoffeeButton variant="card" reducedMotion={settings.reducedMotion} />
 
         {/* App Settings */}
-        <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
+        <section className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-4 sm:p-5">
           <h2 className="font-extrabold text-base text-slate-900 dark:text-white mb-2">
             تنظیمات صدا، نمایش و دسترسی‌پذیری
           </h2>
@@ -98,7 +102,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             'صدای مهره‌های چرتکه و تشویق پاسخ درست',
             settings.soundEnabled,
             (val) => onUpdateSettings({ soundEnabled: val }),
-            <Volume2 className="w-5 h-5" />
+            <Volume2 className="w-5 h-5" />,
+            'blue'
           )}
 
           {toggleRow(
@@ -106,7 +111,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             'خواندن درس‌ها و تشویق‌ها با صدای مهربان خانم مناسب کودکان',
             settings.speechEnabled,
             (val) => onUpdateSettings({ speechEnabled: val }),
-            <MessageSquare className="w-5 h-5" />
+            <MessageSquare className="w-5 h-5" />,
+            'pink'
           )}
 
           {toggleRow(
@@ -114,7 +120,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             'ملودی آرام هنگام یادگیری',
             settings.musicEnabled,
             (val) => onUpdateSettings({ musicEnabled: val }),
-            <Music className="w-5 h-5" />
+            <Music className="w-5 h-5" />,
+            'violet'
           )}
 
           {toggleRow(
@@ -122,7 +129,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             'توقف حرکات اضافه برای تمرکز بیشتر کودک',
             settings.reducedMotion,
             (val) => onUpdateSettings({ reducedMotion: val }),
-            <Sparkles className="w-5 h-5" />
+            <Sparkles className="w-5 h-5" />,
+            'amber'
           )}
 
           {toggleRow(
@@ -130,30 +138,31 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             'رنگ‌های تیره و ملایم برای نور کم',
             settings.nightMode,
             (val) => onUpdateSettings({ nightMode: val }),
-            <Moon className="w-5 h-5" />
+            <Moon className="w-5 h-5" />,
+            'sky'
           )}
 
-          {/* Digits & Language future-ready option */}
-          <div className="flex items-center justify-between gap-3 py-3 border-t border-slate-100 dark:border-slate-800">
+          {/* Digits & Language option */}
+          <div className="flex items-center justify-between gap-3 py-3 border-t border-[#EFE0CE] dark:border-slate-800">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-200">
+              <KidIconTile color="green" size="md">
                 <Globe className="w-5 h-5" />
-              </div>
+              </KidIconTile>
               <div>
-                <div className="font-bold text-sm text-slate-900 dark:text-white">
+                <div className="font-extrabold text-sm text-slate-900 dark:text-white">
                   نمایش اعداد و زبان
                 </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">
+                <div className="text-xs text-slate-600 dark:text-slate-400">
                   زبان فعلی: فارسی (امکان انتخاب ارقام فارسی یا انگلیسی)
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+            <div className="flex items-center gap-1 p-1 rounded-2xl bg-[#FFF6EB] dark:bg-slate-800 border border-[#EEDCC5] dark:border-slate-700">
               <button
                 type="button"
                 onClick={() => onUpdateSettings({ digitMode: 'fa' })}
-                className={`min-h-[38px] px-3 rounded-lg text-xs font-bold ${
+                className={`min-h-[38px] px-3 rounded-xl text-xs font-extrabold ${
                   settings.digitMode === 'fa'
                     ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
                     : 'text-slate-600 dark:text-slate-400'
@@ -164,7 +173,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               <button
                 type="button"
                 onClick={() => onUpdateSettings({ digitMode: 'en' })}
-                className={`min-h-[38px] px-3 rounded-lg text-xs font-bold ${
+                className={`min-h-[38px] px-3 rounded-xl text-xs font-extrabold ${
                   settings.digitMode === 'en'
                     ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
                     : 'text-slate-600 dark:text-slate-400'
@@ -177,12 +186,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         </section>
 
         {/* PWA & Local Data Management */}
-        <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <section className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="font-extrabold text-sm text-slate-900 dark:text-white">
               نصب آفلاین و مدیریت اطلاعات محلی
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
               تمام پیشرفت‌ها فقط روی همین دستگاه ذخیره می‌شوند و هیچ اطلاعاتی به سرور ارسال نمی‌شود.
             </p>
           </div>
@@ -194,7 +203,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               <button
                 type="button"
                 onClick={() => setConfirmClear(true)}
-                className="min-h-[44px] px-4 rounded-xl bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 text-amber-950 dark:text-amber-100 font-bold text-xs inline-flex items-center gap-1.5"
+                className="min-h-[44px] px-4 rounded-2xl bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 border-b-4 border-amber-300 dark:border-amber-800 text-amber-950 dark:text-amber-100 font-bold text-xs inline-flex items-center gap-1.5"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>حذف اطلاعات محلی</span>
@@ -207,14 +216,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     onClearAllData();
                     setConfirmClear(false);
                   }}
-                  className="min-h-[44px] px-3 rounded-xl bg-amber-600 text-white font-bold text-xs"
+                  className="min-h-[44px] px-3 rounded-2xl bg-amber-600 border-b-4 border-amber-800 text-white font-bold text-xs"
                 >
                   تایید حذف کامل
                 </button>
                 <button
                   type="button"
                   onClick={() => setConfirmClear(false)}
-                  className="min-h-[44px] px-3 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100 font-bold text-xs"
+                  className="min-h-[44px] px-3 rounded-2xl bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100 font-bold text-xs"
                 >
                   لغو
                 </button>
