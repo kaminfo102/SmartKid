@@ -571,6 +571,7 @@ class KN_REST {
 					'dailyChallengeCount' => isset( $settings['daily_challenge_count'] ) ? absint( $settings['daily_challenge_count'] ) : 5,
 					'wooActive'           => KN_Woo::is_woo_active(),
 					'wooCurrency'         => KN_Woo::get_currency_label(),
+					'audioSettings'       => KN_DB::get_audio_settings(),
 					'defaultSettings'     => array(
 						'soundEnabled'  => ! empty( $settings['default_sound_enabled'] ),
 						'speechEnabled' => ! empty( $settings['default_speech_enabled'] ),

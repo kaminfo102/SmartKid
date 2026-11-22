@@ -114,12 +114,12 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
     setKiaMood('teaching');
     setFeedback(null);
     setFlashHidden(false);
-    audioEngine.speakPersian(q.spokenText);
+    audioEngine.speakPersian(q.spokenText, undefined, q.audioUrl);
   };
 
   useEffect(() => {
     setUsedQuestionIds(new Set([question.id]));
-    audioEngine.speakPersian(question.spokenText);
+    audioEngine.speakPersian(question.spokenText, undefined, question.audioUrl);
     return () => audioEngine.stopSpeech();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -160,7 +160,7 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
         title: 'آفرین! کیا برات دست می‌زنه!',
         subtitle: `جواب درست عدد ${formatNumber(question.targetValue, settings.digitMode)} است.`,
       });
-      audioEngine.speakPersian('آفرین! خیلی خوب بود.');
+      audioEngine.speakPersian('آفرین! خیلی خوب بود.', 'cheer', undefined, 'praise_correct');
     } else {
       const nextFails = failsOnCurrent + 1;
       setFailsOnCurrent(nextFails);
@@ -174,14 +174,14 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
           title: 'غصه نخور! بیا با هم حلش کنیم',
           subtitle: 'مهره‌ای که فلش طلایی دارد را حرکت بده یا شبیه‌ساز حل را ببین.',
         });
-        audioEngine.speakPersian('دوباره تلاش کن قهرمان! فلش طلایی کمکت می‌کند.');
+        audioEngine.speakPersian('دوباره تلاش کن قهرمان! فلش طلایی کمکت می‌کند.', 'encourage', undefined, 'try_again');
       } else {
         setFeedback({
           type: 'encourage',
           title: 'یه کوچولو دیگه مونده! دوباره تلاش کن',
           subtitle: `الان عدد ${formatNumber(userVal, settings.digitMode)} روی چرتکه است.`,
         });
-        audioEngine.speakPersian('دوباره تلاش کن!');
+        audioEngine.speakPersian('دوباره تلاش کن!', 'encourage', undefined, 'try_again');
       }
     }
   };
@@ -263,7 +263,12 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
           </span>
         </div>
 
-        <AudioButton textToSpeak={question.spokenText} label="صدا" size="sm" />
+        <AudioButton
+          textToSpeak={question.spokenText}
+          audioUrl={question.audioUrl}
+          label="صدا"
+          size="sm"
+        />
       </header>
 
       {/* Question Prompt Card with Expressive KiaAvatar */}

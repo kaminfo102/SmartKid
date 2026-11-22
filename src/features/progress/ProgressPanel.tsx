@@ -1,5 +1,4 @@
 import React from 'react';
-import { Award, CheckCircle2, Clock, Star } from 'lucide-react';
 import type {
   ChildProfile,
   DigitDisplayMode,
@@ -8,7 +7,7 @@ import type {
 } from '../../types/app';
 import { LESSONS, SKILL_LABELS } from '../../data/lessons';
 import { formatNumber } from '../../lib/numbers';
-import { KidIconTile } from '../../components/KidIconTile';
+import { ChildProfileDetails } from './ChildProfileDetails';
 
 interface ProgressPanelProps {
   profile: ChildProfile;
@@ -21,12 +20,6 @@ export const ProgressPanel: React.FC<ProgressPanelProps> = ({
   digitMode,
   lessons = LESSONS,
 }) => {
-  const completedLessons = lessons.filter((l) => profile.lessons[l.id]?.completed).length;
-  const accuracy =
-    profile.totalAttempts > 0
-      ? Math.round((profile.totalCorrect / profile.totalAttempts) * 100)
-      : 100;
-
   const skillEntries = (Object.keys(SKILL_LABELS) as SkillKey[]).map((key) => {
     const stat = profile.skills[key] ?? { correct: 0, attempts: 0 };
     const pct = stat.attempts > 0 ? Math.round((stat.correct / stat.attempts) * 100) : null;
@@ -38,69 +31,16 @@ export const ProgressPanel: React.FC<ProgressPanelProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* Top 4 Metrics with Colorful KidIconTiles */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_8px_20px_-6px_rgba(170,104,40,0.14)] p-3.5 flex items-center gap-3">
-          <KidIconTile color="green" size="md">
-            <CheckCircle2 className="w-6 h-6" />
-          </KidIconTile>
-          <div className="min-w-0">
-            <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">
-              درس‌های کامل
-            </div>
-            <div className="text-lg font-extrabold text-slate-900 dark:text-white tabular-nums">
-              {formatNumber(completedLessons, digitMode)} / {formatNumber(lessons.length, digitMode)}
-            </div>
-          </div>
-        </div>
+      <ChildProfileDetails
+        profile={profile}
+        digitMode={digitMode}
+        lessons={lessons}
+      />
 
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_8px_20px_-6px_rgba(170,104,40,0.14)] p-3.5 flex items-center gap-3">
-          <KidIconTile color="sky" size="md">
-            <Clock className="w-6 h-6" />
-          </KidIconTile>
-          <div className="min-w-0">
-            <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">
-              زمان تمرین
-            </div>
-            <div className="text-lg font-extrabold text-slate-900 dark:text-white tabular-nums">
-              {formatNumber(Math.max(1, profile.practiceMinutes), digitMode)} دقیقه
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_8px_20px_-6px_rgba(170,104,40,0.14)] p-3.5 flex items-center gap-3">
-          <KidIconTile color="violet" size="md">
-            <Award className="w-6 h-6" />
-          </KidIconTile>
-          <div className="min-w-0">
-            <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">
-              پاسخ درست
-            </div>
-            <div className="text-lg font-extrabold text-slate-900 dark:text-white tabular-nums">
-              {formatNumber(profile.totalCorrect, digitMode)} (%{formatNumber(accuracy, digitMode)})
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_8px_20px_-6px_rgba(170,104,40,0.14)] p-3.5 flex items-center gap-3">
-          <KidIconTile color="amber" size="md">
-            <Star className="w-6 h-6 fill-white" />
-          </KidIconTile>
-          <div className="min-w-0">
-            <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">
-              ستاره‌ها
-            </div>
-            <div className="text-lg font-extrabold text-slate-900 dark:text-white tabular-nums">
-              {formatNumber(profile.totalStars, digitMode)}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Strong & Weak Skills Analysis */}
+      {/* Strong & Weak Skills Quick Summary for Parents */}
       <div className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_8px_20px_-6px_rgba(170,104,40,0.14)] p-4 space-y-3">
         <h2 className="font-extrabold text-sm text-slate-900 dark:text-white">
-          تحلیل مهارت‌های {profile.name}
+          خلاصه تحلیل مهارت‌های {profile.name}
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">

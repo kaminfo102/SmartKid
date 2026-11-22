@@ -165,20 +165,29 @@ class KN_Auth {
 	 * Convert Persian/Arabic numerals to ASCII and strip whitespace/dashes for mobile normalization.
 	 */
 	public static function normalize_mobile( $raw ) {
-		$str  = (string) $raw;
-		$fa   = array( '۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹' );
-		$ar   = array( '٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩' );
-		$en   = array( '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' );
-		$str  = str_replace( $fa, $en, $str );
-		$str  = str_replace( $ar, $en, $str );
+		$str    = (string) $raw;
+		$fa     = array( '۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹' );
+		$ar     = array( '٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩' );
+		$en     = array( '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' );
+		$str    = str_replace( $fa, $en, $str );
+		$str    = str_replace( $ar, $en, $str );
 		$digits = preg_replace( '/[^0-9]/', '', $str );
-		// Normalize +98 / 98 prefix for Iranian numbers to 09...
-		if ( strlen( $digits ) === 12 && strpos( $digits, '989' ) === 0 ) {
+		// Normalize 00989... / 989... / 9... prefix for Iranian numbers to 09...
+		if ( strlen( $digits ) === 14 && strpos( $digits, '00989' ) === 0 ) {
+			$digits = '0' . substr( $digits, 4 );
+		} elseif ( strlen( $digits ) === 12 && strpos( $digits, '989' ) === 0 ) {
 			$digits = '0' . substr( $digits, 2 );
 		} elseif ( strlen( $digits ) === 10 && strpos( $digits, '9' ) === 0 ) {
 			$digits = '0' . $digits;
 		}
 		return $digits;
+	}
+
+	/**
+	 * Strictly validate Iranian mobile format (11 digits starting with 09).
+	 */
+	public static function is_valid_iran_mobile( $mobile ) {
+		return preg_match( '/^09[0-9]{9}$/', (string) $mobile ) === 1;
 	}
 
 	/**
@@ -282,8 +291,8 @@ class KN_Auth {
 		$child_age    = isset( $params['childAge'] ) ? max( 4, min( 15, absint( $params['childAge'] ) ) ) : 6;
 		$child_avatar = isset( $params['childAvatar'] ) ? sanitize_key( $params['childAvatar'] ) : 'owl';
 
-		if ( strlen( $mobile ) < 10 ) {
-			return new WP_Error( 'invalid_mobile', 'لطفاً شماره موبایل معتبر وارد کنید (مثلاً 09123456789).', array( 'status' => 400 ) );
+		if ( ! self::is_valid_iran_mobile( $mobile ) ) {
+			return new WP_Error( 'invalid_mobile', 'شماره موبایل معتبر نیست. لطفاً شماره ۱۱ رقمی با شروع 09 وارد کنید (مثلاً 09123456789).', array( 'status' => 400 ) );
 		}
 
 		if ( strlen( $password ) < 6 ) {
@@ -293,13 +302,37 @@ class KN_Auth {
 		// Prevent duplicate registration on the same mobile number
 		$existing_mobile = get_users(
 			array(
-				'meta_key'   => 'kn_mobile',
-				'meta_value' => $mobile,
+				'meta_query' => array(
+					'relation' => 'OR',
+					array(
+						'key'   => 'kn_mobile',
+						'value' => $mobile,
+					),
+					array(
+						'key'   => 'billing_phone',
+						'value' => $mobile,
+					),
+				),
 				'number'     => 1,
 			)
 		);
-		if ( ! empty( $existing_mobile ) || username_exists( $mobile ) ) {
+		if ( ! empty( $existing_mobile ) ) {
 			return new WP_Error( 'mobile_exists', 'این شماره موبایل قبلاً ثبت شده است. لطفاً وارد حساب خود شوید.', array( 'status' => 409 ) );
+		}
+
+		if ( ! empty( $username_raw ) ) {
+			if ( strlen( $username_raw ) < 3 ) {
+				return new WP_Error( 'invalid_username', 'نام کاربری باید حداقل ۳ کاراکتر انگلیسی باشد.', array( 'status' => 400 ) );
+			}
+			if ( username_exists( $username_raw ) ) {
+				return new WP_Error( 'username_exists', 'این نام کاربری قبلاً انتخاب شده است. لطفاً نام کاربری دیگری وارد کنید.', array( 'status' => 409 ) );
+			}
+			$username = $username_raw;
+		} else {
+			if ( username_exists( $mobile ) ) {
+				return new WP_Error( 'mobile_exists', 'این شماره موبایل قبلاً ثبت شده است. لطفاً وارد حساب خود شوید.', array( 'status' => 409 ) );
+			}
+			$username = $mobile;
 		}
 
 		if ( ! empty( $email_in ) ) {
@@ -311,13 +344,13 @@ class KN_Auth {
 			}
 			$email = $email_in;
 		} else {
-			$host = wp_parse_url( home_url( '/' ), PHP_URL_HOST );
-			if ( empty( $host ) || strpos( $host, '.' ) === false ) {
-				$host = 'koodaknabegheh.local';
+			$local_part = strtolower( preg_replace( '/[^a-zA-Z0-9._-]/', '', $username ) );
+			if ( empty( $local_part ) ) {
+				$local_part = $mobile;
 			}
-			$email = sanitize_email( $mobile . '@' . $host );
+			$email = sanitize_email( $local_part . '@chootkeh.ir' );
 			if ( email_exists( $email ) ) {
-				$email = sanitize_email( $mobile . '_' . wp_rand( 10, 99 ) . '@' . $host );
+				$email = sanitize_email( $local_part . '_' . wp_rand( 10, 99 ) . '@chootkeh.ir' );
 			}
 		}
 
@@ -328,11 +361,6 @@ class KN_Auth {
 		}
 		if ( empty( $display_name ) ) {
 			$display_name = trim( $first_name . ' ' . $last_name );
-		}
-
-		$username = ! empty( $username_raw ) ? $username_raw : $mobile;
-		if ( empty( $username ) || username_exists( $username ) ) {
-			$username = $mobile . '_' . wp_rand( 100, 999 );
 		}
 
 		$user_id = wp_create_user( $username, $password, $email );
@@ -380,6 +408,7 @@ class KN_Auth {
 			)
 		);
 
+		clean_user_cache( $user_id );
 		$user = get_user_by( 'id', $user_id );
 		return $user;
 	}
@@ -400,8 +429,30 @@ class KN_Auth {
 		$postcode     = isset( $params['postcode'] ) ? self::normalize_mobile( $params['postcode'] ) : get_user_meta( $user_id, 'billing_postcode', true );
 		$new_password = isset( $params['newPassword'] ) ? (string) $params['newPassword'] : '';
 
-		if ( ! empty( $mobile_in ) && strlen( $mobile_in ) < 10 ) {
-			return new WP_Error( 'invalid_mobile', 'شماره موبایل وارد شده معتبر نیست.', array( 'status' => 400 ) );
+		if ( empty( $mobile_in ) || ! self::is_valid_iran_mobile( $mobile_in ) ) {
+			return new WP_Error( 'invalid_mobile', 'شماره موبایل معتبر نیست. لطفاً شماره ۱۱ رقمی با شروع 09 وارد کنید.', array( 'status' => 400 ) );
+		}
+
+		// Prevent hijacking another user's mobile number
+		$existing_mobile = get_users(
+			array(
+				'exclude'    => array( $user_id ),
+				'meta_query' => array(
+					'relation' => 'OR',
+					array(
+						'key'   => 'kn_mobile',
+						'value' => $mobile_in,
+					),
+					array(
+						'key'   => 'billing_phone',
+						'value' => $mobile_in,
+					),
+				),
+				'number'     => 1,
+			)
+		);
+		if ( ! empty( $existing_mobile ) ) {
+			return new WP_Error( 'mobile_exists', 'این شماره موبایل متعلق به حساب کاربری دیگری است.', array( 'status' => 409 ) );
 		}
 
 		$update_args = array(
@@ -412,7 +463,14 @@ class KN_Auth {
 		);
 
 		$final_email = $user->user_email;
-		if ( ! empty( $email_in ) && $email_in !== $user->user_email ) {
+		if ( empty( $email_in ) ) {
+			$local_part    = strtolower( preg_replace( '/[^a-zA-Z0-9._-]/', '', $user->user_login ) );
+			$default_email = sanitize_email( ( $local_part ?: $mobile_in ) . '@chootkeh.ir' );
+			if ( ! email_exists( $default_email ) || (int) email_exists( $default_email ) === $user_id ) {
+				$update_args['user_email'] = $default_email;
+				$final_email               = $default_email;
+			}
+		} elseif ( $email_in !== $user->user_email ) {
 			$sanitized = sanitize_email( $email_in );
 			if ( ! is_email( $sanitized ) ) {
 				return new WP_Error( 'invalid_email', 'ایمیل وارد شده معتبر نیست.', array( 'status' => 400 ) );
@@ -452,6 +510,7 @@ class KN_Auth {
 			)
 		);
 
+		clean_user_cache( $user_id );
 		return get_user_by( 'id', $user_id );
 	}
 
@@ -513,25 +572,27 @@ class KN_Auth {
 	 * Format user info for frontend.
 	 */
 	public static function format_user( WP_User $user ) {
-		$uid    = (int) $user->ID;
-		$mobile = (string) get_user_meta( $uid, 'kn_mobile', true );
-		if ( empty( $mobile ) ) {
-			$mobile = (string) get_user_meta( $uid, 'billing_phone', true );
-		}
-		$is_auto_email = (string) get_user_meta( $uid, 'kn_auto_email', true ) === '1';
+		$uid        = (int) $user->ID;
+		$mobile     = (string) ( get_user_meta( $uid, 'kn_mobile', true ) ?: get_user_meta( $uid, 'billing_phone', true ) );
+		$first_name = (string) ( get_user_meta( $uid, 'first_name', true ) ?: get_user_meta( $uid, 'billing_first_name', true ) ?: $user->first_name );
+		$last_name  = (string) ( get_user_meta( $uid, 'last_name', true ) ?: get_user_meta( $uid, 'billing_last_name', true ) ?: $user->last_name );
+		$state      = (string) ( get_user_meta( $uid, 'billing_state', true ) ?: get_user_meta( $uid, 'shipping_state', true ) );
+		$city       = (string) ( get_user_meta( $uid, 'billing_city', true ) ?: get_user_meta( $uid, 'shipping_city', true ) );
+		$address1   = (string) ( get_user_meta( $uid, 'billing_address_1', true ) ?: get_user_meta( $uid, 'shipping_address_1', true ) );
+		$postcode   = (string) ( get_user_meta( $uid, 'billing_postcode', true ) ?: get_user_meta( $uid, 'shipping_postcode', true ) );
 
 		return array(
 			'id'          => $uid,
 			'username'    => $user->user_login,
-			'email'       => $is_auto_email ? '' : $user->user_email,
+			'email'       => (string) $user->user_email,
 			'mobile'      => $mobile,
-			'firstName'   => (string) ( $user->first_name ?: get_user_meta( $uid, 'billing_first_name', true ) ),
-			'lastName'    => (string) ( $user->last_name ?: get_user_meta( $uid, 'billing_last_name', true ) ),
-			'displayName' => $user->display_name,
-			'state'       => (string) get_user_meta( $uid, 'billing_state', true ),
-			'city'        => (string) get_user_meta( $uid, 'billing_city', true ),
-			'address1'    => (string) get_user_meta( $uid, 'billing_address_1', true ),
-			'postcode'    => (string) get_user_meta( $uid, 'billing_postcode', true ),
+			'firstName'   => $first_name,
+			'lastName'    => $last_name,
+			'displayName' => $user->display_name ?: trim( $first_name . ' ' . $last_name ) ?: $user->user_login,
+			'state'       => $state,
+			'city'        => $city,
+			'address1'    => $address1,
+			'postcode'    => $postcode,
 			'roles'       => array_values( $user->roles ),
 			'isAdmin'     => user_can( $user, 'manage_options' ),
 		);

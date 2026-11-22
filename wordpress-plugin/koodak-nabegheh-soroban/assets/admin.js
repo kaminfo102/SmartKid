@@ -1,4 +1,26 @@
 (function () {
+  var voiceRowCounter = 1000;
+
+  function syncAudioPreview(inputId, url) {
+    if (!inputId) return;
+    var audioEl = document.querySelector('[data-kn-audio-preview="' + inputId + '"]');
+    if (!audioEl) return;
+    var trimmed = (url || '').trim();
+    if (trimmed) {
+      audioEl.src = trimmed;
+      audioEl.style.display = 'block';
+      try {
+        audioEl.load();
+      } catch (err) {}
+    } else {
+      try {
+        audioEl.pause();
+      } catch (err) {}
+      audioEl.removeAttribute('src');
+      audioEl.style.display = 'none';
+    }
+  }
+
   document.addEventListener('click', function (e) {
     var copyBtn = e.target.closest('[data-kn-copy]');
     if (copyBtn) {
@@ -22,6 +44,86 @@
       if (targetEl) {
         targetEl.classList.toggle('is-open');
       }
+      return;
+    }
+
+    var mediaBtn = e.target.closest('[data-kn-media-target]');
+    if (mediaBtn) {
+      e.preventDefault();
+      var inputId = mediaBtn.getAttribute('data-kn-media-target');
+      var inputEl = document.getElementById(inputId);
+      if (!inputEl) return;
+
+      if (!window.wp || !window.wp.media) {
+        inputEl.focus();
+        return;
+      }
+
+      var frame = window.wp.media({
+        title: 'انتخاب یا آپلود فایل صوتی',
+        library: { type: 'audio' },
+        button: { text: 'استفاده از این فایل صوتی' },
+        multiple: false
+      });
+
+      frame.on('select', function () {
+        var selection = frame.state().get('selection');
+        if (!selection || !selection.first()) return;
+        var attachment = selection.first().toJSON();
+        if (attachment && attachment.url) {
+          inputEl.value = attachment.url;
+          syncAudioPreview(inputId, attachment.url);
+        }
+      });
+
+      frame.open();
+      return;
+    }
+
+    var clearBtn = e.target.closest('[data-kn-media-clear]');
+    if (clearBtn) {
+      e.preventDefault();
+      var clearTargetId = clearBtn.getAttribute('data-kn-media-clear');
+      var clearInput = document.getElementById(clearTargetId);
+      if (clearInput) {
+        clearInput.value = '';
+      }
+      syncAudioPreview(clearTargetId, '');
+      return;
+    }
+
+    var addVoiceBtn = e.target.closest('[data-kn-add-voice-row]');
+    if (addVoiceBtn) {
+      e.preventDefault();
+      var tbody = document.getElementById('kn-voice-clips-body');
+      var tpl = document.getElementById('kn-voice-row-template');
+      if (!tbody || !tpl) return;
+      voiceRowCounter += 1;
+      var html = tpl.innerHTML.replace(/__INDEX__/g, String(voiceRowCounter));
+      var tempTable = document.createElement('table');
+      tempTable.innerHTML = '<tbody>' + html + '</tbody>';
+      var newRow = tempTable.querySelector('tr');
+      if (newRow) {
+        tbody.appendChild(newRow);
+      }
+      return;
+    }
+
+    var removeVoiceBtn = e.target.closest('[data-kn-remove-voice-row]');
+    if (removeVoiceBtn) {
+      e.preventDefault();
+      var row = removeVoiceBtn.closest('tr.kn-voice-clip-row');
+      if (row) {
+        row.remove();
+      }
+    }
+  });
+
+  document.addEventListener('change', function (e) {
+    var input = e.target.closest('input[data-kn-audio-input]');
+    if (input && input.id) {
+      syncAudioPreview(input.id, input.value);
     }
   });
 })();
+

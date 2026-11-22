@@ -34,9 +34,13 @@ import { IRAN_PROVINCES } from '../lib/iranProvinces';
 import type { OptimizedImageResult } from '../lib/imageOptimizer';
 import {
   checkWordPressHealth,
+  fetchAccountMe,
   fetchUserOrders,
+  isValidIranMobile,
   loginWordPress,
   logoutWordPress,
+  normalizeIranMobile,
+  normalizePersianDigits,
   registerWordPress,
   saveWordPressUrl,
   updateAccountProfile,
@@ -88,6 +92,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
   const [password, setPassword] = useState('');
 
   // Registration fields
+  const [regUsername, setRegUsername] = useState('');
   const [regMobile, setRegMobile] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [regFirstName, setRegFirstName] = useState('');
@@ -103,6 +108,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
 
   // Logged-in account tabs
   const [accountTab, setAccountTab] = useState<'orders' | 'profile' | 'admin'>('orders');
+  const [profileLoading, setProfileLoading] = useState(false);
 
   // Profile edit state
   const [editFirstName, setEditFirstName] = useState(wpUser?.firstName || '');
@@ -127,18 +133,40 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const syncEditFieldsFromUser = useCallback((user: WordPressUser) => {
+    setEditFirstName(user.firstName || '');
+    setEditLastName(user.lastName || '');
+    setEditMobile(user.mobile || '');
+    setEditEmail(
+      user.email || (user.username ? `${user.username}@chootkeh.ir` : '')
+    );
+    setEditState(user.state && user.state.trim() ? user.state : 'تهران');
+    setEditCity(user.city || '');
+    setEditAddress1(user.address1 || '');
+    setEditPostcode(user.postcode || '');
+  }, []);
+
   useEffect(() => {
     if (wpUser) {
-      setEditFirstName(wpUser.firstName || '');
-      setEditLastName(wpUser.lastName || '');
-      setEditMobile(wpUser.mobile || '');
-      setEditEmail(wpUser.email || '');
-      setEditState(wpUser.state || 'تهران');
-      setEditCity(wpUser.city || '');
-      setEditAddress1(wpUser.address1 || '');
-      setEditPostcode(wpUser.postcode || '');
+      syncEditFieldsFromUser(wpUser);
     }
-  }, [wpUser]);
+  }, [wpUser, syncEditFieldsFromUser]);
+
+  const loadAccountProfile = useCallback(async () => {
+    if (!wpUrl || !wpUser) return;
+    setProfileLoading(true);
+    try {
+      const me = await fetchAccountMe(wpUrl);
+      if (me?.user) {
+        onUpdateUser?.(me.user);
+        syncEditFieldsFromUser(me.user);
+      }
+    } catch {
+      // keep existing wpUser values if offline/temporary error
+    } finally {
+      setProfileLoading(false);
+    }
+  }, [wpUrl, wpUser, onUpdateUser, syncEditFieldsFromUser]);
 
   const loadOrders = useCallback(async () => {
     if (!wpUrl || !wpUser) return;
@@ -155,10 +183,13 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
   }, [wpUrl, wpUser]);
 
   useEffect(() => {
-    if (wpUser && wpUrl && accountTab === 'orders') {
+    if (!wpUser || !wpUrl) return;
+    if (accountTab === 'orders') {
       void loadOrders();
+    } else if (accountTab === 'profile') {
+      void loadAccountProfile();
     }
-  }, [wpUser, wpUrl, accountTab, loadOrders]);
+  }, [wpUser, wpUrl, accountTab, loadOrders, loadAccountProfile]);
 
   const handleTestAndSaveUrl = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -217,17 +248,40 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
     e.preventDefault();
     setErrorMsg(null);
     setStatusMsg(null);
+
+    const normalizedMobile = normalizeIranMobile(regMobile);
+    if (!isValidIranMobile(normalizedMobile)) {
+      setErrorMsg('شماره موبایل معتبر نیست. لطفاً شماره ۱۱ رقمی صحیح با شروع ۰۹ وارد کنید (مثلاً 09123456789).');
+      return;
+    }
+
+    const cleanUsername = normalizePersianDigits(regUsername.trim()).replace(/[^a-zA-Z0-9._-]/g, '');
+    if (regUsername.trim() && cleanUsername.length < 3) {
+      setErrorMsg('نام کاربری باید حداقل ۳ کاراکتر انگلیسی (حروف یا عدد) باشد یا این فیلد را خالی بگذارید تا شماره موبایل ثبت شود.');
+      return;
+    }
+
+    if (regPassword.length < 6) {
+      setErrorMsg('رمز عبور باید حداقل ۶ کاراکتر باشد.');
+      return;
+    }
+
     const activeUrl = saveWordPressUrl(siteInput || wpUrl);
     if (!activeUrl) {
       setShowAdminSetup(true);
       setErrorMsg('سرور برنامه هنوز تنظیم نشده است. مدیر سایت باید آدرس سرور را وارد کند.');
       return;
     }
+
+    const finalUsernameForEmail = cleanUsername || normalizedMobile;
+    const defaultEmail = `${finalUsernameForEmail.toLowerCase()}@chootkeh.ir`;
+
     setLoading(true);
     try {
       const res = await registerWordPress(activeUrl, {
-        mobile: regMobile.trim(),
-        email: regEmail.trim() || undefined,
+        mobile: normalizedMobile,
+        username: cleanUsername || undefined,
+        email: regEmail.trim() || defaultEmail,
         password: regPassword,
         firstName: regFirstName.trim(),
         lastName: regLastName.trim(),
@@ -235,12 +289,13 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
         state: regState.trim(),
         city: regCity.trim(),
         address1: regAddress1.trim(),
-        postcode: regPostcode.trim(),
+        postcode: normalizePersianDigits(regPostcode.trim()),
         childName: regChildName.trim() || 'قهرمان کوچک',
         childAge: regChildAge,
         childAvatar: regAvatar,
       });
       onUpdateWpUrl(activeUrl);
+      syncEditFieldsFromUser(res.user);
       onAuthSuccess(res);
       setStatusMsg('ثبت‌نام با موفقیت انجام شد و پروفایل کودک شما ساخته شد!');
     } catch (err) {
@@ -253,23 +308,33 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!wpUrl || !wpUser) return;
-    setLoading(true);
     setErrorMsg(null);
     setStatusMsg(null);
+
+    const normalizedMobile = normalizeIranMobile(editMobile);
+    if (!isValidIranMobile(normalizedMobile)) {
+      setErrorMsg('شماره موبایل معتبر نیست. لطفاً شماره ۱۱ رقمی با شروع ۰۹ وارد کنید (مثلاً 09123456789).');
+      return;
+    }
+
+    const fallbackEmail = wpUser.username ? `${wpUser.username}@chootkeh.ir` : undefined;
+
+    setLoading(true);
     try {
       const res = await updateAccountProfile(wpUrl, {
         firstName: editFirstName.trim(),
         lastName: editLastName.trim(),
         displayName: `${editFirstName.trim()} ${editLastName.trim()}`.trim() || wpUser.displayName,
-        mobile: editMobile.trim(),
-        email: editEmail.trim() || undefined,
+        mobile: normalizedMobile,
+        email: editEmail.trim() || fallbackEmail,
         state: editState.trim(),
         city: editCity.trim(),
         address1: editAddress1.trim(),
-        postcode: editPostcode.trim(),
+        postcode: normalizePersianDigits(editPostcode.trim()),
         newPassword: editNewPassword.trim() || undefined,
       });
       onUpdateUser?.(res.user);
+      syncEditFieldsFromUser(res.user);
       setEditNewPassword('');
       setStatusMsg(res.message);
     } catch (err) {
@@ -627,10 +692,29 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
             {/* Tab 2: Account & Billing/Shipping Edit Form */}
             {accountTab === 'profile' && (
               <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 p-4 sm:p-5">
-                <h2 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white mb-4">
-                  ویرایش مشخصات ثبت‌نام و آدرس ارسال
-                </h2>
+                <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
+                  <h2 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white">
+                    ویرایش مشخصات ثبت‌نام و آدرس ارسال
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => void loadAccountProfile()}
+                    disabled={profileLoading}
+                    className="min-h-[36px] px-3 rounded-xl bg-[#FFF6EB] dark:bg-slate-800 border border-[#EEDCC5] dark:border-slate-700 text-xs font-extrabold text-[#783F1D] dark:text-slate-200 inline-flex items-center gap-1.5"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${profileLoading ? 'animate-spin' : ''}`} />
+                    <span>{profileLoading ? 'در حال فراخوانی...' : 'فراخوانی اطلاعات از سرور'}</span>
+                  </button>
+                </div>
+
                 <form onSubmit={handleSaveProfile} className="space-y-3">
+                  <div className="rounded-2xl bg-[#FFF9F2] dark:bg-slate-800/70 border border-[#EEDCC5] dark:border-slate-700 px-3.5 py-2.5 flex items-center justify-between gap-2 text-xs">
+                    <span className="font-extrabold text-slate-600 dark:text-slate-300">نام کاربری حساب (ثابت):</span>
+                    <span dir="ltr" className="font-mono font-extrabold text-[#5472EB] dark:text-sky-300">
+                      {wpUser.username}
+                    </span>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
@@ -661,27 +745,34 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-                        شماره موبایل
+                        شماره موبایل *
                       </label>
                       <input
                         type="tel"
                         dir="ltr"
                         required
+                        maxLength={14}
                         value={editMobile}
-                        onChange={(e) => setEditMobile(e.target.value)}
+                        onChange={(e) => setEditMobile(normalizePersianDigits(e.target.value))}
+                        placeholder="09123456789"
                         className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                       />
+                      {editMobile.trim() && !isValidIranMobile(editMobile) && (
+                        <p className="text-[11px] font-bold text-rose-600 mt-1">
+                          شماره موبایل باید ۱۱ رقم و با ۰۹ شروع شود.
+                        </p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-                        ایمیل (اختیاری)
+                        ایمیل (اختیاری — پیش‌فرض @chootkeh.ir)
                       </label>
                       <input
                         type="email"
                         dir="ltr"
                         value={editEmail}
                         onChange={(e) => setEditEmail(e.target.value)}
-                        placeholder="email@example.com"
+                        placeholder={`${wpUser.username}@chootkeh.ir`}
                         className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                       />
                     </div>
@@ -697,6 +788,9 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                         onChange={(e) => setEditState(e.target.value)}
                         className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                       >
+                        {editState && !IRAN_PROVINCES.includes(editState) && (
+                          <option value={editState}>{editState}</option>
+                        )}
                         {IRAN_PROVINCES.map((prov) => (
                           <option key={prov} value={prov}>
                             {prov}
@@ -826,10 +920,10 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                     </KidIconTile>
                     <div>
                       <h2 className="font-extrabold text-sm sm:text-base text-[#35207A] dark:text-white">
-                        بسته افزونه مدیریت سرور (نسخه ۲.۲.۰)
+                        بسته افزونه مدیریت سرور (نسخه ۲.۳.۰)
                       </h2>
                       <p className="text-xs text-[#59449E] dark:text-slate-300">
-                        دارای مدیریت فروشگاه، تایید فیش‌های بانکی، تیکتینگ پشتیبانی، تخفیف‌ها و جاده مراحل
+                        دارای مدیریت فروشگاه، تایید فیش‌های بانکی، تیکتینگ پشتیبانی، مدیریت فایل‌های صوتی، تخفیف‌ها و جاده مراحل
                       </p>
                     </div>
                   </div>
@@ -955,33 +1049,67 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-                        شماره موبایل (نام کاربری ورود) *
+                        شماره موبایل (۱۱ رقم با شروع ۰۹) *
                       </label>
                       <input
                         type="tel"
                         dir="ltr"
                         required
+                        maxLength={14}
                         value={regMobile}
-                        onChange={(e) => setRegMobile(e.target.value)}
+                        onChange={(e) => setRegMobile(normalizePersianDigits(e.target.value))}
                         placeholder="09123456789"
-                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                        className={`w-full min-h-[46px] px-3.5 rounded-2xl border-2 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white ${
+                          regMobile.trim() && !isValidIranMobile(regMobile)
+                            ? 'border-rose-400 dark:border-rose-500'
+                            : 'border-[#EEDCC5] dark:border-slate-700'
+                        }`}
                       />
+                      {regMobile.trim() && (
+                        <p
+                          className={`text-[11px] font-bold mt-1 ${
+                            isValidIranMobile(regMobile) ? 'text-emerald-700' : 'text-rose-600'
+                          }`}
+                        >
+                          {isValidIranMobile(regMobile)
+                            ? `شماره موبایل معتبر است (${normalizeIranMobile(regMobile)})`
+                            : 'لطفاً شماره موبایل معتبر ۱۱ رقمی با شروع 09 وارد کنید.'}
+                        </p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-                        رمز عبور (حداقل ۶ کاراکتر) *
+                        نام کاربری انگلیسی (اختیاری — پیش‌فرض موبایل)
                       </label>
                       <input
-                        type="password"
+                        type="text"
                         dir="ltr"
-                        required
-                        minLength={6}
-                        value={regPassword}
-                        onChange={(e) => setRegPassword(e.target.value)}
-                        placeholder="••••••••"
+                        value={regUsername}
+                        onChange={(e) =>
+                          setRegUsername(
+                            normalizePersianDigits(e.target.value).replace(/[^a-zA-Z0-9._-]/g, '')
+                          )
+                        }
+                        placeholder={normalizeIranMobile(regMobile) || 'مثلاً artin123'}
                         className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                       />
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                      رمز عبور (حداقل ۶ کاراکتر) *
+                    </label>
+                    <input
+                      type="password"
+                      dir="ltr"
+                      required
+                      minLength={6}
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                    />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1039,7 +1167,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                         dir="ltr"
                         required
                         value={regPostcode}
-                        onChange={(e) => setRegPostcode(e.target.value)}
+                        onChange={(e) => setRegPostcode(normalizePersianDigits(e.target.value))}
                         placeholder="1234567890"
                         className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                       />
@@ -1055,9 +1183,27 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                       dir="ltr"
                       value={regEmail}
                       onChange={(e) => setRegEmail(e.target.value)}
-                      placeholder="optional@example.com"
+                      placeholder={`${(
+                        regUsername.trim() ||
+                        normalizeIranMobile(regMobile) ||
+                        'username'
+                      ).toLowerCase()}@chootkeh.ir`}
                       className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                     />
+                    {!regEmail.trim() && (
+                      <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mt-1">
+                        در صورت خالی ماندن، ایمیل پیش‌فرض به‌صورت{' '}
+                        <span dir="ltr" className="font-mono text-[#5472EB]">
+                          {(
+                            regUsername.trim() ||
+                            normalizeIranMobile(regMobile) ||
+                            'username'
+                          ).toLowerCase()}
+                          @chootkeh.ir
+                        </span>{' '}
+                        ثبت خواهد شد.
+                      </p>
+                    )}
                   </div>
 
                   <div className="pt-2 border-t border-[#EFE0CE] dark:border-slate-800 space-y-3">

@@ -69,8 +69,12 @@ export const LessonScreen: React.FC<LessonScreenProps> = ({
     setStepSolved(false);
     setAttemptsOnStep(0);
     setShowSimulatorModal(false);
-    audioEngine.speakPersian(currentStep.spokenText);
-  }, [stepIdx, currentStep]);
+    audioEngine.speakPersian(
+      currentStep.spokenText,
+      undefined,
+      currentStep.audioUrl || lesson.audioUrl
+    );
+  }, [stepIdx, currentStep, lesson.audioUrl]);
 
   // Compute next guided hint move automatically from current abacus state toward target
   const nextGuidedMove = useMemo<SorobanGuidedMove | null>(() => {
@@ -98,7 +102,7 @@ export const LessonScreen: React.FC<LessonScreenProps> = ({
         title: 'آفرین! کیا خیلی خوشحال شد!',
         subtitle: `عدد ${formatNumber(currentNumeric, settings.digitMode)} را عالی ساختی.`,
       });
-      audioEngine.speakPersian('آفرین! کاملاً درست است.');
+      audioEngine.speakPersian('آفرین! کاملاً درست است.', 'cheer', undefined, 'praise_correct');
     } else {
       setAttemptsOnStep((a) => a + 1);
       audioEngine.play('tryAgain');
@@ -114,7 +118,7 @@ export const LessonScreen: React.FC<LessonScreenProps> = ({
           settings.digitMode
         )} را می‌خواهیم.`,
       });
-      audioEngine.speakPersian('اشکالی ندارد قهرمان! دوباره تلاش کن.');
+      audioEngine.speakPersian('اشکالی ندارد قهرمان! دوباره تلاش کن.', 'encourage', undefined, 'try_again');
     }
   };
 
@@ -196,7 +200,12 @@ export const LessonScreen: React.FC<LessonScreenProps> = ({
           </div>
         </div>
 
-        <AudioButton textToSpeak={currentStep.spokenText} label="تکرار" size="sm" />
+        <AudioButton
+          textToSpeak={currentStep.spokenText}
+          audioUrl={currentStep.audioUrl || lesson.audioUrl}
+          label="تکرار"
+          size="sm"
+        />
       </header>
 
       {/* Instruction Bar with Interactive KiaAvatar */}

@@ -28,6 +28,23 @@ export interface WordPressUser {
   isAdmin: boolean;
 }
 
+export interface VoiceClipMapping {
+  key?: string;
+  phrase: string;
+  url: string;
+}
+
+export interface AudioSettingsConfig {
+  sfxUrls?: Partial<
+    Record<
+      'beadClick' | 'uiTap' | 'success' | 'tryAgain' | 'levelComplete' | 'birdChirp',
+      string
+    >
+  >;
+  bgMusicUrl?: string;
+  voiceClips?: VoiceClipMapping[];
+}
+
 export interface WordPressConfig {
   appTitle: string;
   dailyChallengeCount: number;
@@ -38,6 +55,7 @@ export interface WordPressConfig {
   siteName?: string;
   wooActive?: boolean;
   wooCurrency?: string;
+  audioSettings?: AudioSettingsConfig;
 }
 
 export interface BacsAccount {
@@ -226,6 +244,24 @@ export interface LessonProgress {
   bestScore: number;
 }
 
+export interface DailyBonusState {
+  streak: number;
+  lastClaimDate: string; // YYYY-MM-DD in local timezone
+  totalDaysClaimed: number;
+  history: string[]; // Recent claimed YYYY-MM-DD dates
+}
+
+export interface RewardMedalDefinition {
+  id: string;
+  title: string;
+  description: string;
+  category: 'learning' | 'streak' | 'shop';
+  categoryLabel: string;
+  icon: 'star' | 'trophy' | 'target' | 'brain' | 'flame' | 'sun' | 'crown' | 'rocket' | 'gem' | 'compass';
+  accentColor: string;
+  pointsCost?: number;
+}
+
 export interface ChildProfile {
   id: string;
   name: string;
@@ -240,6 +276,8 @@ export interface ChildProfile {
   lessons: Record<string, LessonProgress>;
   skills: Record<SkillKey, SkillStats>;
   badges: string[];
+  rewardPoints?: number;
+  dailyBonus?: DailyBonusState;
 }
 
 export interface LessonStep {
@@ -253,6 +291,7 @@ export interface LessonStep {
   requireInteraction: boolean;
   autoDemoSteps?: boolean;
   highlightColumn?: number;
+  audioUrl?: string;
 }
 
 export interface LessonDefinition {
@@ -270,6 +309,7 @@ export interface LessonDefinition {
   unlockRequirement?: string;
   iconName: 'sparkles' | 'layers' | 'plus' | 'minus' | 'puzzle' | 'brain';
   accentColor: string;
+  audioUrl?: string;
   steps: LessonStep[];
 }
 
@@ -316,6 +356,7 @@ export interface PracticeQuestion {
   visualCountB?: number;
   visualEmoji?: 'apple' | 'star' | 'balloon' | 'pencil';
   operation?: '+' | '-';
+  audioUrl?: string;
 }
 
 export type GameModeId = 'build' | 'find-number' | 'count-add' | 'spot-mistake';

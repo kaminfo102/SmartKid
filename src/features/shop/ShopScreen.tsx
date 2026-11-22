@@ -19,9 +19,14 @@ import {
   Trash2,
   UserCheck,
   X,
+  Coins,
+  Award,
+  Gift,
+  Lock,
 } from 'lucide-react';
 import type {
   BacsAccount,
+  ChildProfile,
   DigitDisplayMode,
   StoreCatalogResponse,
   StoreProduct,
@@ -35,16 +40,22 @@ import {
   submitOfflineOrder,
   validateSafeHttpUrl,
 } from '../../lib/wordpressApi';
+import { getDailyBonusPreview, SHOP_VIRTUAL_MEDALS } from '../../lib/rewards';
 import type { OptimizedImageResult } from '../../lib/imageOptimizer';
 import { ReceiptUploaderField } from '../../components/ReceiptUploaderField';
 import { SaleCountdown } from '../../components/SaleCountdown';
+import { MedalIconGlyph } from '../progress/ChildProfileDetails';
 import { audioEngine } from '../../lib/audioEngine';
 
 interface ShopScreenProps {
   wpUrl: string;
   wpUser: WordPressUser | null;
+  activeProfile: ChildProfile;
   digitMode: DigitDisplayMode;
   bacsAccounts?: BacsAccount[];
+  onClaimDailyBonus?: () => { awardedPoints: number; newBadgeTitles: string[] };
+  onRedeemShopMedal?: (medalId: string) => { ok: boolean; error?: string };
+  onSpendPointsOnOrder?: (points: number) => void;
   onOpenAuth: () => void;
   onOrderCreated?: () => void;
   onBack: () => void;
@@ -83,12 +94,20 @@ const ProductImageFrame: React.FC<{ src: string; alt: string }> = ({ src, alt })
 export const ShopScreen: React.FC<ShopScreenProps> = ({
   wpUrl,
   wpUser,
+  activeProfile,
   digitMode,
   bacsAccounts = [],
+  onClaimDailyBonus,
+  onRedeemShopMedal,
+  onSpendPointsOnOrder,
   onOpenAuth,
   onOrderCreated,
   onBack,
 }) => {
+  const [storeSection, setStoreSection] = useState<'products' | 'medals'>('products');
+  const [medalNotice, setMedalNotice] = useState<string | null>(null);
+  const [useRewardDiscount, setUseRewardDiscount] = useState(false);
+
   const [catalog, setCatalog] = useState<StoreCatalogResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -107,6 +126,10 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
   const [createdPendingOrder, setCreatedPendingOrder] = useState<UserOrder | null>(null);
   const [onlineRedirectNotice, setOnlineRedirectNotice] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const bonusPreview = getDailyBonusPreview(activeProfile);
+  const rewardPoints = bonusPreview.rewardPointsBalance;
+  const canUse50PtsDiscount = rewardPoints >= 50;
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedSearch(searchQuery.trim()), 320);
@@ -218,11 +241,21 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
     setSubmitting(true);
     setErrorMsg(null);
     try {
+      const appliedDiscount = useRewardDiscount && canUse50PtsDiscount;
+      const discountPrefix = appliedDiscount
+        ? '[کسر ۵۰ امتیاز پاداش روزانه معادل ۵,۰۰۰ تومان تخفیف باشگاه] '
+        : '';
+      const combinedNote = `${discountPrefix}${paymentNote.trim()}`.trim();
+
       const res = await submitOfflineOrder(wpUrl, {
         items: cart.map((c) => ({ productId: c.product.id, qty: c.qty })),
-        note: paymentNote.trim() || undefined,
+        note: combinedNote || undefined,
         receiptFile: receiptImage?.file ?? null,
       });
+      if (appliedDiscount) {
+        onSpendPointsOnOrder?.(50);
+        setUseRewardDiscount(false);
+      }
       setCreatedPendingOrder(res.order);
       setCart([]);
       setReceiptImage(null);
@@ -307,6 +340,172 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
             />
           </div>
         </section>
+
+        {/* Daily Bonus Points Wallet + Store Section Tabs */}
+        <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="inline-flex items-center gap-2 text-sm font-extrabold text-amber-800 dark:text-amber-300 tabular-nums">
+              <Coins className="w-5 h-5 text-amber-500" />
+              <span>
+                امتیاز باشگاه {activeProfile.name}:{' '}
+                {formatNumber(rewardPoints, digitMode)} امتیاز
+              </span>
+            </div>
+
+            {bonusPreview.canClaimToday && onClaimDailyBonus && (
+              <button
+                type="button"
+                onClick={() => {
+                  const res = onClaimDailyBonus();
+                  if (res.awardedPoints > 0) {
+                    setMedalNotice(
+                      `+${formatNumber(res.awardedPoints, digitMode)} امتیاز پاداش روزانه اضافه شد!`
+                    );
+                  }
+                }}
+                className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[#FF9500] hover:bg-[#EA8800] text-white text-xs font-extrabold inline-flex items-center gap-1.5"
+              >
+                <Gift className="w-4 h-4" />
+                <span>
+                  دریافت پاداش امروز (+{formatNumber(bonusPreview.todayRewardPoints, digitMode)})
+                </span>
+              </button>
+            )}
+          </div>
+
+          <div
+            role="tablist"
+            aria-label="بخش‌های فروشگاه"
+            className="inline-flex items-center gap-1 p-1 rounded-2xl bg-[#FFF6EB] dark:bg-slate-800 border border-[#EEDCC5] dark:border-slate-700 self-start sm:self-auto"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={storeSection === 'products'}
+              onClick={() => setStoreSection('products')}
+              className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-extrabold inline-flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+                storeSection === 'products'
+                  ? 'bg-[#5472EB] text-white shadow-xs'
+                  : 'text-slate-700 dark:text-slate-300'
+              }`}
+            >
+              <ShoppingBag className="w-4 h-4" />
+              <span>محصولات فروشگاه</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={storeSection === 'medals'}
+              onClick={() => setStoreSection('medals')}
+              className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-extrabold inline-flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+                storeSection === 'medals'
+                  ? 'bg-[#5472EB] text-white shadow-xs'
+                  : 'text-slate-700 dark:text-slate-300'
+              }`}
+            >
+              <Award className="w-4 h-4" />
+              <span>مدال‌های مجازی (با امتیاز)</span>
+            </button>
+          </div>
+        </section>
+
+        {medalNotice && (
+          <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-700 p-3.5 text-xs sm:text-sm font-extrabold text-emerald-900 dark:text-emerald-200 flex items-center justify-between gap-2">
+            <span>{medalNotice}</span>
+            <button
+              type="button"
+              onClick={() => setMedalNotice(null)}
+              aria-label="بستن پیام"
+              className="text-emerald-700 dark:text-emerald-300 p-1"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {storeSection === 'medals' ? (
+          <section className="space-y-4">
+            <div className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 p-4 text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">
+              امتیازهای پاداش روزانه خودت را اینجا به مدال‌های کمیاب و افتخاری تبدیل کن تا در کارنامه پروفایلت بدرخشند (یا هنگام سفارش کارت به کارت ۵۰ امتیاز را برای تخفیف مصرف کن).
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {SHOP_VIRTUAL_MEDALS.map((medal) => {
+                const isOwned = (activeProfile.badges ?? []).includes(medal.id);
+                const canAfford = rewardPoints >= medal.pointsCost;
+
+                return (
+                  <article
+                    key={medal.id}
+                    className={`rounded-2xl bg-white dark:bg-slate-900 border-2 p-4 flex flex-col justify-between gap-4 shadow-sm ${
+                      isOwned
+                        ? 'border-emerald-400 dark:border-emerald-600'
+                        : 'border-[#EEDCC5] dark:border-slate-800'
+                    }`}
+                  >
+                    <div className="space-y-3">
+                      <div
+                        className="w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-sm mx-auto"
+                        style={{ backgroundColor: medal.accentColor }}
+                      >
+                        <MedalIconGlyph icon={medal.icon} className="w-7 h-7" />
+                      </div>
+                      <div className="text-center space-y-1">
+                        <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">
+                          {medal.title}
+                        </h3>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                          {medal.description}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 pt-2 border-t border-[#F4E6D4] dark:border-slate-800">
+                      <div className="text-center text-xs font-extrabold text-amber-700 dark:text-amber-300 tabular-nums">
+                        {formatNumber(medal.pointsCost, digitMode)} امتیاز باشگاه
+                      </div>
+
+                      {isOwned ? (
+                        <div className="w-full min-h-[42px] rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-extrabold text-xs flex items-center justify-center gap-1.5">
+                          <Check className="w-4 h-4" />
+                          <span>در کلکسیون مدال‌های شماست</span>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={!canAfford}
+                          onClick={() => {
+                            if (!onRedeemShopMedal) return;
+                            const res = onRedeemShopMedal(medal.id);
+                            if (res.ok) {
+                              audioEngine.play('levelComplete');
+                              setMedalNotice(`تبریک! مدال «${medal.title}» با موفقیت دریافت شد و در پروفایل شما قرار گرفت.`);
+                            } else if (res.error) {
+                              setMedalNotice(res.error);
+                            }
+                          }}
+                          className={`w-full min-h-[42px] rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                            canAfford
+                              ? 'bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] text-white'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-500 cursor-not-allowed'
+                          }`}
+                        >
+                          {!canAfford && <Lock className="w-3.5 h-3.5" />}
+                          <span>
+                            {canAfford
+                              ? 'دریافت مدال با امتیاز'
+                              : `${formatNumber(medal.pointsCost - rewardPoints, digitMode)} امتیاز دیگر نیاز است`}
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        ) : (
+          <>
 
         {/* Interactive Category Filter Buttons */}
         {catalog && catalog.categories.length > 0 && (
@@ -490,6 +689,8 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
               );
             })}
           </div>
+        )}
+          </>
         )}
       </main>
 
@@ -773,6 +974,20 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
                               onNoteChange={setPaymentNote}
                             />
                           </div>
+
+                          {canUse50PtsDiscount && (
+                            <label className="rounded-2xl bg-[#FFF6EB] dark:bg-slate-800 border border-[#EEDCC5] dark:border-slate-700 p-3 flex items-start gap-2.5 cursor-pointer text-xs font-bold text-slate-800 dark:text-slate-200">
+                              <input
+                                type="checkbox"
+                                checked={useRewardDiscount}
+                                onChange={(e) => setUseRewardDiscount(e.target.checked)}
+                                className="mt-0.5 w-4 h-4 accent-[#5472EB]"
+                              />
+                              <span>
+                                استفاده از {formatNumber(50, digitMode)} امتیاز پاداش روزانه برای درخواست تخفیف ویژه ({formatNumber('5,000', digitMode)} تومان) در این سفارش
+                              </span>
+                            </label>
+                          )}
 
                           <button
                             type="button"

@@ -18,9 +18,15 @@ import {
   clearAppData,
   createChildProfile,
   loadAppData,
+  normalizeChildProfile,
   saveAppData,
   type StoredAppData,
 } from './lib/storage';
+import {
+  claimDailyBonusOnProfile,
+  evaluateProfileBadges,
+  redeemShopMedalOnProfile,
+} from './lib/rewards';
 import {
   createProfileInWordPress,
   fetchWordPressCurriculum,
@@ -69,6 +75,7 @@ export default function App() {
   const [practiceSkill, setPracticeSkill] = useState<SkillKey>('recognition');
   const [lastResult, setLastResult] = useState<SessionResult | null>(null);
   const [parentUnlocked, setParentUnlocked] = useState(false);
+  const [profileTab, setProfileTab] = useState<'details' | 'profiles'>('details');
 
   const lessons = useMemo<LessonDefinition[]>(() => {
     const flattened = terms.flatMap((t) => t.stages);
@@ -83,9 +90,9 @@ export default function App() {
   }, [terms, lessons]);
 
   const activeProfile = useMemo<ChildProfile>(() => {
-    return (
-      data.profiles.find((p) => p.id === data.activeProfileId) ?? data.profiles[0]
-    );
+    const found =
+      data.profiles.find((p) => p.id === data.activeProfileId) ?? data.profiles[0];
+    return normalizeChildProfile(found);
   }, [data.profiles, data.activeProfileId]);
 
   // Fetch dynamic Terms, Learning Roads & Practice Questions from Headless WordPress
@@ -132,6 +139,7 @@ export default function App() {
 
         setWpQuestions(questions);
         setBacsAccounts(curriculum.bacsAccounts ?? []);
+        audioEngine.configureAssets(curriculum.config.audioSettings);
         setWpConfig((prev) => ({
           ...prev,
           appTitle: curriculum.config.appTitle || prev.appTitle,
@@ -139,6 +147,7 @@ export default function App() {
             curriculum.config.dailyChallengeCount || prev.dailyChallengeCount,
           wooActive: curriculum.config.wooActive ?? prev.wooActive,
           wooCurrency: curriculum.config.wooCurrency ?? prev.wooCurrency,
+          audioSettings: curriculum.config.audioSettings ?? prev.audioSettings,
         }));
         setWpConnected(true);
         return true;
@@ -260,7 +269,7 @@ export default function App() {
         nextDiff = p.difficultyLevel - 1;
       }
 
-      return {
+      const draft: ChildProfile = {
         ...p,
         totalCorrect: nextCorrect,
         totalAttempts: nextAttempts,
@@ -272,6 +281,10 @@ export default function App() {
             attempts: prevStat.attempts + 1,
           },
         },
+      };
+      return {
+        ...draft,
+        badges: evaluateProfileBadges(draft, lessons),
       };
     });
   };
@@ -287,7 +300,7 @@ export default function App() {
         const prevStars = existing?.stars ?? 0;
         const gainedStars = Math.max(0, result.stars - prevStars);
         const prevSkill = p.skills[result.skill] ?? { correct: 0, attempts: 0 };
-        return {
+        const draft: ChildProfile = {
           ...p,
           totalStars: p.totalStars + (existing ? gainedStars : result.stars),
           totalCorrect: p.totalCorrect + score,
@@ -308,6 +321,10 @@ export default function App() {
             },
           },
         };
+        return {
+          ...draft,
+          badges: evaluateProfileBadges(draft, lessons),
+        };
       });
     }
     setLastResult(result);
@@ -315,10 +332,16 @@ export default function App() {
   };
 
   const handleCompleteSession = (result: SessionResult) => {
-    updateActiveProfile((p) => ({
-      ...p,
-      totalStars: p.totalStars + result.stars,
-    }));
+    updateActiveProfile((p) => {
+      const draft: ChildProfile = {
+        ...p,
+        totalStars: p.totalStars + result.stars,
+      };
+      return {
+        ...draft,
+        badges: evaluateProfileBadges(draft, lessons),
+      };
+    });
     setLastResult(result);
     setScreen('result');
   };
@@ -370,10 +393,12 @@ export default function App() {
   const handleWordPressAuthSuccess = (res: WordPressAuthResponse) => {
     setWpUser(res.user);
     setWpConnected(true);
+    const normalizedProfiles =
+      res.profiles.length > 0 ? res.profiles.map(normalizeChildProfile) : [];
     setData((prev) => ({
-      profiles: res.profiles.length > 0 ? res.profiles : prev.profiles,
+      profiles: normalizedProfiles.length > 0 ? normalizedProfiles : prev.profiles,
       activeProfileId:
-        res.profiles.length > 0 ? res.profiles[0].id : prev.activeProfileId,
+        normalizedProfiles.length > 0 ? normalizedProfiles[0].id : prev.activeProfileId,
       settings: res.settings ? { ...prev.settings, ...res.settings } : prev.settings,
     }));
     if (Array.isArray(res.unlockedTermIds) && res.unlockedTermIds.length > 0) {
@@ -418,6 +443,42 @@ export default function App() {
     [refreshFromWordPress]
   );
 
+  const handleClaimDailyBonus = () => {
+    const res = claimDailyBonusOnProfile(activeProfile, lessons);
+    if (!res.alreadyClaimed) {
+      audioEngine.play('levelComplete');
+      audioEngine.speakPersian('آفرین! پاداش روزانه به حسابت اضافه شد!', 'cheer');
+      updateActiveProfile(() => res.updatedProfile);
+    }
+    return {
+      awardedPoints: res.awardedPoints,
+      newBadgeTitles: res.newBadges.map((b) => b.title),
+    };
+  };
+
+  const handleRedeemShopMedal = (medalId: string) => {
+    const res = redeemShopMedalOnProfile(activeProfile, medalId, lessons);
+    if (res.ok) {
+      audioEngine.play('levelComplete');
+      updateActiveProfile(() => res.updatedProfile);
+    } else {
+      audioEngine.play('tryAgain');
+    }
+    return {
+      ok: res.ok,
+      error: res.error,
+    };
+  };
+
+  const handleSpendPointsOnOrder = (points: number) => {
+    const safeSpend = Math.max(0, Math.floor(points));
+    if (safeSpend <= 0) return;
+    updateActiveProfile((p) => ({
+      ...p,
+      rewardPoints: Math.max(0, (p.rewardPoints ?? 0) - safeSpend),
+    }));
+  };
+
   const hasProgress = Object.keys(activeProfile.lessons).length > 0;
 
   return (
@@ -459,8 +520,15 @@ export default function App() {
           }}
           onOpenProfiles={() => {
             audioEngine.play('uiTap');
+            setProfileTab('profiles');
             setScreen('profiles');
           }}
+          onOpenProfileDetails={() => {
+            audioEngine.play('uiTap');
+            setProfileTab('details');
+            setScreen('profiles');
+          }}
+          onClaimDailyBonus={handleClaimDailyBonus}
           onOpenAuth={() => {
             audioEngine.play('uiTap');
             setScreen('auth');
@@ -486,7 +554,10 @@ export default function App() {
           onUpdateUser={(u) => setWpUser(u)}
           onLogout={handleWordPressLogout}
           onRefreshFromWordPress={refreshFromWordPress}
-          onOpenProfiles={() => setScreen('profiles')}
+          onOpenProfiles={() => {
+            setProfileTab('details');
+            setScreen('profiles');
+          }}
           onOpenTickets={() => setScreen('tickets')}
           onBack={() => setScreen('start')}
         />
@@ -497,6 +568,8 @@ export default function App() {
           profiles={data.profiles}
           activeProfileId={data.activeProfileId}
           digitMode={data.settings.digitMode}
+          lessons={lessons}
+          initialTab={profileTab}
           onSelectProfile={(id) => {
             audioEngine.play('uiTap');
             setData((prev) => ({ ...prev, activeProfileId: id }));
@@ -512,6 +585,15 @@ export default function App() {
             if (wpUrl && hasMemoryBearerToken()) {
               void createProfileInWordPress(wpUrl, created).catch(() => {});
             }
+          }}
+          onPracticeSkill={(skill) => {
+            audioEngine.play('uiTap');
+            setPracticeSkill(skill);
+            setScreen('practice');
+          }}
+          onOpenShop={() => {
+            audioEngine.play('uiTap');
+            setScreen('shop');
           }}
           onBack={() => setScreen('start')}
         />
@@ -617,8 +699,12 @@ export default function App() {
         <ShopScreen
           wpUrl={wpUrl}
           wpUser={wpUser}
+          activeProfile={activeProfile}
           digitMode={data.settings.digitMode}
           bacsAccounts={bacsAccounts}
+          onClaimDailyBonus={handleClaimDailyBonus}
+          onRedeemShopMedal={handleRedeemShopMedal}
+          onSpendPointsOnOrder={handleSpendPointsOnOrder}
           onOpenAuth={() => setScreen('auth')}
           onOrderCreated={() => void refreshFromWordPress()}
           onBack={() => setScreen('start')}

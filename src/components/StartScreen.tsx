@@ -14,6 +14,7 @@ import {
   User,
   ShoppingBag,
   Headphones,
+  Award,
 } from 'lucide-react';
 import type {
   ChildProfile,
@@ -30,6 +31,7 @@ import { AbacusAdventureIllustration } from './KidIllustrations';
 import { AudioButton } from './AudioButton';
 import { PWAInstallButton } from './PWAInstallButton';
 import { BuyCoffeeButton } from './BuyCoffeeButton';
+import { DailyBonusCard } from './DailyBonusCard';
 import { audioEngine } from '../lib/audioEngine';
 
 interface StartScreenProps {
@@ -48,6 +50,8 @@ interface StartScreenProps {
   onOpenShop: () => void;
   onOpenTickets: () => void;
   onOpenProfiles: () => void;
+  onOpenProfileDetails: () => void;
+  onClaimDailyBonus: () => { awardedPoints: number; newBadgeTitles: string[] };
   onOpenAuth: () => void;
   onOpenParents: () => void;
 }
@@ -68,6 +72,8 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   onOpenShop,
   onOpenTickets,
   onOpenProfiles,
+  onOpenProfileDetails,
+  onClaimDailyBonus,
   onOpenAuth,
   onOpenParents,
 }) => {
@@ -239,6 +245,14 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               label="صدای کیا"
               size="sm"
             />
+            <button
+              type="button"
+              onClick={onOpenProfileDetails}
+              className="min-h-[40px] px-3.5 py-2 rounded-2xl bg-white/95 hover:bg-white dark:bg-slate-900 border-b-4 border-[#E5D3BE] dark:border-slate-800 text-xs font-extrabold text-[#5C3A00] dark:text-amber-200 inline-flex items-center gap-1.5 shadow-sm transition-all active:translate-y-0.5"
+            >
+              <Award className="w-4 h-4 text-[#5472EB]" />
+              <span>کارنامه و مدال‌ها</span>
+            </button>
             <PWAInstallButton />
           </div>
         </section>
@@ -288,6 +302,14 @@ export const StartScreen: React.FC<StartScreenProps> = ({
             <span>شروع یادگیری</span>
           </button>
         </motion.section>
+
+        {/* Daily Login Bonus Card */}
+        <DailyBonusCard
+          profile={activeProfile}
+          digitMode={digitMode}
+          onClaimBonus={onClaimDailyBonus}
+          onOpenShop={onOpenShop}
+        />
 
         {/* Prominent Store & Support Quick Entry Cards */}
         <section aria-label="فروشگاه و پشتیبانی" className="grid grid-cols-1 sm:grid-cols-3 gap-3">

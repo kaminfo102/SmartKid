@@ -23,6 +23,7 @@
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "three": "^0.187.0",
+    "vazirmatn": "^33.0.3",
     "vite": "^8.3.0",
     "vite-plugin-pwa": "^2.0.0"
   },

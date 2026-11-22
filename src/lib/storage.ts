@@ -30,6 +30,30 @@ function createEmptySkills(): Record<SkillKey, { correct: number; attempts: numb
   };
 }
 
+export function createEmptyDailyBonus() {
+  return {
+    streak: 0,
+    lastClaimDate: '',
+    totalDaysClaimed: 0,
+    history: [] as string[],
+  };
+}
+
+export function normalizeChildProfile(profile: ChildProfile): ChildProfile {
+  return {
+    ...profile,
+    badges: Array.isArray(profile.badges) ? profile.badges : [],
+    rewardPoints: typeof profile.rewardPoints === 'number' && Number.isFinite(profile.rewardPoints)
+      ? Math.max(0, Math.round(profile.rewardPoints))
+      : 0,
+    dailyBonus: {
+      ...createEmptyDailyBonus(),
+      ...(profile.dailyBonus ?? {}),
+      history: Array.isArray(profile.dailyBonus?.history) ? profile.dailyBonus.history : [],
+    },
+  };
+}
+
 export function createChildProfile(
   name: string,
   avatar: AvatarId,
@@ -49,6 +73,8 @@ export function createChildProfile(
     lessons: {},
     skills: createEmptySkills(),
     badges: [],
+    rewardPoints: 0,
+    dailyBonus: createEmptyDailyBonus(),
   };
 }
 
@@ -78,16 +104,17 @@ export function loadAppData(): StoredAppData {
       saveAppData(init);
       return init;
     }
+    const profiles = parsed.profiles.map(normalizeChildProfile);
     const settings: AppSettings = {
       ...DEFAULT_SETTINGS,
       ...(parsed.settings ?? {}),
     };
     const activeProfileId =
-      parsed.activeProfileId && parsed.profiles.some((p) => p.id === parsed.activeProfileId)
+      parsed.activeProfileId && profiles.some((p) => p.id === parsed.activeProfileId)
         ? parsed.activeProfileId
-        : parsed.profiles[0].id;
+        : profiles[0].id;
     return {
-      profiles: parsed.profiles,
+      profiles,
       activeProfileId,
       settings,
     };

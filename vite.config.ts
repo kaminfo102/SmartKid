@@ -89,6 +89,20 @@ export default defineConfig(() => {
                 },
               },
             },
+            {
+              urlPattern: /^\/audio\/.*/i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'static-audio-cache',
+                expiration: {
+                  maxEntries: 60,
+                  maxAgeSeconds: 60 * 60 * 24 * 90,
+                },
+                cacheableResponse: {
+                  statuses: [200],
+                },
+              },
+            },
           ],
         },
         devOptions: {

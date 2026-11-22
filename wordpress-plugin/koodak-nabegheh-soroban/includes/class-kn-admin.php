@@ -138,6 +138,15 @@ class KN_Admin {
 
 		add_submenu_page(
 			'kn-soroban',
+			'مدیریت صدا، افکت و گویندگی',
+			'مدیریت صدا و گویندگی',
+			'manage_options',
+			'kn-soroban-audio',
+			array( __CLASS__, 'render_audio_page' )
+		);
+
+		add_submenu_page(
+			'kn-soroban',
 			'تنظیمات هدلس و API',
 			'تنظیمات هدلس',
 			'manage_options',
@@ -150,8 +159,54 @@ class KN_Admin {
 		if ( strpos( (string) $hook, 'kn-soroban' ) === false ) {
 			return;
 		}
+		wp_enqueue_media();
 		wp_enqueue_style( 'kn-soroban-admin', KN_SOROBAN_URL . 'assets/admin.css', array(), KN_SOROBAN_VERSION );
-		wp_enqueue_script( 'kn-soroban-admin', KN_SOROBAN_URL . 'assets/admin.js', array(), KN_SOROBAN_VERSION, true );
+		wp_enqueue_script( 'kn-soroban-admin', KN_SOROBAN_URL . 'assets/admin.js', array( 'jquery' ), KN_SOROBAN_VERSION, true );
+	}
+
+	private static function sanitize_audio_url_input( $raw ) {
+		$trimmed = trim( (string) $raw );
+		if ( $trimmed === '' ) {
+			return '';
+		}
+		// Allow site-relative /audio/... paths as well as full http(s) media URLs.
+		if ( strpos( $trimmed, '/audio/' ) === 0 ) {
+			return '/' . ltrim( sanitize_text_field( $trimmed ), '/' );
+		}
+		$parsed = wp_parse_url( $trimmed );
+		if ( is_array( $parsed ) && isset( $parsed['scheme'] ) && in_array( strtolower( $parsed['scheme'] ), array( 'http', 'https' ), true ) ) {
+			return esc_url_raw( $trimmed );
+		}
+		return esc_url_raw( $trimmed );
+	}
+
+	private static function render_audio_picker_field( $name, $value, $input_id, $label = 'فایل صوتی اختصاصی (اختیاری - MP3 / OGG)', $placeholder = 'آدرس فایل صوتی یا از کتابخانه رسانه انتخاب کنید...' ) {
+		$val = (string) $value;
+		?>
+		<div class="kn-field">
+			<label for="<?php echo esc_attr( $input_id ); ?>"><?php echo esc_html( $label ); ?></label>
+			<div class="kn-media-row">
+				<input
+					type="text"
+					id="<?php echo esc_attr( $input_id ); ?>"
+					name="<?php echo esc_attr( $name ); ?>"
+					dir="ltr"
+					data-kn-audio-input="1"
+					value="<?php echo esc_attr( $val ); ?>"
+					placeholder="<?php echo esc_attr( $placeholder ); ?>"
+				/>
+				<button type="button" class="kn-btn kn-btn-amber" data-kn-media-target="<?php echo esc_attr( $input_id ); ?>">انتخاب / آپلود صوت</button>
+				<button type="button" class="kn-btn kn-btn-ghost" data-kn-media-clear="<?php echo esc_attr( $input_id ); ?>">پاک کردن</button>
+			</div>
+			<audio
+				class="kn-audio-preview"
+				controls
+				preload="none"
+				data-kn-audio-preview="<?php echo esc_attr( $input_id ); ?>"
+				<?php echo $val !== '' ? 'src="' . esc_url( $val ) . '"' : 'style="display:none;"'; ?>
+			></audio>
+		</div>
+		<?php
 	}
 
 	/**
@@ -250,6 +305,7 @@ class KN_Admin {
 				'unlock_requirement' => sanitize_title( wp_unslash( $_POST['unlock_requirement'] ?? '' ) ),
 				'icon_name'          => sanitize_key( wp_unslash( $_POST['icon_name'] ?? 'sparkles' ) ),
 				'accent_color'       => sanitize_hex_color( wp_unslash( $_POST['accent_color'] ?? '#0EA5E9' ) ) ?: '#0EA5E9',
+				'audio_url'          => self::sanitize_audio_url_input( wp_unslash( $_POST['audio_url'] ?? '' ) ),
 				'is_active'          => ! empty( $_POST['is_active'] ) ? 1 : 0,
 			);
 
@@ -291,6 +347,7 @@ class KN_Admin {
 				'require_interaction' => ! empty( $_POST['require_interaction'] ) ? 1 : 0,
 				'auto_demo_steps'     => ! empty( $_POST['auto_demo_steps'] ) ? 1 : 0,
 				'highlight_column'    => ( isset( $_POST['highlight_column'] ) && $_POST['highlight_column'] !== '' ) ? intval( $_POST['highlight_column'] ) : null,
+				'audio_url'           => self::sanitize_audio_url_input( wp_unslash( $_POST['audio_url'] ?? '' ) ),
 			);
 
 			if ( $step_id > 0 ) {
@@ -330,6 +387,7 @@ class KN_Admin {
 				'visual_count_b' => ( isset( $_POST['visual_count_b'] ) && $_POST['visual_count_b'] !== '' ) ? absint( $_POST['visual_count_b'] ) : null,
 				'visual_emoji'   => sanitize_key( wp_unslash( $_POST['visual_emoji'] ?? 'apple' ) ),
 				'operation'      => in_array( $op, array( '+', '-' ), true ) ? $op : null,
+				'audio_url'      => self::sanitize_audio_url_input( wp_unslash( $_POST['audio_url'] ?? '' ) ),
 				'is_active'      => ! empty( $_POST['is_active'] ) ? 1 : 0,
 			);
 
@@ -494,6 +552,50 @@ class KN_Admin {
 				self::redirect_with_notice( 'kn-soroban-tickets', 'وضعیت تیکت به‌روزرسانی شد.' );
 			}
 		}
+
+		// 14. Save Hybrid Audio & Voiceover Library Settings
+		if ( $action === 'save_audio_settings' && check_admin_referer( 'kn_save_audio_settings' ) ) {
+			$sfx_keys = array( 'beadClick', 'uiTap', 'success', 'tryAgain', 'levelComplete', 'birdChirp' );
+			$sfx_in   = isset( $_POST['sfx_urls'] ) && is_array( $_POST['sfx_urls'] ) ? wp_unslash( $_POST['sfx_urls'] ) : array();
+			$sfx_out  = array();
+			foreach ( $sfx_keys as $k ) {
+				$clean_u = self::sanitize_audio_url_input( $sfx_in[ $k ] ?? '' );
+				if ( $clean_u !== '' ) {
+					$sfx_out[ $k ] = $clean_u;
+				}
+			}
+
+			$bg_music_url = self::sanitize_audio_url_input( wp_unslash( $_POST['bg_music_url'] ?? '' ) );
+
+			$v_keys    = isset( $_POST['voice_keys'] ) && is_array( $_POST['voice_keys'] ) ? wp_unslash( $_POST['voice_keys'] ) : array();
+			$v_phrases = isset( $_POST['voice_phrases'] ) && is_array( $_POST['voice_phrases'] ) ? wp_unslash( $_POST['voice_phrases'] ) : array();
+			$v_urls    = isset( $_POST['voice_urls'] ) && is_array( $_POST['voice_urls'] ) ? wp_unslash( $_POST['voice_urls'] ) : array();
+
+			$clips_out = array();
+			$max_len   = max( count( $v_keys ), count( $v_phrases ), count( $v_urls ) );
+			for ( $i = 0; $i < $max_len; $i++ ) {
+				$c_key    = sanitize_key( (string) ( $v_keys[ $i ] ?? '' ) );
+				$c_phrase = sanitize_text_field( (string) ( $v_phrases[ $i ] ?? '' ) );
+				$c_url    = self::sanitize_audio_url_input( $v_urls[ $i ] ?? '' );
+				if ( $c_url !== '' && ( $c_key !== '' || $c_phrase !== '' ) ) {
+					$clips_out[] = array(
+						'key'    => $c_key,
+						'phrase' => $c_phrase,
+						'url'    => $c_url,
+					);
+				}
+			}
+
+			update_option(
+				'kn_soroban_audio_settings',
+				array(
+					'sfx_urls'     => $sfx_out,
+					'bg_music_url' => $bg_music_url,
+					'voice_clips'  => $clips_out,
+				)
+			);
+			self::redirect_with_notice( 'kn-soroban-audio', 'تنظیمات فایل‌های صوتی، موسیقی پس‌زمینه و کتابخانه گویندگی ذخیره شد.' );
+		}
 	}
 
 	private static function redirect_with_notice( $page_slug, $message, $is_error = false ) {
@@ -611,6 +713,7 @@ class KN_Admin {
 						<a class="kn-btn kn-btn-primary" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-terms' ) ); ?>">ترم‌ها و اتصال ووکامرس</a>
 						<a class="kn-btn kn-btn-green" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-stages' ) ); ?>">مدیریت جاده‌ها و مراحل</a>
 						<a class="kn-btn kn-btn-amber" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-questions' ) ); ?>">بانک سوالات</a>
+						<a class="kn-btn kn-btn-ghost" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-audio' ) ); ?>">مدیریت صدا و گویندگی</a>
 						<a class="kn-btn kn-btn-ghost" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-users' ) ); ?>">کاربران و دسترسی ترم‌ها</a>
 					</div>
 				</div>
@@ -1001,6 +1104,8 @@ class KN_Admin {
 							</div>
 						</div>
 
+						<?php self::render_audio_picker_field( 'audio_url', '', 'kn-stage-audio-new', 'فایل صوتی معرفی مرحله (اختیاری - MP3 / OGG)', 'https://yoursite.com/wp-content/uploads/.../stage-intro.mp3' ); ?>
+
 						<div class="kn-field">
 							<label><input type="checkbox" name="is_active" value="1" checked /> فعال در جاده اپلیکیشن</label>
 						</div>
@@ -1020,6 +1125,9 @@ class KN_Admin {
 							<span class="kn-pill <?php echo $stage['isActive'] ? 'kn-pill-green' : 'kn-pill-slate'; ?>">
 								<?php echo $stage['isActive'] ? 'فعال' : 'پیش‌نویس'; ?>
 							</span>
+							<?php if ( ! empty( $stage['audioUrl'] ) ) : ?>
+								<span class="kn-audio-badge">🔊 صوت مرحله</span>
+							<?php endif; ?>
 							<strong style="font-size:15px;margin-right:6px;"><?php echo esc_html( $stage['title'] ); ?></strong>
 							<div style="font-size:12px;color:#7c5b43;margin-top:4px;">
 								مکان نقشه: <strong><?php echo esc_html( self::$landmarks[ $stage['landmark'] ?? 'barn' ] ?? 'انبار' ); ?></strong> · <?php echo esc_html( $stage['shortGoal'] ); ?> · گام‌ها: <?php echo esc_html( count( $stage['steps'] ) ); ?>
@@ -1125,6 +1233,7 @@ class KN_Admin {
 									</div>
 								</div>
 							</div>
+							<?php self::render_audio_picker_field( 'audio_url', $stage['audioUrl'] ?? '', 'kn-stage-audio-' . $stage['dbId'], 'فایل صوتی معرفی مرحله (اختیاری - MP3 / OGG)' ); ?>
 							<div class="kn-field">
 								<label><input type="checkbox" name="is_active" value="1" <?php checked( $stage['isActive'] ); ?> /> فعال در اپلیکیشن</label>
 							</div>
@@ -1177,6 +1286,7 @@ class KN_Admin {
 									<input type="number" name="highlight_column" min="0" max="3" />
 								</div>
 							</div>
+							<?php self::render_audio_picker_field( 'audio_url', '', 'kn-add-step-audio-' . $stage['dbId'], 'فایل صوتی اختصاصی این گام (اختیاری - MP3 / OGG)' ); ?>
 							<label style="margin-left:14px;"><input type="checkbox" name="require_interaction" value="1" checked /> نیاز به حرکت مهره</label>
 							<label><input type="checkbox" name="auto_demo_steps" value="1" checked /> فعال‌سازی انیمیشن حل کیا</label>
 							<div style="margin-top:10px;">
@@ -1198,6 +1308,9 @@ class KN_Admin {
 										<span class="kn-pill kn-pill-amber">
 											شروع: <?php echo esc_html( $step['initialValue'] ); ?> ← هدف: <?php echo esc_html( $step['targetValue'] ?? '—' ); ?>
 										</span>
+										<?php if ( ! empty( $step['audioUrl'] ) ) : ?>
+											<span class="kn-audio-badge">🔊 صوت اختصاصی</span>
+										<?php endif; ?>
 										<div style="font-size:12px;color:#6b4a35;margin-top:2px;"><?php echo esc_html( $step['instruction'] ); ?></div>
 									</div>
 									<div style="display:flex;gap:6px;">
@@ -1256,6 +1369,7 @@ class KN_Admin {
 												<input type="number" name="highlight_column" value="<?php echo esc_attr( $step['highlightColumn'] ?? '' ); ?>" min="0" max="3" />
 											</div>
 										</div>
+										<?php self::render_audio_picker_field( 'audio_url', $step['audioUrl'] ?? '', 'kn-edit-step-audio-' . $step['dbId'], 'فایل صوتی اختصاصی این گام (اختیاری - MP3 / OGG)' ); ?>
 										<label style="margin-left:14px;"><input type="checkbox" name="require_interaction" value="1" <?php checked( $step['requireInteraction'] ); ?> /> تعامل الزامی</label>
 										<label><input type="checkbox" name="auto_demo_steps" value="1" <?php checked( $step['autoDemoSteps'] ); ?> /> دمو انیمیشن</label>
 										<div style="margin-top:8px;">
@@ -1377,6 +1491,8 @@ class KN_Admin {
 							</div>
 						</div>
 
+						<?php self::render_audio_picker_field( 'audio_url', '', 'kn-question-audio-new', 'فایل صوتی اختصاصی سؤال (اختیاری - MP3 / OGG)' ); ?>
+
 						<label style="display:inline-block;margin-bottom:10px;"><input type="checkbox" name="is_active" value="1" checked /> سؤال فعال باشد</label>
 						<div>
 							<button type="submit" class="kn-btn kn-btn-primary">افزودن به بانک سوالات</button>
@@ -1418,6 +1534,9 @@ class KN_Admin {
 								<tr>
 									<td>
 										<strong><?php echo esc_html( $q['promptText'] ); ?></strong>
+										<?php if ( ! empty( $q['audioUrl'] ) ) : ?>
+											<span class="kn-audio-badge">🔊 صوت اختصاصی</span>
+										<?php endif; ?>
 										<div style="font-size:11px;color:#7c5b43;"><?php echo esc_html( $q['spokenText'] ); ?></div>
 									</td>
 									<td><?php echo esc_html( self::$skills[ $q['skill'] ] ?? $q['skill'] ); ?></td>
@@ -1429,12 +1548,110 @@ class KN_Admin {
 										</span>
 									</td>
 									<td>
-										<form method="post" style="display:inline;" onsubmit="return confirm('این سؤال حذف شود؟');">
-											<?php wp_nonce_field( 'kn_delete_question' ); ?>
-											<input type="hidden" name="kn_action" value="delete_question" />
-											<input type="hidden" name="question_id" value="<?php echo esc_attr( $q['dbId'] ); ?>" />
-											<button type="submit" class="kn-btn kn-btn-danger">حذف</button>
-										</form>
+										<div style="display:flex;gap:6px;flex-wrap:wrap;">
+											<button type="button" class="kn-btn kn-btn-ghost" style="padding:5px 10px;font-size:12px;" data-kn-toggle="kn-edit-q-<?php echo esc_attr( $q['dbId'] ); ?>">ویرایش</button>
+											<form method="post" style="display:inline;" onsubmit="return confirm('این سؤال حذف شود؟');">
+												<?php wp_nonce_field( 'kn_delete_question' ); ?>
+												<input type="hidden" name="kn_action" value="delete_question" />
+												<input type="hidden" name="question_id" value="<?php echo esc_attr( $q['dbId'] ); ?>" />
+												<button type="submit" class="kn-btn kn-btn-danger" style="padding:5px 10px;font-size:12px;">حذف</button>
+											</form>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td colspan="6" style="padding:0;border-bottom:none;">
+										<div id="kn-edit-q-<?php echo esc_attr( $q['dbId'] ); ?>" class="kn-collapsible" style="margin:0 0 10px;padding:14px;background:#fffaf3;border:1px solid #eedcc5;border-radius:12px;">
+											<form method="post">
+												<?php wp_nonce_field( 'kn_save_question' ); ?>
+												<input type="hidden" name="kn_action" value="save_question" />
+												<input type="hidden" name="question_id" value="<?php echo esc_attr( $q['dbId'] ); ?>" />
+												<div class="kn-grid-3">
+													<div class="kn-field">
+														<label>متعلق به ترم</label>
+														<select name="term_id">
+															<option value="0">عمومی (همه ترم‌ها)</option>
+															<?php foreach ( $terms as $tm ) : ?>
+																<option value="<?php echo esc_attr( $tm['id'] ); ?>" <?php selected( (int) ( $q['termDbId'] ?? 0 ), (int) $tm['id'] ); ?>>
+																	<?php echo esc_html( $tm['title'] ); ?>
+																</option>
+															<?php endforeach; ?>
+														</select>
+													</div>
+													<div class="kn-field">
+														<label>مهارت</label>
+														<select name="skill">
+															<?php foreach ( self::$skills as $k => $lbl ) : ?>
+																<option value="<?php echo esc_attr( $k ); ?>" <?php selected( $q['skill'], $k ); ?>><?php echo esc_html( $lbl ); ?></option>
+															<?php endforeach; ?>
+														</select>
+													</div>
+													<div class="kn-field">
+														<label>سختی (۱-۵) / ستون (۱-۴)</label>
+														<div style="display:flex;gap:6px;">
+															<input type="number" name="difficulty" value="<?php echo esc_attr( $q['difficulty'] ); ?>" min="1" max="5" />
+															<input type="number" name="columns_count" value="<?php echo esc_attr( $q['columns'] ); ?>" min="1" max="4" />
+														</div>
+													</div>
+												</div>
+												<div class="kn-grid-2">
+													<div class="kn-field">
+														<label>صورت سؤال نمایشی</label>
+														<input type="text" name="prompt_text" value="<?php echo esc_attr( $q['promptText'] ); ?>" required />
+													</div>
+													<div class="kn-field">
+														<label>متن صوتی گوینده</label>
+														<input type="text" name="spoken_text" value="<?php echo esc_attr( $q['spokenText'] ); ?>" required />
+													</div>
+												</div>
+												<div class="kn-grid-3">
+													<div class="kn-field">
+														<label>مقدار شروع</label>
+														<input type="number" name="start_value" value="<?php echo esc_attr( $q['startValue'] ); ?>" />
+													</div>
+													<div class="kn-field">
+														<label>جواب درست (هدف)</label>
+														<input type="number" name="target_value" value="<?php echo esc_attr( $q['targetValue'] ); ?>" required />
+													</div>
+													<div class="kn-field">
+														<label>نمایش بصری / عملگر / شکل</label>
+														<div style="display:flex;gap:6px;">
+															<select name="visual_type">
+																<option value="number" <?php selected( $q['visualType'], 'number' ); ?>>عددی</option>
+																<option value="objects" <?php selected( $q['visualType'], 'objects' ); ?>>اشیاء</option>
+																<option value="mental-flash" <?php selected( $q['visualType'], 'mental-flash' ); ?>>ذهنی</option>
+															</select>
+															<select name="operation">
+																<option value="" <?php selected( $q['operation'] ?? '', '' ); ?>>بدون عملگر</option>
+																<option value="+" <?php selected( $q['operation'] ?? '', '+' ); ?>>+</option>
+																<option value="-" <?php selected( $q['operation'] ?? '', '-' ); ?>>-</option>
+															</select>
+															<select name="visual_emoji">
+																<option value="apple" <?php selected( $q['visualEmoji'] ?? 'apple', 'apple' ); ?>>سیب</option>
+																<option value="star" <?php selected( $q['visualEmoji'] ?? 'apple', 'star' ); ?>>ستاره</option>
+																<option value="balloon" <?php selected( $q['visualEmoji'] ?? 'apple', 'balloon' ); ?>>بادکنک</option>
+																<option value="pencil" <?php selected( $q['visualEmoji'] ?? 'apple', 'pencil' ); ?>>مداد</option>
+															</select>
+														</div>
+													</div>
+												</div>
+												<div class="kn-grid-2">
+													<div class="kn-field">
+														<label>تعداد شیء اول (اختیاری)</label>
+														<input type="number" name="visual_count_a" value="<?php echo esc_attr( $q['visualCountA'] ?? '' ); ?>" min="0" max="15" />
+													</div>
+													<div class="kn-field">
+														<label>تعداد شیء دوم (اختیاری)</label>
+														<input type="number" name="visual_count_b" value="<?php echo esc_attr( $q['visualCountB'] ?? '' ); ?>" min="0" max="15" />
+													</div>
+												</div>
+												<?php self::render_audio_picker_field( 'audio_url', $q['audioUrl'] ?? '', 'kn-question-audio-' . $q['dbId'], 'فایل صوتی اختصاصی این سؤال (اختیاری)' ); ?>
+												<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+													<label><input type="checkbox" name="is_active" value="1" <?php checked( $q['isActive'] ); ?> /> سؤال فعال باشد</label>
+													<button type="submit" class="kn-btn kn-btn-primary">ذخیره تغییرات سؤال</button>
+												</div>
+											</form>
+										</div>
 									</td>
 								</tr>
 							<?php endforeach; ?>
@@ -2010,6 +2227,181 @@ class KN_Admin {
 					</table>
 				<?php endif; ?>
 			</div>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Page 9: Hybrid Audio, SFX, Background Music & Voiceover Library Manager
+	 */
+	public static function render_audio_page() {
+		$audio_cfg = KN_DB::get_audio_settings();
+		$sfx_urls  = is_object( $audio_cfg['sfxUrls'] ) ? array() : (array) $audio_cfg['sfxUrls'];
+		$bg_url    = (string) ( $audio_cfg['bgMusicUrl'] ?? '' );
+		$clips     = is_array( $audio_cfg['voiceClips'] ) ? $audio_cfg['voiceClips'] : array();
+
+		$sfx_catalog = array(
+			'beadClick'     => array(
+				'label'       => 'صدای حرکت مهره چرتکه (Bead Click)',
+				'static_path' => '/audio/sfx/bead-click.mp3',
+			),
+			'uiTap'         => array(
+				'label'       => 'صدای لمس دکمه‌ها و منو (UI Tap)',
+				'static_path' => '/audio/sfx/ui-tap.mp3',
+			),
+			'success'       => array(
+				'label'       => 'صدای تشویق پاسخ درست (Success)',
+				'static_path' => '/audio/sfx/success.mp3',
+			),
+			'tryAgain'      => array(
+				'label'       => 'صدای ملایم تلاش مجدد (Try Again)',
+				'static_path' => '/audio/sfx/try-again.mp3',
+			),
+			'levelComplete' => array(
+				'label'       => 'صدای جشن تکمیل مرحله (Level Complete)',
+				'static_path' => '/audio/sfx/level-complete.mp3',
+			),
+			'birdChirp'     => array(
+				'label'       => 'صدای خوشامدگویی / پرنده (Bird Chirp)',
+				'static_path' => '/audio/sfx/bird-chirp.mp3',
+			),
+		);
+
+		$seed_helper_keys = array(
+			array( 'key' => 'praise_correct', 'phrase' => 'آفرین نابغه کوچولو! عالی و دقیق حل کردی!' ),
+			array( 'key' => 'try_again', 'phrase' => 'نزدیک بود! دوباره به مهره‌ها نگاه کن و با دقت امتحان کن.' ),
+			array( 'key' => 'welcome', 'phrase' => 'سلام قهرمان! آماده سفر روی چرتکه هستی؟' ),
+			array( 'key' => 'level_complete', 'phrase' => 'هورا! این مرحله را با موفقیت کامل کردی!' ),
+		);
+		?>
+		<div class="kn-wrap">
+			<?php self::render_header( 'مدیریت صدا، افکت‌های صوتی و گویندگی', 'سیستم صوتی هیبرید: اگر فایل صوتی را اینجا آپلود کنید، با اولویت اول از وردپرس پخش می‌شود؛ و در غیر این صورت فایل ثابت اپلیکیشن یا سنتز هوشمند اجرا می‌گردد.' ); ?>
+
+			<form method="post">
+				<?php wp_nonce_field( 'kn_save_audio_settings' ); ?>
+				<input type="hidden" name="kn_action" value="save_audio_settings" />
+
+				<!-- Card 1: App Sound Effects -->
+				<div class="kn-card">
+					<div class="kn-card-header">
+						<h2>۱. افکت‌های صوتی (Sound Effects - MP3 / OGG / WAV)</h2>
+						<span class="kn-pill kn-pill-blue">پخش بدون تاخیر با Web Audio Buffer</span>
+					</div>
+					<p style="font-size:12px;color:#7c5b43;margin-top:0;">
+						برای هر افکت می‌توانید فایل ضبط‌شده دلخواه خود را از کتابخانه رسانه وردپرس انتخاب کنید. در صورت خالی ماندن، فایل ثابت داخل پوشه <code>/public/audio/sfx/</code> یا افکت نرم‌افزاری پخش می‌شود.
+					</p>
+					<div class="kn-grid-2">
+						<?php foreach ( $sfx_catalog as $sfx_key => $meta ) : ?>
+							<div style="background:#fffaf3;border:1px solid #eedcc5;border-radius:14px;padding:12px;">
+								<?php
+								self::render_audio_picker_field(
+									'sfx_urls[' . $sfx_key . ']',
+									$sfx_urls[ $sfx_key ] ?? '',
+									'kn-sfx-' . $sfx_key,
+									$meta['label'],
+									$meta['static_path']
+								);
+								?>
+								<div style="font-size:11px;color:#7c5b43;">مسیر فایل ثابت پشتیبان: <code dir="ltr"><?php echo esc_html( $meta['static_path'] ); ?></code></div>
+							</div>
+						<?php endforeach; ?>
+					</div>
+				</div>
+
+				<!-- Card 2: Background Music -->
+				<div class="kn-card">
+					<div class="kn-card-header">
+						<h2>۲. موسیقی پس‌زمینه کودکانه (Background Music Loop)</h2>
+						<span class="kn-pill kn-pill-amber">پخش ملایم و تکرارشونده</span>
+					</div>
+					<?php
+					self::render_audio_picker_field(
+						'bg_music_url',
+						$bg_url,
+						'kn-bg-music-url',
+						'فایل موسیقی پس‌زمینه (MP3 / OGG با حجم بهینه و ریتم ملایم)',
+						'/audio/music/bg-music.mp3'
+					);
+					?>
+					<div style="font-size:11px;color:#7c5b43;">مسیر فایل ثابت پشتیبان: <code dir="ltr">/audio/music/bg-music.mp3</code> (در صورت نبود فایل، ملودی ملایم داخلی پخش می‌شود).</div>
+				</div>
+
+				<!-- Card 3: Voiceover Library -->
+				<div class="kn-card">
+					<div class="kn-card-header">
+						<h2>۳. کتابخانه صداهای گوینده و جملات پرتکرار (Voiceover Library)</h2>
+						<button type="button" class="kn-btn kn-btn-green" data-kn-add-voice-row="1">+ افزودن جمله و فایل صوتی جدید</button>
+					</div>
+					<p style="font-size:12px;color:#7c5b43;margin-top:0;">
+						کلیدهای استاندارد مثل <code dir="ltr">praise_correct</code> (تشویق پاسخ درست)، <code dir="ltr">try_again</code> (تلاش مجدد)، <code dir="ltr">welcome</code> و <code dir="ltr">level_complete</code> یا متن دقیق جملات را به فایل صوتی گوینده خود متصل کنید. همچنین در صفحه «جاده و مراحل» و «بانک سوالات» می‌توانید برای هر مرحله، گام یا سؤال یک فایل اختصاصی تنظیم کنید.
+					</p>
+
+					<table class="kn-table">
+						<thead>
+							<tr>
+								<th style="width:170px;">کلید یکتا (اختیاری)</th>
+								<th style="width:260px;">متن جمله فارسی (تطابق دقیق)</th>
+								<th>فایل صوتی گوینده و پیش‌نمایش</th>
+								<th style="width:90px;">حذف</th>
+							</tr>
+						</thead>
+						<tbody id="kn-voice-clips-body">
+							<?php
+							$rows_to_render = ! empty( $clips ) ? $clips : $seed_helper_keys;
+							foreach ( $rows_to_render as $idx => $clip ) :
+								$row_input_id = 'kn-voice-url-' . $idx;
+								$c_key        = (string) ( $clip['key'] ?? '' );
+								$c_phrase     = (string) ( $clip['phrase'] ?? '' );
+								$c_url        = (string) ( $clip['url'] ?? '' );
+								?>
+								<tr class="kn-voice-clip-row">
+									<td>
+										<input type="text" name="voice_keys[]" dir="ltr" value="<?php echo esc_attr( $c_key ); ?>" placeholder="praise_correct" style="width:100%;padding:7px 10px;border:2px solid #eedcc5;border-radius:10px;" />
+									</td>
+									<td>
+										<input type="text" name="voice_phrases[]" value="<?php echo esc_attr( $c_phrase ); ?>" placeholder="متن جمله..." style="width:100%;padding:7px 10px;border:2px solid #eedcc5;border-radius:10px;" />
+									</td>
+									<td>
+										<div class="kn-media-row">
+											<input type="text" id="<?php echo esc_attr( $row_input_id ); ?>" name="voice_urls[]" dir="ltr" data-kn-audio-input="1" value="<?php echo esc_attr( $c_url ); ?>" placeholder="https://.../voice.mp3" style="padding:7px 10px;border:2px solid #eedcc5;border-radius:10px;" />
+											<button type="button" class="kn-btn kn-btn-amber" data-kn-media-target="<?php echo esc_attr( $row_input_id ); ?>">انتخاب / آپلود صوت</button>
+											<button type="button" class="kn-btn kn-btn-ghost" data-kn-media-clear="<?php echo esc_attr( $row_input_id ); ?>">پاک</button>
+										</div>
+										<audio class="kn-audio-preview" controls preload="none" data-kn-audio-preview="<?php echo esc_attr( $row_input_id ); ?>" <?php echo $c_url !== '' ? 'src="' . esc_url( $c_url ) . '"' : 'style="display:none;"'; ?>></audio>
+									</td>
+									<td>
+										<button type="button" class="kn-btn kn-btn-danger" data-kn-remove-voice-row="1" style="padding:6px 10px;font-size:12px;">حذف</button>
+									</td>
+								</tr>
+							<?php endforeach; ?>
+						</tbody>
+					</table>
+
+					<template id="kn-voice-row-template">
+						<tr class="kn-voice-clip-row">
+							<td>
+								<input type="text" name="voice_keys[]" dir="ltr" value="" placeholder="custom_key" style="width:100%;padding:7px 10px;border:2px solid #eedcc5;border-radius:10px;" />
+							</td>
+							<td>
+								<input type="text" name="voice_phrases[]" value="" placeholder="متن دقیق جمله فارسی..." style="width:100%;padding:7px 10px;border:2px solid #eedcc5;border-radius:10px;" />
+							</td>
+							<td>
+								<div class="kn-media-row">
+									<input type="text" id="kn-voice-url-__INDEX__" name="voice_urls[]" dir="ltr" data-kn-audio-input="1" value="" placeholder="https://.../voice.mp3" style="padding:7px 10px;border:2px solid #eedcc5;border-radius:10px;" />
+									<button type="button" class="kn-btn kn-btn-amber" data-kn-media-target="kn-voice-url-__INDEX__">انتخاب / آپلود صوت</button>
+									<button type="button" class="kn-btn kn-btn-ghost" data-kn-media-clear="kn-voice-url-__INDEX__">پاک</button>
+								</div>
+								<audio class="kn-audio-preview" controls preload="none" data-kn-audio-preview="kn-voice-url-__INDEX__" style="display:none;"></audio>
+							</td>
+							<td>
+								<button type="button" class="kn-btn kn-btn-danger" data-kn-remove-voice-row="1" style="padding:6px 10px;font-size:12px;">حذف</button>
+							</td>
+						</tr>
+					</template>
+				</div>
+
+				<button type="submit" class="kn-btn kn-btn-primary" style="font-size:14px;padding:12px 24px;">ذخیره کامل تنظیمات صدا و گویندگی</button>
+			</form>
 		</div>
 		<?php
 	}

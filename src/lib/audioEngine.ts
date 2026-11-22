@@ -1,3 +1,5 @@
+import type { AudioSettingsConfig, VoiceClipMapping } from '../types/app';
+
 export type SoundEffectKey =
   | 'beadClick'
   | 'uiTap'
@@ -9,17 +11,34 @@ export type SoundEffectKey =
 export type PersianVoiceTone = 'teach' | 'cheer' | 'encourage';
 
 /**
- * Placeholder structure for optional custom recorded Persian studio audio files.
- * If audio files are placed in /public/audio/, set `src` to use them with
- * automatic fallback to our procedural Web Audio synthesizer.
+ * Default static audio paths served from /public/audio/...
+ * Any missing file automatically falls back to Web Audio synth / TTS without errors.
  */
+export const STATIC_SFX_PATHS: Record<SoundEffectKey, string> = {
+  beadClick: '/audio/sfx/bead-click.mp3',
+  uiTap: '/audio/sfx/ui-tap.mp3',
+  success: '/audio/sfx/success.mp3',
+  tryAgain: '/audio/sfx/try-again.mp3',
+  levelComplete: '/audio/sfx/level-complete.mp3',
+  birdChirp: '/audio/sfx/bird-chirp.mp3',
+};
+
+export const STATIC_BG_MUSIC_PATH = '/audio/music/bg-music.mp3';
+
+export const STATIC_VOICE_MAP: Record<string, string> = {
+  praise_correct: '/audio/voice/praise-correct.mp3',
+  try_again: '/audio/voice/try-again.mp3',
+  level_complete: '/audio/voice/level-complete.mp3',
+  welcome: '/audio/voice/welcome.mp3',
+};
+
 export const AUDIO_ASSET_MAP: Record<SoundEffectKey, { src?: string; description: string }> = {
-  beadClick: { description: 'صدای چوبی حرکت مهره چرتکه' },
-  uiTap: { description: 'صدای کلیک نرم دکمه‌ها' },
-  success: { description: 'صدای تشویق پاسخ درست' },
-  tryAgain: { description: 'صدای ملایم تلاش دوباره' },
-  levelComplete: { description: 'صدای پایان موفقیت‌آمیز مرحله' },
-  birdChirp: { description: 'صدای جیک‌جیک شاد پرنده کیا' },
+  beadClick: { src: STATIC_SFX_PATHS.beadClick, description: 'صدای چوبی حرکت مهره چرتکه' },
+  uiTap: { src: STATIC_SFX_PATHS.uiTap, description: 'صدای کلیک نرم دکمه‌ها' },
+  success: { src: STATIC_SFX_PATHS.success, description: 'صدای تشویق پاسخ درست' },
+  tryAgain: { src: STATIC_SFX_PATHS.tryAgain, description: 'صدای ملایم تلاش دوباره' },
+  levelComplete: { src: STATIC_SFX_PATHS.levelComplete, description: 'صدای پایان موفقیت‌آمیز مرحله' },
+  birdChirp: { src: STATIC_SFX_PATHS.birdChirp, description: 'صدای جیک‌جیک شاد پرنده کیا' },
 };
 
 const FEMALE_VOICE_HINTS = [
@@ -48,6 +67,30 @@ function inferToneFromText(text: string): PersianVoiceTone {
   return 'teach';
 }
 
+function normalizePhrase(text: string): string {
+  return text
+    .trim()
+    .replace(/[\u200c\s]+/g, ' ')
+    .replace(/[.!؟،؛:«»"']/g, '')
+    .toLowerCase();
+}
+
+function isSafeAudioUrl(url?: string): string {
+  if (!url || typeof url !== 'string') return '';
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('/audio/')) return trimmed;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return parsed.toString();
+    }
+  } catch {
+    return '';
+  }
+  return '';
+}
+
 function base64WavToObjectUrl(base64: string): string {
   const binary = window.atob(base64);
   const bytes = new Uint8Array(binary.length);
@@ -63,14 +106,49 @@ class SoundEngine {
   private soundEnabled = true;
   private musicEnabled = false;
   private speechEnabled = true;
+
+  // Synth music fallback timer
   private musicInterval: number | null = null;
   private musicStep = 0;
+  // File-based looped background music
+  private bgMusicAudio: HTMLAudioElement | null = null;
+  private bgMusicUrl: string = STATIC_BG_MUSIC_PATH;
+
+  // Zero-latency Web Audio decoded SFX buffers + URL state caches
+  private sfxBuffers = new Map<SoundEffectKey, AudioBuffer>();
+  private sfxLoading = new Set<SoundEffectKey>();
+  private failedUrls = new Set<string>();
+  private validatedAudioUrls = new Map<string, boolean>();
+  private sfxUrlOverrides: Partial<Record<SoundEffectKey, string>> = {};
+  private pluginVoiceClips: VoiceClipMapping[] = [];
 
   private currentAudio: HTMLAudioElement | null = null;
   private ttsAbortController: AbortController | null = null;
   private audioCache = new Map<string, string>();
   private speakingListeners = new Set<(speaking: boolean) => void>();
   private voicesWarmupAttached = false;
+  private unlockAttached = false;
+
+  constructor() {
+    this.attachFirstGestureUnlock();
+  }
+
+  private attachFirstGestureUnlock() {
+    if (typeof window === 'undefined' || this.unlockAttached) return;
+    this.unlockAttached = true;
+
+    const unlock = () => {
+      const ctx = this.ensureContext();
+      if (ctx && this.soundEnabled) {
+        this.preloadAllSfx();
+      }
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+
+    window.addEventListener('pointerdown', unlock, { passive: true, once: true });
+    window.addEventListener('keydown', unlock, { passive: true, once: true });
+  }
 
   private setSpeaking(speaking: boolean) {
     this.speakingListeners.forEach((cb) => cb(speaking));
@@ -93,9 +171,147 @@ class SoundEngine {
       this.ctx = new AudioCtx();
     }
     if (this.ctx.state === 'suspended') {
-      void this.ctx.resume();
+      void this.ctx.resume().catch(() => {});
     }
     return this.ctx;
+  }
+
+  private getEffectiveSfxUrl(key: SoundEffectKey): string {
+    const custom = isSafeAudioUrl(this.sfxUrlOverrides[key]);
+    if (custom) return custom;
+    return STATIC_SFX_PATHS[key];
+  }
+
+  /**
+   * Fetch and verify an audio URL really serves audio bytes (protects against SPA HTML fallback 200 OK).
+   */
+  private async fetchAudioArrayBuffer(url: string): Promise<ArrayBuffer | null> {
+    if (!url || this.failedUrls.has(url)) return null;
+    try {
+      const res = await fetch(url, { method: 'GET' });
+      if (!res.ok) {
+        this.failedUrls.add(url);
+        return null;
+      }
+      const ct = (res.headers.get('content-type') || '').toLowerCase();
+      if (ct.includes('text/html') || ct.includes('application/json') || ct.includes('text/plain')) {
+        this.failedUrls.add(url);
+        return null;
+      }
+      const buf = await res.arrayBuffer();
+      if (!buf || buf.byteLength < 64) {
+        this.failedUrls.add(url);
+        return null;
+      }
+      this.validatedAudioUrls.set(url, true);
+      return buf;
+    } catch {
+      this.failedUrls.add(url);
+      return null;
+    }
+  }
+
+  private async isPlayableAudioUrl(url: string): Promise<boolean> {
+    if (!url) return false;
+    if (this.failedUrls.has(url)) return false;
+    if (this.validatedAudioUrls.has(url)) return Boolean(this.validatedAudioUrls.get(url));
+
+    // For local /audio/* paths, check headers so SPA HTML fallback never passes as audio
+    if (url.startsWith('/')) {
+      try {
+        const res = await fetch(url, { method: 'HEAD' });
+        if (!res.ok) {
+          this.failedUrls.add(url);
+          return false;
+        }
+        const ct = (res.headers.get('content-type') || '').toLowerCase();
+        if (ct.includes('text/html') || ct.includes('application/json')) {
+          this.failedUrls.add(url);
+          return false;
+        }
+        this.validatedAudioUrls.set(url, true);
+        return true;
+      } catch {
+        this.failedUrls.add(url);
+        return false;
+      }
+    }
+
+    // Remote plugin / CDN media URLs may restrict CORS HEAD requests; let <audio> try directly
+    return true;
+  }
+
+  private async loadSfxBuffer(key: SoundEffectKey): Promise<AudioBuffer | null> {
+    if (this.sfxBuffers.has(key)) return this.sfxBuffers.get(key) ?? null;
+    if (this.sfxLoading.has(key)) return null;
+
+    const url = this.getEffectiveSfxUrl(key);
+    if (!url || this.failedUrls.has(url)) return null;
+
+    const ctx = this.ensureContext();
+    if (!ctx) return null;
+
+    this.sfxLoading.add(key);
+    try {
+      const arrayBuf = await this.fetchAudioArrayBuffer(url);
+      if (!arrayBuf) return null;
+      const decoded = await ctx.decodeAudioData(arrayBuf.slice(0));
+      this.sfxBuffers.set(key, decoded);
+      return decoded;
+    } catch {
+      this.failedUrls.add(url);
+      return null;
+    } finally {
+      this.sfxLoading.delete(key);
+    }
+  }
+
+  private preloadAllSfx() {
+    if (typeof window === 'undefined') return;
+    (Object.keys(STATIC_SFX_PATHS) as SoundEffectKey[]).forEach((key) => {
+      if (!this.sfxBuffers.has(key) && !this.sfxLoading.has(key)) {
+        void this.loadSfxBuffer(key);
+      }
+    });
+  }
+
+  /**
+   * Apply dynamic audio configuration returned from WordPress plugin.
+   */
+  public configureAssets(audioConfig?: AudioSettingsConfig | null) {
+    if (!audioConfig) return;
+
+    const nextSfx = audioConfig.sfxUrls ?? {};
+    let sfxChanged = false;
+    (Object.keys(STATIC_SFX_PATHS) as SoundEffectKey[]).forEach((key) => {
+      const safe = isSafeAudioUrl(nextSfx[key]);
+      if (this.sfxUrlOverrides[key] !== (safe || undefined)) {
+        if (safe) {
+          this.sfxUrlOverrides[key] = safe;
+        } else {
+          delete this.sfxUrlOverrides[key];
+        }
+        this.sfxBuffers.delete(key);
+        sfxChanged = true;
+      }
+    });
+
+    const nextBg = isSafeAudioUrl(audioConfig.bgMusicUrl) || STATIC_BG_MUSIC_PATH;
+    if (nextBg !== this.bgMusicUrl) {
+      this.bgMusicUrl = nextBg;
+      if (this.musicEnabled) {
+        this.stopBackgroundMusic();
+        this.startBackgroundMusic();
+      }
+    }
+
+    this.pluginVoiceClips = Array.isArray(audioConfig.voiceClips)
+      ? audioConfig.voiceClips.filter((c) => c && isSafeAudioUrl(c.url))
+      : [];
+
+    if (sfxChanged && this.soundEnabled) {
+      this.preloadAllSfx();
+    }
   }
 
   public configure(opts: {
@@ -130,12 +346,40 @@ class SoundEngine {
   public play(key: SoundEffectKey) {
     if (!this.soundEnabled) return;
 
-    const customSrc = AUDIO_ASSET_MAP[key]?.src;
-    if (customSrc && typeof Audio !== 'undefined') {
-      const audio = new Audio(customSrc);
-      audio.volume = 0.6;
-      audio.play().catch(() => this.playSynth(key));
-      return;
+    const cachedBuffer = this.sfxBuffers.get(key);
+    const ctx = this.ensureContext();
+    if (cachedBuffer && ctx) {
+      try {
+        const src = ctx.createBufferSource();
+        src.buffer = cachedBuffer;
+        const gain = ctx.createGain();
+        gain.gain.value = key === 'beadClick' ? 0.7 : 0.6;
+        src.connect(gain);
+        gain.connect(ctx.destination);
+        src.start(0);
+        return;
+      } catch {
+        // fallback to synth below
+      }
+    }
+
+    // Trigger lazy decode for next call while playing synth zero-latency right now
+    const effectiveUrl = this.getEffectiveSfxUrl(key);
+    if (effectiveUrl && !this.failedUrls.has(effectiveUrl)) {
+      if (effectiveUrl.startsWith('/')) {
+        void this.loadSfxBuffer(key);
+      } else {
+        // Remote audio URL (e.g. from WordPress Media Library) — try Audio element or preload buffer
+        void this.loadSfxBuffer(key).then((buf) => {
+          if (!buf && !this.failedUrls.has(effectiveUrl) && typeof Audio !== 'undefined') {
+            const audio = new Audio(effectiveUrl);
+            audio.volume = 0.6;
+            void audio.play().catch(() => {
+              this.failedUrls.add(effectiveUrl);
+            });
+          }
+        });
+      }
     }
 
     this.playSynth(key);
@@ -253,7 +497,7 @@ class SoundEngine {
     }
   }
 
-  private startBackgroundMusic() {
+  private startSynthBackgroundMusic() {
     if (this.musicInterval !== null || typeof window === 'undefined') return;
     const pentatonic = [261.63, 293.66, 329.63, 392.0, 440.0, 392.0, 329.63, 293.66];
     this.musicInterval = window.setInterval(() => {
@@ -276,11 +520,88 @@ class SoundEngine {
     }, 900);
   }
 
-  private stopBackgroundMusic() {
+  private startBackgroundMusic() {
+    if (typeof window === 'undefined') return;
+    const musicUrl = this.bgMusicUrl;
+    if (musicUrl && !this.failedUrls.has(musicUrl) && typeof Audio !== 'undefined') {
+      void this.isPlayableAudioUrl(musicUrl).then((ok) => {
+        if (!this.musicEnabled) return;
+        if (ok) {
+          this.stopSynthMusicOnly();
+          const audio = new Audio(musicUrl);
+          audio.loop = true;
+          audio.volume = 0.2;
+          this.bgMusicAudio = audio;
+          audio.onerror = () => {
+            this.failedUrls.add(musicUrl);
+            this.bgMusicAudio = null;
+            if (this.musicEnabled) this.startSynthBackgroundMusic();
+          };
+          void audio.play().catch(() => {
+            if (this.bgMusicAudio === audio) {
+              this.bgMusicAudio = null;
+            }
+            if (this.musicEnabled) this.startSynthBackgroundMusic();
+          });
+        } else {
+          this.startSynthBackgroundMusic();
+        }
+      });
+      return;
+    }
+    this.startSynthBackgroundMusic();
+  }
+
+  private stopSynthMusicOnly() {
     if (this.musicInterval !== null && typeof window !== 'undefined') {
       window.clearInterval(this.musicInterval);
       this.musicInterval = null;
     }
+  }
+
+  private stopBackgroundMusic() {
+    this.stopSynthMusicOnly();
+    if (this.bgMusicAudio) {
+      try {
+        this.bgMusicAudio.pause();
+        this.bgMusicAudio.currentTime = 0;
+      } catch {
+        // ignore
+      }
+      this.bgMusicAudio = null;
+    }
+  }
+
+  private resolveVoiceUrl(
+    cleanText: string,
+    explicitAudioUrl?: string,
+    staticKey?: string
+  ): string {
+    const direct = isSafeAudioUrl(explicitAudioUrl);
+    if (direct && !this.failedUrls.has(direct)) return direct;
+
+    const norm = normalizePhrase(cleanText);
+    // 1. Check WordPress-managed phrase voice clips
+    for (const clip of this.pluginVoiceClips) {
+      const clipUrl = isSafeAudioUrl(clip.url);
+      if (!clipUrl || this.failedUrls.has(clipUrl)) continue;
+      if (staticKey && clip.key && clip.key === staticKey) return clipUrl;
+      if (clip.phrase && normalizePhrase(clip.phrase) === norm) return clipUrl;
+    }
+
+    // 2. Check static key / standard built-in static voice files
+    if (staticKey && STATIC_VOICE_MAP[staticKey] && !this.failedUrls.has(STATIC_VOICE_MAP[staticKey])) {
+      return STATIC_VOICE_MAP[staticKey];
+    }
+
+    if (/آفرین|کاملا درست|خیلی خوب بود/.test(norm) && !this.failedUrls.has(STATIC_VOICE_MAP.praise_correct)) {
+      return STATIC_VOICE_MAP.praise_correct;
+    }
+    if (/دوباره تلاش|اشکالی ندارد|غصه نخور/.test(norm) && !this.failedUrls.has(STATIC_VOICE_MAP.try_again)) {
+      return STATIC_VOICE_MAP.try_again;
+    }
+
+    return '';
   }
 
   private pickFemalePersianVoice(): SpeechSynthesisVoice | null {
@@ -293,7 +614,6 @@ class SoundEngine {
     });
     if (persianVoices.length === 0) return null;
 
-    // Score voices to prioritize natural female Persian voices
     let bestVoice = persianVoices[0];
     let bestScore = -999;
     for (const v of persianVoices) {
@@ -317,7 +637,7 @@ class SoundEngine {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'fa-IR';
       utterance.rate = 0.9;
-      utterance.pitch = 1.18; // Gentle warm female tone for children
+      utterance.pitch = 1.18;
 
       const femaleVoice = this.pickFemalePersianVoice();
       if (femaleVoice) {
@@ -366,17 +686,46 @@ class SoundEngine {
   }
 
   /**
-   * Speaks Persian text using a warm, child-friendly female Iranian voice.
-   * Uses server-side Gemini TTS (/api/tts) with caching and seamlessly falls back
-   * to the browser's female Persian voice when offline.
+   * Hybrid Persian Voice Player:
+   * 1) Explicit per-step/question/stage MP3 URL or WordPress Voice Library clip
+   * 2) Static pre-recorded voiceover file in /audio/voice/
+   * 3) Server-side /api/tts with local cache
+   * 4) Browser female Persian speechSynthesis
    */
-  public speakPersian(text: string, explicitTone?: PersianVoiceTone) {
+  public speakPersian(
+    text: string,
+    explicitTone?: PersianVoiceTone,
+    explicitAudioUrl?: string,
+    staticKey?: string
+  ) {
     if (!this.speechEnabled || typeof window === 'undefined') return;
     const cleanText = text.trim();
-    if (!cleanText) return;
+    const resolvedFileUrl = this.resolveVoiceUrl(cleanText, explicitAudioUrl, staticKey);
+    if (!cleanText && !resolvedFileUrl) return;
 
     this.stopSpeech();
 
+    if (resolvedFileUrl) {
+      void this.isPlayableAudioUrl(resolvedFileUrl)
+        .then(async (ok) => {
+          if (!ok) throw new Error('Audio asset absent');
+          await this.playCachedUrl(resolvedFileUrl);
+        })
+        .catch(() => {
+          this.failedUrls.add(resolvedFileUrl);
+          if (cleanText) {
+            this.speakViaTtsOrBrowser(cleanText, explicitTone);
+          }
+        });
+      return;
+    }
+
+    if (cleanText) {
+      this.speakViaTtsOrBrowser(cleanText, explicitTone);
+    }
+  }
+
+  private speakViaTtsOrBrowser(cleanText: string, explicitTone?: PersianVoiceTone) {
     const tone = explicitTone ?? inferToneFromText(cleanText);
     const cacheKey = `${tone}:${cleanText}`;
     const cachedUrl = this.audioCache.get(cacheKey);

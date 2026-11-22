@@ -4,6 +4,8 @@ import { audioEngine } from '../lib/audioEngine';
 
 interface AudioButtonProps {
   textToSpeak: string;
+  audioUrl?: string;
+  voiceKey?: string;
   label?: string;
   size?: 'sm' | 'md';
   className?: string;
@@ -11,6 +13,8 @@ interface AudioButtonProps {
 
 export const AudioButton: React.FC<AudioButtonProps> = ({
   textToSpeak,
+  audioUrl,
+  voiceKey,
   label = 'گوش کن',
   size = 'md',
   className = '',
@@ -25,7 +29,7 @@ export const AudioButton: React.FC<AudioButtonProps> = ({
 
   const handleClick = () => {
     audioEngine.play('uiTap');
-    audioEngine.speakPersian(textToSpeak);
+    audioEngine.speakPersian(textToSpeak, undefined, audioUrl, voiceKey);
   };
 
   return (

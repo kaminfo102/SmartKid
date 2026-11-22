@@ -1,5 +1,6 @@
 import type {
   AppSettings,
+  AudioSettingsConfig,
   AvatarId,
   BacsAccount,
   ChildProfile,
@@ -29,6 +30,41 @@ export function setMemoryBearerToken(token: string | null): void {
 
 export function hasMemoryBearerToken(): boolean {
   return Boolean(memoryBearerToken);
+}
+
+/**
+ * Convert Persian/Arabic numerals to ASCII Latin digits.
+ */
+export function normalizePersianDigits(raw: string): string {
+  const fa = '۰۱۲۳۴۵۶۷۸۹';
+  const ar = '٠١٢٣٤٥٦٧٨٩';
+  return raw
+    .replace(/[۰-۹]/g, (d) => String(fa.indexOf(d)))
+    .replace(/[٠-٩]/g, (d) => String(ar.indexOf(d)));
+}
+
+/**
+ * Normalize an Iranian mobile number (handles spaces, dashes, +98/0098/98, Persian digits).
+ */
+export function normalizeIranMobile(raw: string): string {
+  const digits = normalizePersianDigits(raw).replace(/\D/g, '');
+  if (digits.length === 14 && digits.startsWith('00989')) {
+    return '0' + digits.slice(4);
+  }
+  if (digits.length === 12 && digits.startsWith('989')) {
+    return '0' + digits.slice(2);
+  }
+  if (digits.length === 10 && digits.startsWith('9')) {
+    return '0' + digits;
+  }
+  return digits;
+}
+
+/**
+ * Strictly validate an Iranian mobile number (11 digits starting with 09).
+ */
+export function isValidIranMobile(raw: string): boolean {
+  return /^09\d{9}$/.test(normalizeIranMobile(raw));
 }
 
 /**
@@ -206,6 +242,7 @@ export interface WordPressCurriculumResponse {
     wooActive?: boolean;
     wooCurrency?: string;
     defaultSettings?: Partial<AppSettings>;
+    audioSettings?: AudioSettingsConfig;
   };
 }
 
@@ -230,6 +267,7 @@ export async function fetchWordPressCurriculum(siteUrl: string): Promise<{
       dailyChallengeCount: data.config?.dailyChallengeCount,
       wooActive: data.wooActive ?? data.config?.wooActive,
       wooCurrency: data.wooCurrency ?? data.config?.wooCurrency,
+      audioSettings: data.config?.audioSettings,
     },
     defaultSettings: data.config?.defaultSettings,
   };
@@ -372,6 +410,20 @@ export async function fetchUserOrders(siteUrl: string): Promise<{
     { method: 'GET' },
     true
   );
+}
+
+export async function fetchAccountMe(siteUrl: string): Promise<{
+  user: WordPressUser;
+  profiles: ChildProfile[];
+  settings: AppSettings;
+  unlockedTermIds: number[];
+}> {
+  return wpRequest<{
+    user: WordPressUser;
+    profiles: ChildProfile[];
+    settings: AppSettings;
+    unlockedTermIds: number[];
+  }>(siteUrl, '/auth/me', { method: 'GET' }, true);
 }
 
 export async function updateAccountProfile(
@@ -528,6 +580,7 @@ export async function registerWordPress(
   siteUrl: string,
   payload: {
     mobile: string;
+    username?: string;
     email?: string;
     password: string;
     firstName: string;

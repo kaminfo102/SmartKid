@@ -105,6 +105,7 @@ class KN_DB {
 			unlock_requirement varchar(100) DEFAULT '',
 			icon_name varchar(40) NOT NULL DEFAULT 'sparkles',
 			accent_color varchar(20) NOT NULL DEFAULT '#0EA5E9',
+			audio_url varchar(500) NOT NULL DEFAULT '',
 			is_active tinyint(1) NOT NULL DEFAULT 1,
 			created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -122,6 +123,7 @@ class KN_DB {
 			title varchar(255) NOT NULL,
 			instruction text NOT NULL,
 			spoken_text text NOT NULL,
+			audio_url varchar(500) NOT NULL DEFAULT '',
 			initial_value int(11) NOT NULL DEFAULT 0,
 			target_value int(11) DEFAULT NULL,
 			columns_count tinyint(3) unsigned NOT NULL DEFAULT 1,
@@ -141,6 +143,7 @@ class KN_DB {
 			columns_count tinyint(3) unsigned NOT NULL DEFAULT 1,
 			prompt_text text NOT NULL,
 			spoken_text text NOT NULL,
+			audio_url varchar(500) NOT NULL DEFAULT '',
 			start_value int(11) NOT NULL DEFAULT 0,
 			target_value int(11) NOT NULL DEFAULT 0,
 			visual_type varchar(30) NOT NULL DEFAULT 'number',
@@ -171,6 +174,8 @@ class KN_DB {
 			lessons_json longtext NOT NULL,
 			skills_json longtext NOT NULL,
 			badges_json longtext NOT NULL,
+			reward_points int(11) NOT NULL DEFAULT 0,
+			daily_bonus_json longtext NOT NULL,
 			created_at bigint(20) NOT NULL DEFAULT 0,
 			updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 			PRIMARY KEY  (id),
@@ -396,6 +401,7 @@ class KN_DB {
 				'title'               => sanitize_text_field( $step['title'] ),
 				'instruction'         => wp_kses_post( $step['instruction'] ),
 				'spoken_text'         => sanitize_text_field( $step['spoken_text'] ),
+				'audio_url'           => esc_url_raw( $step['audio_url'] ?? '' ),
 				'initial_value'       => intval( $step['initial_value'] ?? 0 ),
 				'target_value'        => isset( $step['target_value'] ) && $step['target_value'] !== '' ? intval( $step['target_value'] ) : null,
 				'columns_count'       => max( 1, min( 4, absint( $step['columns_count'] ?? 1 ) ) ),
@@ -536,6 +542,7 @@ class KN_DB {
 					'title'              => $sp['title'],
 					'instruction'        => $sp['instruction'],
 					'spokenText'         => $sp['spoken_text'],
+					'audioUrl'           => (string) ( $sp['audio_url'] ?? '' ),
 					'initialValue'       => (int) $sp['initial_value'],
 					'columns'            => (int) $sp['columns_count'],
 					'requireInteraction' => (bool) $sp['require_interaction'],
@@ -563,6 +570,7 @@ class KN_DB {
 				'columns'      => (int) $st['columns_count'],
 				'iconName'     => $st['icon_name'],
 				'accentColor'  => $st['accent_color'],
+				'audioUrl'     => (string) ( $st['audio_url'] ?? '' ),
 				'isActive'     => (bool) $st['is_active'],
 				'steps'        => $steps,
 			);
@@ -939,6 +947,7 @@ class KN_DB {
 				'columns'     => (int) $row['columns_count'],
 				'promptText'  => $row['prompt_text'],
 				'spokenText'  => $row['spoken_text'],
+				'audioUrl'    => (string) ( $row['audio_url'] ?? '' ),
 				'startValue'  => (int) $row['start_value'],
 				'targetValue' => (int) $row['target_value'],
 				'visualType'  => $row['visual_type'],
@@ -961,12 +970,52 @@ class KN_DB {
 	}
 
 	/**
+	 * Fetch normalized global audio settings (SFX, BG music, phrase voice library) for REST API & Admin.
+	 */
+	public static function get_audio_settings() {
+		$raw      = get_option( 'kn_soroban_audio_settings', array() );
+		$sfx_keys = array( 'beadClick', 'uiTap', 'success', 'tryAgain', 'levelComplete', 'birdChirp' );
+		$sfx_out  = array();
+		$raw_sfx  = isset( $raw['sfx_urls'] ) && is_array( $raw['sfx_urls'] ) ? $raw['sfx_urls'] : array();
+		foreach ( $sfx_keys as $k ) {
+			if ( ! empty( $raw_sfx[ $k ] ) ) {
+				$sfx_out[ $k ] = esc_url_raw( (string) $raw_sfx[ $k ] );
+			}
+		}
+
+		$clips_out = array();
+		$raw_clips = isset( $raw['voice_clips'] ) && is_array( $raw['voice_clips'] ) ? $raw['voice_clips'] : array();
+		foreach ( $raw_clips as $clip ) {
+			if ( ! is_array( $clip ) ) {
+				continue;
+			}
+			$url    = esc_url_raw( (string) ( $clip['url'] ?? '' ) );
+			$phrase = sanitize_text_field( (string) ( $clip['phrase'] ?? '' ) );
+			$key    = sanitize_key( (string) ( $clip['key'] ?? '' ) );
+			if ( ! empty( $url ) && ( ! empty( $phrase ) || ! empty( $key ) ) ) {
+				$clips_out[] = array(
+					'key'    => $key,
+					'phrase' => $phrase,
+					'url'    => $url,
+				);
+			}
+		}
+
+		return array(
+			'sfxUrls'    => ! empty( $sfx_out ) ? $sfx_out : new stdClass(),
+			'bgMusicUrl' => ! empty( $raw['bg_music_url'] ) ? esc_url_raw( (string) $raw['bg_music_url'] ) : '',
+			'voiceClips' => $clips_out,
+		);
+	}
+
+	/**
 	 * Format a child profile database row to React ChildProfile JSON.
 	 */
 	public static function format_profile_row( $row ) {
-		$lessons = json_decode( $row['lessons_json'], true );
-		$skills  = json_decode( $row['skills_json'], true );
-		$badges  = json_decode( $row['badges_json'], true );
+		$lessons     = json_decode( $row['lessons_json'], true );
+		$skills      = json_decode( $row['skills_json'], true );
+		$badges      = json_decode( $row['badges_json'], true );
+		$daily_bonus = isset( $row['daily_bonus_json'] ) ? json_decode( $row['daily_bonus_json'], true ) : null;
 
 		return array(
 			'id'              => $row['client_profile_id'],
@@ -984,6 +1033,13 @@ class KN_DB {
 			'lessons'         => is_array( $lessons ) ? $lessons : new stdClass(),
 			'skills'          => is_array( $skills ) ? $skills : self::default_skills_map(),
 			'badges'          => is_array( $badges ) ? $badges : array(),
+			'rewardPoints'    => isset( $row['reward_points'] ) ? max( 0, (int) $row['reward_points'] ) : 0,
+			'dailyBonus'      => is_array( $daily_bonus ) ? $daily_bonus : array(
+				'streak'           => 0,
+				'lastClaimDate'    => '',
+				'totalDaysClaimed' => 0,
+				'history'          => array(),
+			),
 		);
 	}
 
@@ -1039,6 +1095,15 @@ class KN_DB {
 			'lessons_json'      => wp_json_encode( $payload['lessons'] ?? new stdClass() ),
 			'skills_json'       => wp_json_encode( $payload['skills'] ?? self::default_skills_map() ),
 			'badges_json'       => wp_json_encode( $payload['badges'] ?? array() ),
+			'reward_points'     => max( 0, intval( $payload['rewardPoints'] ?? 0 ) ),
+			'daily_bonus_json'  => wp_json_encode(
+				$payload['dailyBonus'] ?? array(
+					'streak'           => 0,
+					'lastClaimDate'    => '',
+					'totalDaysClaimed' => 0,
+					'history'          => array(),
+				)
+			),
 			'created_at'        => ! empty( $payload['createdAt'] ) ? intval( $payload['createdAt'] ) : ( time() * 1000 ),
 		);
 
