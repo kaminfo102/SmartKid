@@ -108,57 +108,59 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       <main className="flex-1 w-full max-w-3xl mx-auto p-4 space-y-5 pb-10">
         <ProgressPanel profile={profile} digitMode={settings.digitMode} lessons={lessons} />
 
-        {/* Headless WordPress & Plugin Card */}
-        <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] p-4 sm:p-5 space-y-3">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-3 min-w-0">
-              <KidIconTile color="sky" size="md">
-                <Cloud className="w-6 h-6" />
-              </KidIconTile>
-              <div className="min-w-0">
-                <h2 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white">
-                  بک‌اند وردپرس هدلس و دانلود پلاگین
-                </h2>
-                <p className="text-xs text-slate-600 dark:text-slate-400 truncate">
-                  {wpConnected
-                    ? `متصل به ${wpUrl}${wpUser ? ` (${wpUser.displayName})` : ''}`
-                    : 'اتصال به وردپرس برای مدیریت داینامیک جاده مراحل، سوالات و حساب کاربران'}
-                </p>
+        {/* Admin-Only Server & Plugin Card */}
+        {wpUser?.isAdmin && (
+          <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] p-4 sm:p-5 space-y-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-3 min-w-0">
+                <KidIconTile color="sky" size="md">
+                  <Cloud className="w-6 h-6" />
+                </KidIconTile>
+                <div className="min-w-0">
+                  <h2 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white">
+                    تنظیمات اتصال سرور و بسته افزونه (ویژه مدیر)
+                  </h2>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 truncate">
+                    {wpConnected
+                      ? `متصل به ${wpUrl} (${wpUser.displayName})`
+                      : 'پیکربندی اتصال سرور و دانلود نسخه جدید افزونه مدیریت'}
+                  </p>
+                </div>
               </div>
-            </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={onOpenWordPressAuth}
-                className="min-h-[44px] px-4 rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] text-white font-extrabold text-xs inline-flex items-center gap-1.5"
-              >
-                <Cloud className="w-4 h-4" />
-                <span>{wpUser ? 'مدیریت حساب وردپرس' : 'اتصال و ورود به وردپرس'}</span>
-              </button>
-
-              {wpConnected && onRefreshWordPress && (
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
-                  onClick={onRefreshWordPress}
-                  className="min-h-[44px] px-3 rounded-2xl bg-[#FFDC5E] hover:bg-[#F5CE3D] border-b-4 border-[#DFAD19] text-[#5C3A00] font-extrabold text-xs inline-flex items-center gap-1.5"
+                  onClick={onOpenWordPressAuth}
+                  className="min-h-[44px] px-4 rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] text-white font-extrabold text-xs inline-flex items-center gap-1.5"
                 >
-                  <RefreshCw className="w-4 h-4" />
-                  <span>به‌روزرسانی جاده</span>
+                  <Cloud className="w-4 h-4" />
+                  <span>مدیریت اتصال سرور</span>
                 </button>
-              )}
 
-              <a
-                href="/downloads/koodak-nabegheh-soroban.zip"
-                download="koodak-nabegheh-soroban.zip"
-                className="min-h-[44px] px-3.5 rounded-2xl bg-[#8E63EB] hover:bg-[#7A4EE0] border-b-4 border-[#6339C4] text-white font-extrabold text-xs inline-flex items-center gap-1.5"
-              >
-                <Download className="w-4 h-4" />
-                <span>دانلود پلاگین (ZIP)</span>
-              </a>
+                {wpConnected && onRefreshWordPress && (
+                  <button
+                    type="button"
+                    onClick={onRefreshWordPress}
+                    className="min-h-[44px] px-3 rounded-2xl bg-[#FFDC5E] hover:bg-[#F5CE3D] border-b-4 border-[#DFAD19] text-[#5C3A00] font-extrabold text-xs inline-flex items-center gap-1.5"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    <span>به‌روزرسانی دوره‌ها</span>
+                  </button>
+                )}
+
+                <a
+                  href="/downloads/koodak-nabegheh-soroban.zip"
+                  download="koodak-nabegheh-soroban.zip"
+                  className="min-h-[44px] px-3.5 rounded-2xl bg-[#8E63EB] hover:bg-[#7A4EE0] border-b-4 border-[#6339C4] text-white font-extrabold text-xs inline-flex items-center gap-1.5"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>دانلود افزونه (ZIP)</span>
+                </a>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* Parent Support Banner */}
         <BuyCoffeeButton variant="card" reducedMotion={settings.reducedMotion} />
@@ -261,10 +263,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="font-extrabold text-sm text-slate-900 dark:text-white">
-              نصب آفلاین و مدیریت اطلاعات محلی
+              نصب اپلیکیشن و مدیریت حافظه دستگاه
             </h2>
             <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-              تمام پیشرفت‌ها فقط روی همین دستگاه ذخیره می‌شوند و هیچ اطلاعاتی به سرور ارسال نمی‌شود.
+              نصب نسخه وب‌اپلیکیشن روی گوشی یا تبلت برای دسترسی سریع و مدیریت حافظه موقت این دستگاه.
             </p>
           </div>
 

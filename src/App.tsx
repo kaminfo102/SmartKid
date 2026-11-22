@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
   AppSettings,
   AvatarId,
+  BacsAccount,
   ChildProfile,
   LessonDefinition,
   PracticeQuestion,
@@ -43,6 +44,8 @@ import { SorobanStepSimulator } from './features/abacus/SorobanStepSimulator';
 import { ResultScreen } from './features/progress/ResultScreen';
 import { ParentGate } from './components/ParentGate';
 import { SettingsPanel } from './features/progress/SettingsPanel';
+import { ShopScreen } from './features/shop/ShopScreen';
+import { SupportScreen } from './features/support/SupportScreen';
 import { OfflineIndicator } from './components/PWAInstallButton';
 
 export default function App() {
@@ -51,6 +54,7 @@ export default function App() {
   const [terms, setTerms] = useState<TermDefinition[]>(DEFAULT_TERMS);
   const [activeTermId, setActiveTermId] = useState<string>(DEFAULT_TERMS[0].id);
   const [wpQuestions, setWpQuestions] = useState<PracticeQuestion[]>([]);
+  const [bacsAccounts, setBacsAccounts] = useState<BacsAccount[]>([]);
   const [wpUrl, setWpUrl] = useState<string>(() => getSavedWordPressUrl());
   const [wpUser, setWpUser] = useState<WordPressUser | null>(null);
   const [wpConnected, setWpConnected] = useState(false);
@@ -127,6 +131,7 @@ export default function App() {
         }
 
         setWpQuestions(questions);
+        setBacsAccounts(curriculum.bacsAccounts ?? []);
         setWpConfig((prev) => ({
           ...prev,
           appTitle: curriculum.config.appTitle || prev.appTitle,
@@ -318,17 +323,6 @@ export default function App() {
     setScreen('result');
   };
 
-  const handleStartFirstOrNextLesson = () => {
-    audioEngine.play('uiTap');
-    const nextUnfinished =
-      unlockedLessons.find((l) => !activeProfile.lessons[l.id]?.completed) ??
-      unlockedLessons[0];
-    if (nextUnfinished) {
-      setActiveLesson(nextUnfinished);
-      setScreen('lesson');
-    }
-  };
-
   const handleNextFromResult = () => {
     if (!lastResult) {
       setScreen('map');
@@ -402,6 +396,8 @@ export default function App() {
       prev.map((t) => ({
         ...t,
         unlocked: t.isFree,
+        unlockedSource: t.isFree ? 'free' : null,
+        pendingOrder: null,
       }))
     );
   };
@@ -412,7 +408,7 @@ export default function App() {
         setTerms((prev) =>
           prev.map((t) =>
             t.dbId === termDbId
-              ? { ...t, unlocked: true, unlockedSource: 'woocommerce' }
+              ? { ...t, unlocked: true, unlockedSource: 'woocommerce', pendingOrder: null }
               : t
           )
         );
@@ -436,7 +432,6 @@ export default function App() {
           hasProgress={hasProgress}
           wpUser={wpUser}
           wpConnected={wpConnected}
-          onStartFirstLesson={handleStartFirstOrNextLesson}
           onContinueMap={() => {
             audioEngine.play('uiTap');
             setScreen('map');
@@ -453,6 +448,14 @@ export default function App() {
           onOpenSimulator={() => {
             audioEngine.play('uiTap');
             setScreen('simulator');
+          }}
+          onOpenShop={() => {
+            audioEngine.play('uiTap');
+            setScreen('shop');
+          }}
+          onOpenTickets={() => {
+            audioEngine.play('uiTap');
+            setScreen('tickets');
           }}
           onOpenProfiles={() => {
             audioEngine.play('uiTap');
@@ -480,8 +483,11 @@ export default function App() {
           digitMode={data.settings.digitMode}
           onUpdateWpUrl={(url) => setWpUrl(url)}
           onAuthSuccess={handleWordPressAuthSuccess}
+          onUpdateUser={(u) => setWpUser(u)}
           onLogout={handleWordPressLogout}
           onRefreshFromWordPress={refreshFromWordPress}
+          onOpenProfiles={() => setScreen('profiles')}
+          onOpenTickets={() => setScreen('tickets')}
           onBack={() => setScreen('start')}
         />
       )}
@@ -526,6 +532,7 @@ export default function App() {
           wpUrl={wpUrl}
           wpUser={wpUser}
           wpConnected={wpConnected}
+          bacsAccounts={bacsAccounts}
           isRefreshing={wpRefreshing}
           onRefreshCurriculum={() => void refreshFromWordPress()}
           onTermUnlocked={handleTermUnlocked}
@@ -603,6 +610,28 @@ export default function App() {
           onRetry={handleRetryFromResult}
           onNext={handleNextFromResult}
           onMap={() => setScreen('map')}
+        />
+      )}
+
+      {screen === 'shop' && (
+        <ShopScreen
+          wpUrl={wpUrl}
+          wpUser={wpUser}
+          digitMode={data.settings.digitMode}
+          bacsAccounts={bacsAccounts}
+          onOpenAuth={() => setScreen('auth')}
+          onOrderCreated={() => void refreshFromWordPress()}
+          onBack={() => setScreen('start')}
+        />
+      )}
+
+      {screen === 'tickets' && (
+        <SupportScreen
+          wpUrl={wpUrl}
+          wpUser={wpUser}
+          digitMode={data.settings.digitMode}
+          onOpenAuth={() => setScreen('auth')}
+          onBack={() => setScreen('start')}
         />
       )}
 

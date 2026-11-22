@@ -27,7 +27,7 @@ export default defineConfig(() => {
           id: '/',
           name: 'کودک نابغه — آموزش چرتکه سوروبان',
           short_name: 'کودک نابغه',
-          description: 'آموزش چرتکه ژاپنی و محاسبات ذهنی با بازی و چرتکه سه‌بعدی برای کودکان ۴ تا ۱۰ سال',
+          description: 'آموزش چرتکه ژاپنی و محاسبات ذهنی با بازی و چرتکه سه‌بعدی برای کودکان ۴ تا ۱۵ سال',
           theme_color: '#2563EB',
           background_color: '#F7F9FC',
           display: 'standalone',
@@ -59,6 +59,7 @@ export default defineConfig(() => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+          navigateFallbackDenylist: [/^\/downloads\//, /^\/api\//],
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,

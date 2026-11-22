@@ -1,26 +1,46 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ArrowRight,
   CheckCircle2,
-  Cloud,
+  CreditCard,
   Download,
+  Edit3,
   Globe,
+  Headphones,
+  Loader2,
+  Lock,
   LogIn,
   LogOut,
+  Package,
   RefreshCw,
+  Save,
+  Shield,
   UserPlus,
+  Users,
 } from 'lucide-react';
-import type { AvatarId, DigitDisplayMode, WordPressUser } from '../types/app';
+import type {
+  AvatarId,
+  BacsAccount,
+  DigitDisplayMode,
+  UserOrder,
+  WordPressUser,
+} from '../types/app';
 import { AVATAR_OPTIONS, AvatarGraphic } from './MascotDana';
 import { KidIconTile } from './KidIconTile';
 import { CloudSyncIllustration } from './KidIllustrations';
+import { ReceiptUploaderField } from './ReceiptUploaderField';
 import { formatNumber } from '../lib/numbers';
+import { IRAN_PROVINCES } from '../lib/iranProvinces';
+import type { OptimizedImageResult } from '../lib/imageOptimizer';
 import {
   checkWordPressHealth,
+  fetchUserOrders,
   loginWordPress,
   logoutWordPress,
   registerWordPress,
   saveWordPressUrl,
+  updateAccountProfile,
+  uploadOrderReceipt,
   type WordPressAuthResponse,
 } from '../lib/wordpressApi';
 
@@ -33,10 +53,15 @@ interface WordPressAuthScreenProps {
   digitMode: DigitDisplayMode;
   onUpdateWpUrl: (url: string) => void;
   onAuthSuccess: (res: WordPressAuthResponse) => void;
+  onUpdateUser?: (user: WordPressUser) => void;
   onLogout: () => void;
   onRefreshFromWordPress: (overrideUrl?: string) => Promise<boolean>;
+  onOpenProfiles?: () => void;
+  onOpenTickets?: () => void;
   onBack: () => void;
 }
+
+const CHILD_AGES = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
 
 export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
   wpUrl,
@@ -47,26 +72,93 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
   digitMode,
   onUpdateWpUrl,
   onAuthSuccess,
+  onUpdateUser,
   onLogout,
   onRefreshFromWordPress,
+  onOpenProfiles,
+  onOpenTickets,
   onBack,
 }) => {
   const [siteInput, setSiteInput] = useState(wpUrl);
-  const [tab, setTab] = useState<'login' | 'register'>('login');
+  const [showAdminSetup, setShowAdminSetup] = useState(!wpUrl);
+
+  // Logged-out auth tabs
+  const [authTab, setAuthTab] = useState<'login' | 'register'>('login');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
 
   // Registration fields
-  const [regEmail, setRegEmail] = useState('');
+  const [regMobile, setRegMobile] = useState('');
   const [regPassword, setRegPassword] = useState('');
-  const [regDisplayName, setRegDisplayName] = useState('');
+  const [regFirstName, setRegFirstName] = useState('');
+  const [regLastName, setRegLastName] = useState('');
+  const [regState, setRegState] = useState('تهران');
+  const [regCity, setRegCity] = useState('');
+  const [regAddress1, setRegAddress1] = useState('');
+  const [regPostcode, setRegPostcode] = useState('');
+  const [regEmail, setRegEmail] = useState('');
   const [regChildName, setRegChildName] = useState('');
   const [regChildAge, setRegChildAge] = useState(6);
   const [regAvatar, setRegAvatar] = useState<AvatarId>('owl');
 
+  // Logged-in account tabs
+  const [accountTab, setAccountTab] = useState<'orders' | 'profile' | 'admin'>('orders');
+
+  // Profile edit state
+  const [editFirstName, setEditFirstName] = useState(wpUser?.firstName || '');
+  const [editLastName, setEditLastName] = useState(wpUser?.lastName || '');
+  const [editMobile, setEditMobile] = useState(wpUser?.mobile || '');
+  const [editEmail, setEditEmail] = useState(wpUser?.email || '');
+  const [editState, setEditState] = useState(wpUser?.state || 'تهران');
+  const [editCity, setEditCity] = useState(wpUser?.city || '');
+  const [editAddress1, setEditAddress1] = useState(wpUser?.address1 || '');
+  const [editPostcode, setEditPostcode] = useState(wpUser?.postcode || '');
+  const [editNewPassword, setEditNewPassword] = useState('');
+
+  // Orders state
+  const [orders, setOrders] = useState<UserOrder[]>([]);
+  const [bacsAccounts, setBacsAccounts] = useState<BacsAccount[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [uploadingOrderId, setUploadingOrderId] = useState<number | null>(null);
+  const [orderReceipts, setOrderReceipts] = useState<Record<number, OptimizedImageResult | null>>({});
+  const [orderNotes, setOrderNotes] = useState<Record<number, string>>({});
+
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (wpUser) {
+      setEditFirstName(wpUser.firstName || '');
+      setEditLastName(wpUser.lastName || '');
+      setEditMobile(wpUser.mobile || '');
+      setEditEmail(wpUser.email || '');
+      setEditState(wpUser.state || 'تهران');
+      setEditCity(wpUser.city || '');
+      setEditAddress1(wpUser.address1 || '');
+      setEditPostcode(wpUser.postcode || '');
+    }
+  }, [wpUser]);
+
+  const loadOrders = useCallback(async () => {
+    if (!wpUrl || !wpUser) return;
+    setOrdersLoading(true);
+    try {
+      const res = await fetchUserOrders(wpUrl);
+      setOrders(res.orders);
+      setBacsAccounts(res.bacsAccounts);
+    } catch {
+      // keep existing state cleanly
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, [wpUrl, wpUser]);
+
+  useEffect(() => {
+    if (wpUser && wpUrl && accountTab === 'orders') {
+      void loadOrders();
+    }
+  }, [wpUser, wpUrl, accountTab, loadOrders]);
 
   const handleTestAndSaveUrl = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,7 +166,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
     setStatusMsg(null);
     const saved = saveWordPressUrl(siteInput);
     if (!saved) {
-      setErrorMsg('لطفاً آدرس معتبر سایت وردپرس را با https:// وارد کنید.');
+      setErrorMsg('لطفاً آدرس معتبر سرور را با https:// وارد کنید.');
       return;
     }
     setLoading(true);
@@ -83,16 +175,15 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
       onUpdateWpUrl(saved);
       await onRefreshFromWordPress(saved);
       setStatusMsg(
-        `اتصال به «${health.siteName || saved}» برقرار شد! (${formatNumber(
+        `اتصال به سرور «${health.siteName || saved}» برقرار شد! (${formatNumber(
           health.stagesCount,
           digitMode
         )} مرحله و ${formatNumber(health.questionsCount, digitMode)} سؤال بارگذاری شد)`
       );
+      setShowAdminSetup(false);
     } catch (err) {
       setErrorMsg(
-        err instanceof Error
-          ? err.message
-          : 'ارتباط با پلاگین وردپرس برقرار نشد. مطمئن شوید پلاگین نصب و فعال است.'
+        err instanceof Error ? err.message : 'ارتباط با سرور برقرار نشد.'
       );
     } finally {
       setLoading(false);
@@ -105,7 +196,8 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
     setStatusMsg(null);
     const activeUrl = saveWordPressUrl(siteInput || wpUrl);
     if (!activeUrl) {
-      setErrorMsg('ابتدا آدرس سایت وردپرس را در بالا وارد و ذخیره کنید.');
+      setShowAdminSetup(true);
+      setErrorMsg('سرور برنامه هنوز تنظیم نشده است. مدیر سایت باید آدرس سرور را وارد کند.');
       return;
     }
     setLoading(true);
@@ -113,9 +205,9 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
       const res = await loginWordPress(activeUrl, identifier.trim(), password);
       onUpdateWpUrl(activeUrl);
       onAuthSuccess(res);
-      setStatusMsg(`خوش آمدی ${res.user.displayName}! اطلاعات با وردپرس همگام شد.`);
+      setStatusMsg(`خوش آمدید ${res.user.displayName}! حساب کاربری شما با موفقیت متصل شد.`);
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'ورود ناموفق بود.');
+      setErrorMsg(err instanceof Error ? err.message : 'ورود به حساب کاربری ناموفق بود.');
     } finally {
       setLoading(false);
     }
@@ -127,26 +219,88 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
     setStatusMsg(null);
     const activeUrl = saveWordPressUrl(siteInput || wpUrl);
     if (!activeUrl) {
-      setErrorMsg('ابتدا آدرس سایت وردپرس را در بالا وارد و ذخیره کنید.');
+      setShowAdminSetup(true);
+      setErrorMsg('سرور برنامه هنوز تنظیم نشده است. مدیر سایت باید آدرس سرور را وارد کند.');
       return;
     }
     setLoading(true);
     try {
       const res = await registerWordPress(activeUrl, {
-        email: regEmail.trim(),
+        mobile: regMobile.trim(),
+        email: regEmail.trim() || undefined,
         password: regPassword,
-        displayName: regDisplayName.trim() || regChildName.trim(),
+        firstName: regFirstName.trim(),
+        lastName: regLastName.trim(),
+        displayName: `${regFirstName.trim()} ${regLastName.trim()}`.trim() || regChildName.trim(),
+        state: regState.trim(),
+        city: regCity.trim(),
+        address1: regAddress1.trim(),
+        postcode: regPostcode.trim(),
         childName: regChildName.trim() || 'قهرمان کوچک',
         childAge: regChildAge,
         childAvatar: regAvatar,
       });
       onUpdateWpUrl(activeUrl);
       onAuthSuccess(res);
-      setStatusMsg('ثبت‌نام با موفقیت انجام شد و پروفایل کودک ساخته شد!');
+      setStatusMsg('ثبت‌نام با موفقیت انجام شد و پروفایل کودک شما ساخته شد!');
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'ثبت‌نام انجام نشد.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!wpUrl || !wpUser) return;
+    setLoading(true);
+    setErrorMsg(null);
+    setStatusMsg(null);
+    try {
+      const res = await updateAccountProfile(wpUrl, {
+        firstName: editFirstName.trim(),
+        lastName: editLastName.trim(),
+        displayName: `${editFirstName.trim()} ${editLastName.trim()}`.trim() || wpUser.displayName,
+        mobile: editMobile.trim(),
+        email: editEmail.trim() || undefined,
+        state: editState.trim(),
+        city: editCity.trim(),
+        address1: editAddress1.trim(),
+        postcode: editPostcode.trim(),
+        newPassword: editNewPassword.trim() || undefined,
+      });
+      onUpdateUser?.(res.user);
+      setEditNewPassword('');
+      setStatusMsg(res.message);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'ذخیره اطلاعات ناموفق بود.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUploadOrderReceipt = async (orderId: number) => {
+    if (!wpUrl || !wpUser) return;
+    const img = orderReceipts[orderId] ?? null;
+    const note = orderNotes[orderId] ?? '';
+    if (!img && !note.trim()) {
+      setErrorMsg('لطفاً تصویر فیش بانکی یا توضیحات واریز را وارد کنید.');
+      return;
+    }
+
+    setUploadingOrderId(orderId);
+    setErrorMsg(null);
+    setStatusMsg(null);
+    try {
+      const res = await uploadOrderReceipt(wpUrl, orderId, img?.file ?? null, note);
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? res.order : o)));
+      setOrderReceipts((prev) => ({ ...prev, [orderId]: null }));
+      setStatusMsg(res.message);
+      void onRefreshFromWordPress();
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'ارسال فیش بانکی ناموفق بود.');
+    } finally {
+      setUploadingOrderId(null);
     }
   };
 
@@ -157,7 +311,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
     try {
       await logoutWordPress(wpUrl);
       onLogout();
-      setStatusMsg('از حساب وردپرس خارج شدید.');
+      setStatusMsg('با موفقیت از حساب کاربری خود خارج شدید.');
     } finally {
       setLoading(false);
     }
@@ -176,7 +330,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
         </button>
 
         <h1 className="text-base sm:text-lg font-extrabold text-white drop-shadow-[0_2px_0_rgba(148,70,22,0.45)]">
-          حساب کاربری و وردپرس هدلس
+          {wpUser ? 'حساب کاربری و سفارش‌ها' : 'ورود و ثبت‌نام'}
         </h1>
 
         <div className="w-11" />
@@ -196,309 +350,842 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
           </div>
         )}
 
-        {/* 1. WordPress Site URL Connector */}
-        <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] p-4 sm:p-5 space-y-3">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex items-center gap-3">
-              <CloudSyncIllustration className="w-12 h-12 shrink-0" />
-              <div>
-                <h2 className="font-extrabold text-sm sm:text-base text-[#3B2618] dark:text-white">
-                  آدرس سرور وردپرس هدلس
-                </h2>
-                <p className="text-xs text-[#785942] dark:text-slate-400">
-                  جاده مراحل، بانک سوالات و پیشرفت کودکان از اینجا خوانده می‌شود
-                </p>
-              </div>
-            </div>
-
-            <span
-              className={`px-3 py-1 rounded-xl text-xs font-extrabold ${
-                wpConnected
-                  ? 'bg-[#E7F9E5] text-[#1E6B19] border border-[#8EE086]'
-                  : 'bg-[#FFF6EB] text-[#8B623D] border border-[#EEDCC5]'
-              }`}
-            >
-              {wpConnected
-                ? `متصل · ${formatNumber(stagesCount, digitMode)} مرحله · ${formatNumber(
-                    questionsCount,
-                    digitMode
-                  )} سؤال`
-                : 'حالت آفلاین / پیش‌فرض'}
-            </span>
-          </div>
-
-          <form onSubmit={handleTestAndSaveUrl} className="flex flex-col sm:flex-row gap-2">
-            <input
-              type="url"
-              dir="ltr"
-              value={siteInput}
-              onChange={(e) => setSiteInput(e.target.value)}
-              placeholder="https://yoursite.com"
-              className="flex-1 min-h-[48px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5472EB]"
-            />
-            <button
-              type="submit"
-              disabled={loading}
-              className="min-h-[48px] px-5 rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-sm inline-flex items-center justify-center gap-2 transition-all disabled:opacity-60"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              <span>اتصال و همگام‌سازی</span>
-            </button>
-          </form>
-        </section>
-
-        {/* 2. Authenticated User Card OR Login/Register Tabs */}
         {wpUser ? (
-          <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] p-5 space-y-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="flex items-center gap-3">
-                <KidIconTile color="green" size="lg">
-                  <Cloud className="w-7 h-7" />
-                </KidIconTile>
-                <div>
-                  <h2 className="font-extrabold text-base text-[#3B2618] dark:text-white">
-                    {wpUser.displayName}
-                  </h2>
-                  <p className="text-xs text-[#785942] dark:text-slate-400" dir="ltr">
-                    {wpUser.email}
-                  </p>
+          <>
+            {/* Authenticated Commercial User Header Card */}
+            <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] p-4 sm:p-5 space-y-4">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-3 min-w-0">
+                  <KidIconTile color="green" size="lg">
+                    <CheckCircle2 className="w-7 h-7" />
+                  </KidIconTile>
+                  <div className="min-w-0">
+                    <div className="text-xs font-extrabold text-[#1E6B19] dark:text-emerald-400">
+                      حساب کاربری فعال
+                    </div>
+                    <div className="text-base sm:text-lg font-extrabold text-[#3B2618] dark:text-white truncate">
+                      {wpUser.displayName}
+                    </div>
+                    <div className="text-xs text-[#785942] dark:text-slate-400 flex items-center gap-2 flex-wrap">
+                      {wpUser.mobile && <span dir="ltr">{wpUser.mobile}</span>}
+                      {wpUser.email && <span>· {wpUser.email}</span>}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  {onOpenProfiles && (
+                    <button
+                      type="button"
+                      onClick={onOpenProfiles}
+                      className="min-h-[42px] px-3 rounded-2xl bg-[#FFF6EB] hover:bg-amber-100 dark:bg-slate-800 border-b-4 border-[#DFC6A8] text-[#783F1D] dark:text-slate-200 font-extrabold text-xs inline-flex items-center gap-1.5"
+                    >
+                      <Users className="w-4 h-4 text-[#5472EB]" />
+                      <span>فرزندان</span>
+                    </button>
+                  )}
+                  {onOpenTickets && (
+                    <button
+                      type="button"
+                      onClick={onOpenTickets}
+                      className="min-h-[42px] px-3 rounded-2xl bg-[#EFF6FF] hover:bg-sky-100 dark:bg-slate-800 border-b-4 border-sky-200 text-sky-900 dark:text-sky-200 font-extrabold text-xs inline-flex items-center gap-1.5"
+                    >
+                      <Headphones className="w-4 h-4 text-sky-600" />
+                      <span>پشتیبانی و تیکت</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleLogoutClick}
+                    disabled={loading}
+                    className="min-h-[42px] px-3 rounded-2xl bg-[#FEE2E2] hover:bg-rose-200 border-b-4 border-[#FCA5A5] text-[#991B1B] font-extrabold text-xs inline-flex items-center gap-1.5"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>خروج</span>
+                  </button>
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={handleLogoutClick}
-                disabled={loading}
-                className="min-h-[44px] px-4 rounded-2xl bg-amber-100 hover:bg-amber-200 border-b-4 border-amber-300 text-amber-950 font-extrabold text-xs inline-flex items-center gap-1.5"
-              >
-                <LogOut className="w-4 h-4" />
-                <span>خروج از حساب</span>
-              </button>
-            </div>
-
-            <p className="text-xs text-[#6B4A35] dark:text-slate-300 leading-relaxed">
-              حساب شما به وردپرس متصل است؛ امتیازات، ستاره‌ها، پروفایل کودکان و تنظیمات به‌صورت خودکار با سرور همگام‌سازی می‌شوند.
-            </p>
-          </section>
-        ) : (
-          <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] p-4 sm:p-5 space-y-4">
-            <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-[#FFF6EB] dark:bg-slate-800 border border-[#EEDCC5] dark:border-slate-700">
-              <button
-                type="button"
-                onClick={() => setTab('login')}
-                className={`min-h-[44px] rounded-2xl font-extrabold text-sm inline-flex items-center justify-center gap-1.5 transition-all ${
-                  tab === 'login'
-                    ? 'bg-[#5472EB] text-white shadow-xs'
-                    : 'text-[#6B4A35] dark:text-slate-300'
-                }`}
-              >
-                <LogIn className="w-4 h-4" />
-                <span>ورود به حساب</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTab('register')}
-                className={`min-h-[44px] rounded-2xl font-extrabold text-sm inline-flex items-center justify-center gap-1.5 transition-all ${
-                  tab === 'register'
-                    ? 'bg-[#4BB543] text-white shadow-xs'
-                    : 'text-[#6B4A35] dark:text-slate-300'
-                }`}
-              >
-                <UserPlus className="w-4 h-4" />
-                <span>ثبت‌نام جدید</span>
-              </button>
-            </div>
-
-            {tab === 'login' ? (
-              <form onSubmit={handleLogin} className="space-y-3">
-                <div>
-                  <label className="block text-xs font-extrabold text-[#5C3A00] dark:text-slate-300 mb-1">
-                    ایمیل یا نام کاربری وردپرس
-                  </label>
-                  <input
-                    type="text"
-                    dir="ltr"
-                    required
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="parent@example.com"
-                    className="w-full min-h-[48px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-extrabold text-[#5C3A00] dark:text-slate-300 mb-1">
-                    رمز عبور
-                  </label>
-                  <input
-                    type="password"
-                    dir="ltr"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••"
-                    className="w-full min-h-[48px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
-                  />
-                </div>
+              {/* Navigation Sub-tabs */}
+              <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 pt-1">
                 <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full min-h-[52px] rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-base transition-all disabled:opacity-60"
+                  type="button"
+                  onClick={() => setAccountTab('orders')}
+                  className={`min-h-[44px] px-4 rounded-2xl font-extrabold text-xs inline-flex items-center justify-center gap-1.5 transition-all ${
+                    accountTab === 'orders'
+                      ? 'bg-[#5472EB] text-white border-b-4 border-[#354EB8]'
+                      : 'bg-[#FFF6EB] dark:bg-slate-800 text-[#783F1D] dark:text-slate-300'
+                  }`}
                 >
-                  ورود و بارگذاری پیشرفت کودک
+                  <Package className="w-4 h-4" />
+                  <span>سفارش‌ها و وضعیت پرداخت</span>
                 </button>
-              </form>
-            ) : (
-              <form onSubmit={handleRegister} className="space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+                <button
+                  type="button"
+                  onClick={() => setAccountTab('profile')}
+                  className={`min-h-[44px] px-4 rounded-2xl font-extrabold text-xs inline-flex items-center justify-center gap-1.5 transition-all ${
+                    accountTab === 'profile'
+                      ? 'bg-[#4BB543] text-white border-b-4 border-[#2E8228]'
+                      : 'bg-[#FFF6EB] dark:bg-slate-800 text-[#783F1D] dark:text-slate-300'
+                  }`}
+                >
+                  <Edit3 className="w-4 h-4" />
+                  <span>ویرایش مشخصات و آدرس</span>
+                </button>
+
+                {wpUser.isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setAccountTab('admin')}
+                    className={`col-span-2 sm:col-span-1 min-h-[44px] px-4 rounded-2xl font-extrabold text-xs inline-flex items-center justify-center gap-1.5 transition-all ${
+                      accountTab === 'admin'
+                        ? 'bg-[#8E63EB] text-white border-b-4 border-[#6339C4]'
+                        : 'bg-[#F5F3FF] dark:bg-slate-800 text-violet-900 dark:text-violet-300'
+                    }`}
+                  >
+                    <Shield className="w-4 h-4" />
+                    <span>مدیریت سرور و پلاگین</span>
+                  </button>
+                )}
+              </div>
+            </section>
+
+            {/* Tab 1: Orders History & Bank Receipt Uploader */}
+            {accountTab === 'orders' && (
+              <section className="space-y-3">
+                <div className="flex items-center justify-between px-1">
+                  <h2 className="text-sm sm:text-base font-extrabold text-[#5B3A1D] dark:text-white">
+                    تاریخچه سفارش‌ها و وضعیت تایید
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => void loadOrders()}
+                    disabled={ordersLoading}
+                    className="min-h-[38px] px-3 rounded-xl bg-white dark:bg-slate-800 border border-[#EEDCC5] dark:border-slate-700 text-xs font-extrabold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${ordersLoading ? 'animate-spin' : ''}`} />
+                    <span>به‌روزرسانی</span>
+                  </button>
+                </div>
+
+                {ordersLoading && orders.length === 0 ? (
+                  <div className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] p-8 flex flex-col items-center gap-2 text-slate-500">
+                    <Loader2 className="w-6 h-6 animate-spin text-[#5472EB]" />
+                    <span className="text-xs font-bold">در حال دریافت فهرست سفارش‌ها...</span>
+                  </div>
+                ) : orders.length === 0 ? (
+                  <div className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 p-6 text-center space-y-2">
+                    <Package className="w-10 h-10 text-amber-400 mx-auto" />
+                    <div className="text-sm font-extrabold text-slate-800 dark:text-white">
+                      هنوز سفارشی ثبت نکرده‌اید
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      پس از تهیه دوره‌ها یا خرید از فروشگاه کودک نابغه، وضعیت و جزئیات هر سفارش در اینجا نمایش داده می‌شود.
+                    </p>
+                  </div>
+                ) : (
+                  orders.map((order) => (
+                    <div
+                      key={order.id}
+                      className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 p-4 space-y-3 shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-2 flex-wrap">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-extrabold text-sm text-slate-900 dark:text-white">
+                              سفارش #{formatNumber(order.orderNumber, digitMode)}
+                            </span>
+                            <span
+                              className={`px-2.5 py-0.5 rounded-xl text-[11px] font-extrabold ${
+                                order.pendingReview
+                                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                  : order.status === 'completed' || order.status === 'processing'
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                  : 'bg-slate-100 text-slate-700'
+                              }`}
+                            >
+                              {order.statusLabel}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                            {order.dateCreated} · {order.paymentMethodTitle}
+                          </div>
+                        </div>
+
+                        <div className="text-sm font-extrabold text-[#4BB543] dark:text-emerald-400">
+                          {order.totalFormatted}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl bg-[#FFF9F2] dark:bg-slate-800/70 p-2.5 space-y-1">
+                        {order.items.map((item, i) => (
+                          <div
+                            key={i}
+                            className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-200"
+                          >
+                            <span>
+                              {item.name} × {formatNumber(item.qty, digitMode)}
+                            </span>
+                            <span>{item.totalFormatted}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {order.pendingReview && (
+                        <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-200 dark:border-amber-800 p-3 space-y-3">
+                          <div className="text-xs font-extrabold text-amber-900 dark:text-amber-200">
+                            سفارش در حال بررسی و تایید توسط مدیر می‌باشد.
+                          </div>
+
+                          {bacsAccounts.length > 0 && (
+                            <div className="rounded-xl bg-white/90 dark:bg-slate-900/80 border border-amber-200 p-2.5 space-y-1.5">
+                              <div className="flex items-center gap-1.5 text-[11px] font-extrabold text-slate-700 dark:text-slate-200">
+                                <CreditCard className="w-3.5 h-3.5 text-amber-600" />
+                                <span>اطلاعات حساب بانکی جهت واریز:</span>
+                              </div>
+                              {bacsAccounts.map((acc, idx) => (
+                                <div key={idx} className="text-[11px] text-slate-600 dark:text-slate-300 space-y-0.5">
+                                  <div>
+                                    <strong>{acc.bankName || 'حساب بانکی'}:</strong> {acc.accountName}
+                                  </div>
+                                  {acc.accountNumber && (
+                                    <div dir="ltr" className="text-right font-mono font-bold">
+                                      شماره حساب/کارت: {acc.accountNumber}
+                                    </div>
+                                  )}
+                                  {acc.iban && (
+                                    <div dir="ltr" className="text-right font-mono">
+                                      شبا: {acc.iban}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {order.receiptUrl && (
+                            <div className="flex items-center gap-2.5">
+                              <a
+                                href={order.receiptUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="shrink-0"
+                              >
+                                <img
+                                  src={order.receiptUrl}
+                                  alt="رسید ثبت‌شده"
+                                  className="w-14 h-14 rounded-xl object-cover border-2 border-emerald-400"
+                                />
+                              </a>
+                              <div className="text-[11px] text-emerald-800 dark:text-emerald-300 font-bold">
+                                رسید بانکی قبلاً ثبت شده است. در صورت نیاز می‌توانید تصویر جدید جایگزین کنید.
+                              </div>
+                            </div>
+                          )}
+
+                          {order.paymentNote && (
+                            <div className="text-[11px] text-slate-700 dark:text-slate-300 font-bold bg-white/80 dark:bg-slate-900 rounded-xl px-2.5 py-1.5">
+                              توضیحات ثبت‌شده: {order.paymentNote}
+                            </div>
+                          )}
+
+                          <ReceiptUploaderField
+                            digitMode={digitMode}
+                            selectedImage={orderReceipts[order.id] ?? null}
+                            onImageChange={(img) =>
+                              setOrderReceipts((prev) => ({ ...prev, [order.id]: img }))
+                            }
+                            noteValue={orderNotes[order.id] ?? order.paymentNote ?? ''}
+                            onNoteChange={(val) =>
+                              setOrderNotes((prev) => ({ ...prev, [order.id]: val }))
+                            }
+                            imageLabel="ارسال یا تغییر تصویر فیش واریزی (اختیاری)"
+                          />
+
+                          <button
+                            type="button"
+                            disabled={uploadingOrderId === order.id}
+                            onClick={() => void handleUploadOrderReceipt(order.id)}
+                            className="w-full min-h-[44px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] text-white font-extrabold text-xs inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
+                          >
+                            {uploadingOrderId === order.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Save className="w-4 h-4" />
+                            )}
+                            <span>ثبت رسید و توضیحات برای مدیر</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </section>
+            )}
+
+            {/* Tab 2: Account & Billing/Shipping Edit Form */}
+            {accountTab === 'profile' && (
+              <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 p-4 sm:p-5">
+                <h2 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white mb-4">
+                  ویرایش مشخصات ثبت‌نام و آدرس ارسال
+                </h2>
+                <form onSubmit={handleSaveProfile} className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                        نام
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={editFirstName}
+                        onChange={(e) => setEditFirstName(e.target.value)}
+                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                        نام خانوادگی
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={editLastName}
+                        onChange={(e) => setEditLastName(e.target.value)}
+                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                        شماره موبایل
+                      </label>
+                      <input
+                        type="tel"
+                        dir="ltr"
+                        required
+                        value={editMobile}
+                        onChange={(e) => setEditMobile(e.target.value)}
+                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                        ایمیل (اختیاری)
+                      </label>
+                      <input
+                        type="email"
+                        dir="ltr"
+                        value={editEmail}
+                        onChange={(e) => setEditEmail(e.target.value)}
+                        placeholder="email@example.com"
+                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                        استان
+                      </label>
+                      <select
+                        value={editState}
+                        onChange={(e) => setEditState(e.target.value)}
+                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                      >
+                        {IRAN_PROVINCES.map((prov) => (
+                          <option key={prov} value={prov}>
+                            {prov}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                        شهر
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={editCity}
+                        onChange={(e) => setEditCity(e.target.value)}
+                        placeholder="مثلاً تهران"
+                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                        آدرس کامل پستی
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={editAddress1}
+                        onChange={(e) => setEditAddress1(e.target.value)}
+                        placeholder="خیابان، کوچه، پلاک، واحد"
+                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                        کد پستی
+                      </label>
+                      <input
+                        type="text"
+                        dir="ltr"
+                        required
+                        value={editPostcode}
+                        onChange={(e) => setEditPostcode(e.target.value)}
+                        placeholder="1234567890"
+                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+
                   <div>
-                    <label className="block text-xs font-extrabold text-[#5C3A00] dark:text-slate-300 mb-1">
-                      ایمیل والد
+                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                      تغییر رمز عبور (در صورت عدم نیاز خالی بگذارید)
                     </label>
                     <input
-                      type="email"
+                      type="password"
+                      dir="ltr"
+                      minLength={6}
+                      value={editNewPassword}
+                      onChange={(e) => setEditNewPassword(e.target.value)}
+                      placeholder="حداقل ۶ کاراکتر"
+                      className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full min-h-[50px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] text-white font-extrabold text-sm flex items-center justify-center gap-2 disabled:opacity-60"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>ذخیره تغییرات حساب</span>
+                  </button>
+                </form>
+              </section>
+            )}
+
+            {/* Tab 3: STRICTLY ADMIN ONLY — Backend URL & WordPress Plugin Download */}
+            {accountTab === 'admin' && wpUser.isAdmin && (
+              <div className="space-y-4">
+                <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 p-4 sm:p-5 space-y-3">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-3">
+                      <CloudSyncIllustration className="w-12 h-12 shrink-0" />
+                      <div>
+                        <h2 className="font-extrabold text-sm sm:text-base text-[#3B2618] dark:text-white">
+                          اتصال به سرور مدیریت محتوا (ویژه مدیر)
+                        </h2>
+                        <p className="text-xs text-[#785942] dark:text-slate-400">
+                          {wpConnected
+                            ? `متصل · ${formatNumber(stagesCount, digitMode)} مرحله · ${formatNumber(
+                                questionsCount,
+                                digitMode
+                              )} سؤال`
+                            : 'در حال انتظار اتصال'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleTestAndSaveUrl} className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="url"
+                      dir="ltr"
+                      value={siteInput}
+                      onChange={(e) => setSiteInput(e.target.value)}
+                      placeholder="https://yoursite.com"
+                      className="flex-1 min-h-[46px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                    />
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="min-h-[46px] px-5 rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] text-white font-extrabold text-sm inline-flex items-center justify-center gap-2"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                      <span>اتصال و همگام‌سازی</span>
+                    </button>
+                  </form>
+                </section>
+
+                <section className="rounded-2xl bg-gradient-to-br from-[#F5F3FF] to-[#EDE9FE] dark:from-slate-900 dark:to-slate-900 border-2 border-[#D4C5FC] dark:border-slate-800 p-4 sm:p-5 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <KidIconTile color="violet" size="md">
+                      <Globe className="w-6 h-6" />
+                    </KidIconTile>
+                    <div>
+                      <h2 className="font-extrabold text-sm sm:text-base text-[#35207A] dark:text-white">
+                        بسته افزونه مدیریت سرور (نسخه ۲.۲.۰)
+                      </h2>
+                      <p className="text-xs text-[#59449E] dark:text-slate-300">
+                        دارای مدیریت فروشگاه، تایید فیش‌های بانکی، تیکتینگ پشتیبانی، تخفیف‌ها و جاده مراحل
+                      </p>
+                    </div>
+                  </div>
+                  <a
+                    href="/downloads/koodak-nabegheh-soroban.zip"
+                    download="koodak-nabegheh-soroban.zip"
+                    className="w-full min-h-[48px] px-4 rounded-2xl bg-[#8E63EB] hover:bg-[#7A4EE0] border-b-4 border-[#6339C4] text-white font-extrabold text-sm inline-flex items-center justify-center gap-2"
+                  >
+                    <Download className="w-5 h-5" />
+                    <span>دانلود فایل نصب افزونه (ZIP)</span>
+                  </a>
+                </section>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            {/* Logged Out: Commercial Login & Full Registration Tabs */}
+            <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] overflow-hidden">
+              <div className="grid grid-cols-2 bg-[#FFF6EB] dark:bg-slate-800 p-1.5 gap-1.5 border-b border-[#EEDCC5] dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthTab('login');
+                    setErrorMsg(null);
+                  }}
+                  className={`min-h-[46px] rounded-xl font-extrabold text-sm flex items-center justify-center gap-2 transition-all ${
+                    authTab === 'login'
+                      ? 'bg-[#5472EB] text-white shadow-sm'
+                      : 'text-[#783F1D] dark:text-slate-300'
+                  }`}
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>ورود به حساب</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthTab('register');
+                    setErrorMsg(null);
+                  }}
+                  className={`min-h-[46px] rounded-xl font-extrabold text-sm flex items-center justify-center gap-2 transition-all ${
+                    authTab === 'register'
+                      ? 'bg-[#4BB543] text-white shadow-sm'
+                      : 'text-[#783F1D] dark:text-slate-300'
+                  }`}
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>ثبت نام</span>
+                </button>
+              </div>
+
+              {authTab === 'login' ? (
+                <form onSubmit={handleLogin} className="p-4 sm:p-5 space-y-3.5">
+                  <div>
+                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                      شماره موبایل یا ایمیل
+                    </label>
+                    <input
+                      type="text"
                       dir="ltr"
                       required
-                      value={regEmail}
-                      onChange={(e) => setRegEmail(e.target.value)}
-                      placeholder="parent@example.com"
-                      className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value)}
+                      placeholder="09123456789 یا parent@example.com"
+                      className="w-full min-h-[48px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-extrabold text-[#5C3A00] dark:text-slate-300 mb-1">
-                      رمز عبور (حداقل ۶ کاراکتر)
+                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                      رمز عبور
                     </label>
                     <input
                       type="password"
                       dir="ltr"
                       required
-                      minLength={6}
-                      value={regPassword}
-                      onChange={(e) => setRegPassword(e.target.value)}
-                      placeholder="••••••"
-                      className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full min-h-[48px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                     />
                   </div>
-                </div>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full min-h-[52px] rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] text-white font-extrabold text-base flex items-center justify-center gap-2 disabled:opacity-60"
+                  >
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5" />}
+                    <span>ورود به حساب کاربری</span>
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleRegister} className="p-4 sm:p-5 space-y-3.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                        نام *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={regFirstName}
+                        onChange={(e) => setRegFirstName(e.target.value)}
+                        placeholder="مثلاً سارا"
+                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                        نام خانوادگی *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={regLastName}
+                        onChange={(e) => setRegLastName(e.target.value)}
+                        placeholder="مثلاً محمدی"
+                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                        شماره موبایل (نام کاربری ورود) *
+                      </label>
+                      <input
+                        type="tel"
+                        dir="ltr"
+                        required
+                        value={regMobile}
+                        onChange={(e) => setRegMobile(e.target.value)}
+                        placeholder="09123456789"
+                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                        رمز عبور (حداقل ۶ کاراکتر) *
+                      </label>
+                      <input
+                        type="password"
+                        dir="ltr"
+                        required
+                        minLength={6}
+                        value={regPassword}
+                        onChange={(e) => setRegPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                        استان *
+                      </label>
+                      <select
+                        value={regState}
+                        onChange={(e) => setRegState(e.target.value)}
+                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                      >
+                        {IRAN_PROVINCES.map((prov) => (
+                          <option key={prov} value={prov}>
+                            {prov}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                        شهر *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={regCity}
+                        onChange={(e) => setRegCity(e.target.value)}
+                        placeholder="مثلاً تهران"
+                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                        آدرس کامل *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={regAddress1}
+                        onChange={(e) => setRegAddress1(e.target.value)}
+                        placeholder="خیابان، کوچه، پلاک، واحد"
+                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                        کد پستی *
+                      </label>
+                      <input
+                        type="text"
+                        dir="ltr"
+                        required
+                        value={regPostcode}
+                        onChange={(e) => setRegPostcode(e.target.value)}
+                        placeholder="1234567890"
+                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+
                   <div>
-                    <label className="block text-xs font-extrabold text-[#5C3A00] dark:text-slate-300 mb-1">
-                      نام والد
+                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                      ایمیل (اختیاری)
                     </label>
                     <input
-                      type="text"
-                      value={regDisplayName}
-                      onChange={(e) => setRegDisplayName(e.target.value)}
-                      placeholder="مثلاً خانم محمدی"
-                      className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                      type="email"
+                      dir="ltr"
+                      value={regEmail}
+                      onChange={(e) => setRegEmail(e.target.value)}
+                      placeholder="optional@example.com"
+                      className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-extrabold text-[#5C3A00] dark:text-slate-300 mb-1">
-                      نام کودک قهرمان
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={regChildName}
-                      onChange={(e) => setRegChildName(e.target.value)}
-                      placeholder="مثلاً آرتین"
-                      className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
-                    />
-                  </div>
-                </div>
 
-                <div>
-                  <label className="block text-xs font-extrabold text-[#5C3A00] dark:text-slate-300 mb-1">
-                    سن کودک: {formatNumber(regChildAge, digitMode)} سال
-                  </label>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {[4, 5, 6, 7, 8, 9, 10].map((a) => (
-                      <button
-                        key={a}
-                        type="button"
-                        onClick={() => setRegChildAge(a)}
-                        className={`min-h-[40px] min-w-[40px] rounded-xl font-extrabold text-xs ${
-                          regChildAge === a
-                            ? 'bg-[#5472EB] text-white'
-                            : 'bg-[#FFF6EB] text-[#5C3A00] border border-[#EEDCC5]'
-                        }`}
-                      >
-                        {formatNumber(a, digitMode)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                  <div className="pt-2 border-t border-[#EFE0CE] dark:border-slate-800 space-y-3">
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                        نام کودک *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={regChildName}
+                        onChange={(e) => setRegChildName(e.target.value)}
+                        placeholder="مثلاً آرتین یا باران"
+                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
 
-                <div>
-                  <label className="block text-xs font-extrabold text-[#5C3A00] dark:text-slate-300 mb-1.5">
-                    شخصیت کودک
-                  </label>
-                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                    {AVATAR_OPTIONS.map((opt) => (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => setRegAvatar(opt.id)}
-                        className={`p-2 rounded-2xl border-2 flex flex-col items-center gap-1 ${
-                          regAvatar === opt.id
-                            ? 'border-[#5472EB] bg-[#EEF2FF]'
-                            : 'border-[#EEDCC5] bg-[#FFF9F2]'
-                        }`}
-                      >
-                        <AvatarGraphic avatar={opt.id} className="w-8 h-8" />
-                        <span className="text-[11px] font-bold text-[#3B2618]">{opt.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                        سن کودک ({formatNumber(regChildAge, digitMode)} سال — مناسب ۴ تا ۱۵ سال)
+                      </label>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {CHILD_AGES.map((a) => (
+                          <button
+                            key={a}
+                            type="button"
+                            onClick={() => setRegChildAge(a)}
+                            className={`min-h-[38px] min-w-[38px] rounded-xl font-extrabold text-xs ${
+                              regChildAge === a
+                                ? 'bg-[#5472EB] text-white'
+                                : 'bg-[#FFF6EB] dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                            }`}
+                          >
+                            {formatNumber(a, digitMode)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
 
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">
+                        شخصیت همراه کودک
+                      </label>
+                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                        {AVATAR_OPTIONS.map((opt) => (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => setRegAvatar(opt.id)}
+                            className={`p-2 rounded-2xl border-2 flex flex-col items-center gap-1 ${
+                              regAvatar === opt.id
+                                ? 'border-[#5472EB] bg-sky-50 dark:bg-blue-950/40'
+                                : 'border-[#EFE0CE] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800'
+                            }`}
+                          >
+                            <AvatarGraphic avatar={opt.id} className="w-9 h-9" />
+                            <span className="text-[10px] font-bold text-slate-700 dark:text-slate-200">
+                              {opt.label}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full min-h-[52px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] text-white font-extrabold text-base flex items-center justify-center gap-2 disabled:opacity-60"
+                  >
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <UserPlus className="w-5 h-5" />}
+                    <span>ثبت نام</span>
+                  </button>
+                </form>
+              )}
+            </section>
+
+            {/* Discreet Admin Setup Accordion (hidden unless unconfigured or explicitly toggled by admin) */}
+            <div className="text-center pt-2">
+              {!showAdminSetup ? (
                 <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full min-h-[52px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-base transition-all disabled:opacity-60"
+                  type="button"
+                  onClick={() => setShowAdminSetup(true)}
+                  className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#8B623D] dark:text-slate-500 hover:text-slate-800"
                 >
-                  ثبت‌نام و ساخت پروفایل در وردپرس
+                  <Lock className="w-3 h-3" />
+                  <span>تنظیمات اتصال سرور (ویژه مدیر سیستم)</span>
                 </button>
-              </form>
-            )}
-          </section>
-        )}
-
-        {/* 3. Custom WordPress Plugin Download Card */}
-        <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] p-4 sm:p-5 space-y-3">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-3">
-              <KidIconTile color="violet" size="md">
-                <Download className="w-6 h-6" />
-              </KidIconTile>
-              <div>
-                <h2 className="font-extrabold text-sm sm:text-base text-[#3B2618] dark:text-white">
-                  پلاگین اختصاصی وردپرس «کودک نابغه»
-                </h2>
-                <p className="text-xs text-[#785942] dark:text-slate-400">
-                  فایل آماده نصب برای پیشخوان وردپرس + ووکامرس (نسخه ۲.۱.۱)
-                </p>
-              </div>
+              ) : (
+                <section className="rounded-2xl bg-white/95 dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 p-4 space-y-3 text-right">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs font-extrabold text-[#3B2618] dark:text-white flex items-center gap-1.5">
+                      <Shield className="w-4 h-4 text-[#8E63EB]" />
+                      <span>پیکربندی آدرس سرور (ویژه مدیر)</span>
+                    </div>
+                    {wpUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAdminSetup(false)}
+                        className="text-[11px] font-bold text-slate-500"
+                      >
+                        بستن
+                      </button>
+                    )}
+                  </div>
+                  <form onSubmit={handleTestAndSaveUrl} className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="url"
+                      dir="ltr"
+                      value={siteInput}
+                      onChange={(e) => setSiteInput(e.target.value)}
+                      placeholder="https://yoursite.com"
+                      className="flex-1 min-h-[44px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                    />
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="min-h-[44px] px-4 rounded-2xl bg-[#5472EB] text-white font-extrabold text-xs inline-flex items-center justify-center gap-1.5"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                      <span>ذخیره و اتصال</span>
+                    </button>
+                  </form>
+                </section>
+              )}
             </div>
-
-            <a
-              href="/downloads/koodak-nabegheh-soroban.zip"
-              download="koodak-nabegheh-soroban.zip"
-              className="min-h-[46px] px-4 rounded-2xl bg-[#8E63EB] hover:bg-[#7A4EE0] border-b-4 border-[#6339C4] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-xs sm:text-sm inline-flex items-center gap-2 transition-all"
-            >
-              <Download className="w-4 h-4" />
-              <span>دانلود پلاگین (ZIP)</span>
-            </a>
-          </div>
-
-          <ol className="text-xs text-[#6B4A35] dark:text-slate-300 space-y-1.5 list-decimal pr-5 leading-relaxed">
-            <li>فایل <strong>koodak-nabegheh-soroban.zip</strong> را با دکمه بالا دانلود کنید.</li>
-            <li>در پیشخوان وردپرس به بخش <strong>افزونه‌ها ← افزودن افزونه ← بارگذاری افزونه</strong> بروید و فایل را نصب و فعال کنید.</li>
-            <li>منوی جدید <strong>«کودک نابغه»</strong> در وردپرس باز می‌شود و خرید ترم‌ها با ورود خودکار یک‌بارمصرف و تسویه‌حساب سریع بدون فرم در ووکامرس انجام می‌شود.</li>
-          </ol>
-        </section>
+          </>
+        )}
       </main>
     </div>
   );

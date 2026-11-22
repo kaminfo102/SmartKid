@@ -11,8 +11,9 @@ import {
   PlayCircle,
   Check,
   ChevronLeft,
-  Zap,
-  Cloud,
+  User,
+  ShoppingBag,
+  Headphones,
 } from 'lucide-react';
 import type {
   ChildProfile,
@@ -40,11 +41,12 @@ interface StartScreenProps {
   hasProgress: boolean;
   wpUser?: WordPressUser | null;
   wpConnected?: boolean;
-  onStartFirstLesson: () => void;
   onContinueMap: () => void;
   onOpenPractice: () => void;
   onOpenGames: () => void;
   onOpenSimulator: () => void;
+  onOpenShop: () => void;
+  onOpenTickets: () => void;
   onOpenProfiles: () => void;
   onOpenAuth: () => void;
   onOpenParents: () => void;
@@ -59,11 +61,12 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   hasProgress,
   wpUser,
   wpConnected = false,
-  onStartFirstLesson,
   onContinueMap,
   onOpenPractice,
   onOpenGames,
   onOpenSimulator,
+  onOpenShop,
+  onOpenTickets,
   onOpenProfiles,
   onOpenAuth,
   onOpenParents,
@@ -188,12 +191,12 @@ export const StartScreen: React.FC<StartScreenProps> = ({
             <button
               type="button"
               onClick={onOpenAuth}
-              aria-label="حساب کاربری و اتصال به وردپرس هدلس"
+              aria-label="حساب کاربری و سفارش‌ها"
               className="min-h-[46px] min-w-[46px] inline-flex items-center gap-1.5 rounded-2xl bg-white/95 dark:bg-slate-900 border-b-4 border-[#E5D3BE] dark:border-slate-800 px-3 py-2 text-xs font-extrabold text-slate-800 dark:text-slate-100 shadow-sm hover:bg-white transition-all active:translate-y-0.5"
             >
-              <Cloud className={`w-4 h-4 ${wpUser || wpConnected ? 'text-[#4BB543]' : 'text-[#5472EB]'}`} />
+              <User className={`w-4 h-4 ${wpUser || wpConnected ? 'text-[#4BB543]' : 'text-[#5472EB]'}`} />
               <span className="hidden sm:inline">
-                {wpUser ? wpUser.displayName : 'ورود / وردپرس'}
+                {wpUser ? wpUser.displayName : 'ورود / حساب کاربری'}
               </span>
             </button>
 
@@ -277,14 +280,62 @@ export const StartScreen: React.FC<StartScreenProps> = ({
 
           <button
             type="button"
-            onClick={onStartFirstLesson}
-            aria-label="شروع یادگیری درس چرتکه"
+            onClick={onContinueMap}
+            aria-label="شروع یادگیری و مشاهده نقشه دوره‌ها"
             className="min-h-[54px] px-5 rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] active:border-b-0 active:translate-y-1 text-white font-extrabold text-base flex items-center justify-center gap-2 shrink-0 transition-all shadow-sm"
           >
             <Play className="w-5 h-5 fill-white" />
             <span>شروع یادگیری</span>
           </button>
         </motion.section>
+
+        {/* Prominent Store & Support Quick Entry Cards */}
+        <section aria-label="فروشگاه و پشتیبانی" className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <button
+            type="button"
+            onClick={onOpenShop}
+            className="sm:col-span-2 rounded-2xl bg-gradient-to-l from-[#FFCC33] to-[#FFE074] dark:from-amber-900/60 dark:to-slate-900 border-2 border-white dark:border-amber-700 border-b-4 border-b-[#DFA71C] p-3.5 flex items-center justify-between gap-3 text-right shadow-[0_10px_22px_-6px_rgba(205,140,20,0.24)] hover:brightness-[1.02] active:translate-y-0.5 transition-all"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <KidIconTile color="amber" size="lg">
+                <ShoppingBag className="w-7 h-7" />
+              </KidIconTile>
+              <div className="min-w-0">
+                <h2 className="font-extrabold text-sm sm:text-base text-[#593400] dark:text-amber-100 truncate">
+                  فروشگاه کودک نابغه
+                </h2>
+                <p className="text-xs font-bold text-[#7A4E00] dark:text-amber-200/80 truncate">
+                  چرتکه آموزشی، کتاب کار و بسته‌های یادگیری
+                </p>
+              </div>
+            </div>
+            <span className="min-h-[40px] px-3.5 rounded-2xl bg-[#5472EB] border-b-2 border-[#354EB8] text-white font-extrabold text-xs inline-flex items-center gap-1 shrink-0">
+              <span>مشاهده</span>
+              <ChevronLeft className="w-4 h-4" />
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenTickets}
+            className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] hover:border-sky-400 p-3.5 flex items-center justify-between gap-2.5 text-right shadow-[0_8px_20px_-6px_rgba(170,104,40,0.16)] active:translate-y-0.5 transition-all"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <KidIconTile color="sky" size="md">
+                <Headphones className="w-5 h-5" />
+              </KidIconTile>
+              <div className="min-w-0">
+                <div className="font-extrabold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
+                  پشتیبانی و تیکت
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                  ارتباط مستقیم با ما
+                </div>
+              </div>
+            </div>
+            <ChevronLeft className="w-4 h-4 text-slate-400 shrink-0" />
+          </button>
+        </section>
 
         {/* Daily Quests / Adventure Missions with Dotted Track & Big Colorful Icons */}
         <section aria-label="ماموریت‌های شاد امروز" className="space-y-3">

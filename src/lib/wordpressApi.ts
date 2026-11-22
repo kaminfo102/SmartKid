@@ -1,11 +1,16 @@
 import type {
   AppSettings,
   AvatarId,
+  BacsAccount,
   ChildProfile,
   LessonDefinition,
+  PendingOrderInfo,
   PracticeQuestion,
   SkillKey,
+  StoreCatalogResponse,
+  SupportTicket,
   TermDefinition,
+  UserOrder,
   WordPressConfig,
   WordPressUser,
 } from '../types/app';
@@ -97,7 +102,7 @@ async function wpRequest<T>(
 ): Promise<T> {
   const base = normalizeWordPressUrl(siteUrl);
   if (!base) {
-    throw new Error('آدرس سایت وردپرس معتبر نیست (باید با https:// یا http:// شروع شود).');
+    throw new Error('اتصال به سرور برنامه هنوز پیکربندی نشده است.');
   }
 
   const headers: Record<string, string> = {
@@ -124,7 +129,45 @@ async function wpRequest<T>(
     const msg =
       typeof data?.message === 'string' && data.message
         ? data.message
-        : `خطا در ارتباط با وردپرس (${res.status})`;
+        : `خطا در ارتباط با سرور (${res.status})`;
+    throw new Error(msg);
+  }
+  return data as T;
+}
+
+async function wpFormRequest<T>(
+  siteUrl: string,
+  endpoint: string,
+  formData: FormData,
+  requireAuth = true
+): Promise<T> {
+  const base = normalizeWordPressUrl(siteUrl);
+  if (!base) {
+    throw new Error('اتصال به سرور برنامه هنوز پیکربندی نشده است.');
+  }
+
+  const headers: Record<string, string> = {};
+  if (requireAuth) {
+    if (!memoryBearerToken) {
+      throw new Error('لطفاً ابتدا وارد حساب کاربری خود شوید.');
+    }
+    headers['Authorization'] = `Bearer ${memoryBearerToken}`;
+  } else if (memoryBearerToken) {
+    headers['Authorization'] = `Bearer ${memoryBearerToken}`;
+  }
+
+  const res = await fetch(`${base}${WP_API_BASE_PATH}${endpoint}`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg =
+      typeof data?.message === 'string' && data.message
+        ? data.message
+        : `خطا در ارسال اطلاعات (${res.status})`;
     throw new Error(msg);
   }
   return data as T;
@@ -156,6 +199,7 @@ export interface WordPressCurriculumResponse {
   unlockedTermIds?: number[];
   wooActive?: boolean;
   wooCurrency?: string;
+  bacsAccounts?: BacsAccount[];
   config?: {
     appTitle?: string;
     dailyChallengeCount?: number;
@@ -169,6 +213,7 @@ export async function fetchWordPressCurriculum(siteUrl: string): Promise<{
   terms: TermDefinition[];
   stages: LessonDefinition[];
   unlockedTermIds: number[];
+  bacsAccounts: BacsAccount[];
   config: Partial<WordPressConfig>;
   defaultSettings?: Partial<AppSettings>;
 }> {
@@ -179,6 +224,7 @@ export async function fetchWordPressCurriculum(siteUrl: string): Promise<{
     terms: Array.isArray(data.terms) ? data.terms : [],
     stages: Array.isArray(data.stages) ? data.stages : [],
     unlockedTermIds: Array.isArray(data.unlockedTermIds) ? data.unlockedTermIds : [],
+    bacsAccounts: Array.isArray(data.bacsAccounts) ? data.bacsAccounts : [],
     config: {
       appTitle: data.config?.appTitle,
       dailyChallengeCount: data.config?.dailyChallengeCount,
@@ -210,11 +256,20 @@ export interface WordPressCheckoutResponse {
   termDbId: number;
   termTitle: string;
   alreadyUnlocked: boolean;
+  pendingOrder?: PendingOrderInfo | null;
   wooActive: boolean;
   wooProductId: number;
   priceAmount: number;
   priceFormatted: string;
+  regularPriceAmount?: number;
+  regularPriceFormatted?: string;
+  salePriceAmount?: number | null;
+  salePriceFormatted?: string;
+  onSale?: boolean;
+  discountPercent?: number;
+  saleEndTimestamp?: number | null;
   checkoutUrl: string;
+  bacsAccounts?: BacsAccount[];
 }
 
 export async function startWooCommerceTermCheckout(
@@ -231,6 +286,11 @@ export async function startWooCommerceTermCheckout(
 
 export interface WordPressVerifyPurchaseResponse {
   unlocked: boolean;
+  pendingReview?: boolean;
+  orderStatus?: string;
+  orderNumber?: string;
+  receiptUrl?: string;
+  paymentNote?: string;
   source: string | null;
   orderId?: number;
   message: string;
@@ -247,6 +307,195 @@ export async function verifyWooCommercePurchase(
     { method: 'POST' },
     true
   );
+}
+
+export interface OfflineOrderResponse {
+  order: UserOrder;
+  pendingReview: boolean;
+  message: string;
+}
+
+export async function submitOfflineOrder(
+  siteUrl: string,
+  payload: {
+    termDbId?: number;
+    productId?: number;
+    items?: Array<{ productId?: number; termDbId?: number; qty: number }>;
+    note?: string;
+    receiptFile?: File | null;
+  }
+): Promise<OfflineOrderResponse> {
+  const fd = new FormData();
+  if (payload.items && payload.items.length > 0) {
+    fd.append('items', JSON.stringify(payload.items));
+  } else if (payload.termDbId) {
+    fd.append('termDbId', String(payload.termDbId));
+    if (payload.productId) fd.append('productId', String(payload.productId));
+  }
+  if (payload.note) {
+    fd.append('note', payload.note);
+  }
+  if (payload.receiptFile) {
+    fd.append('receipt', payload.receiptFile);
+  }
+  return wpFormRequest<OfflineOrderResponse>(siteUrl, '/checkout/offline', fd, true);
+}
+
+export async function uploadOrderReceipt(
+  siteUrl: string,
+  orderId: number,
+  receiptFile: File | null,
+  note: string
+): Promise<{ order: UserOrder; message: string }> {
+  const fd = new FormData();
+  if (receiptFile) {
+    fd.append('receipt', receiptFile);
+  }
+  if (note.trim()) {
+    fd.append('note', note.trim());
+  }
+  return wpFormRequest<{ order: UserOrder; message: string }>(
+    siteUrl,
+    `/orders/${encodeURIComponent(String(orderId))}/receipt`,
+    fd,
+    true
+  );
+}
+
+export async function fetchUserOrders(siteUrl: string): Promise<{
+  orders: UserOrder[];
+  bacsAccounts: BacsAccount[];
+}> {
+  return wpRequest<{ orders: UserOrder[]; bacsAccounts: BacsAccount[] }>(
+    siteUrl,
+    '/account/orders',
+    { method: 'GET' },
+    true
+  );
+}
+
+export async function updateAccountProfile(
+  siteUrl: string,
+  payload: {
+    firstName: string;
+    lastName: string;
+    displayName?: string;
+    mobile: string;
+    email?: string;
+    state: string;
+    city: string;
+    address1: string;
+    postcode: string;
+    newPassword?: string;
+  }
+): Promise<{ user: WordPressUser; message: string }> {
+  return wpRequest<{ user: WordPressUser; message: string }>(
+    siteUrl,
+    '/account/profile',
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    },
+    true
+  );
+}
+
+export async function fetchStoreCatalog(
+  siteUrl: string,
+  categoryId = 0,
+  search = ''
+): Promise<StoreCatalogResponse> {
+  const params = new URLSearchParams();
+  if (categoryId > 0) params.set('category', String(categoryId));
+  if (search.trim()) params.set('search', search.trim());
+  const qs = params.toString();
+  return wpRequest<StoreCatalogResponse>(
+    siteUrl,
+    `/store/products${qs ? `?${qs}` : ''}`,
+    { method: 'GET' }
+  );
+}
+
+export async function startStoreCheckout(
+  siteUrl: string,
+  items: Array<{ productId: number; qty: number }>
+): Promise<{ checkoutUrl: string }> {
+  return wpRequest<{ checkoutUrl: string }>(
+    siteUrl,
+    '/store/checkout',
+    {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    },
+    true
+  );
+}
+
+export async function fetchTickets(siteUrl: string): Promise<SupportTicket[]> {
+  const data = await wpRequest<{ tickets: SupportTicket[] }>(
+    siteUrl,
+    '/tickets',
+    { method: 'GET' },
+    true
+  );
+  return Array.isArray(data.tickets) ? data.tickets : [];
+}
+
+export async function createTicket(
+  siteUrl: string,
+  payload: {
+    subject: string;
+    category: string;
+    message: string;
+    attachmentFile?: File | null;
+  }
+): Promise<{ ticket: SupportTicket; message: string }> {
+  const fd = new FormData();
+  fd.append('subject', payload.subject);
+  fd.append('category', payload.category);
+  fd.append('message', payload.message);
+  if (payload.attachmentFile) {
+    fd.append('attachment', payload.attachmentFile);
+  }
+  return wpFormRequest<{ ticket: SupportTicket; message: string }>(
+    siteUrl,
+    '/tickets',
+    fd,
+    true
+  );
+}
+
+export async function fetchTicketDetail(
+  siteUrl: string,
+  ticketId: number
+): Promise<SupportTicket> {
+  const data = await wpRequest<{ ticket: SupportTicket }>(
+    siteUrl,
+    `/tickets/${encodeURIComponent(String(ticketId))}`,
+    { method: 'GET' },
+    true
+  );
+  return data.ticket;
+}
+
+export async function replyTicket(
+  siteUrl: string,
+  ticketId: number,
+  message: string,
+  attachmentFile?: File | null
+): Promise<SupportTicket> {
+  const fd = new FormData();
+  fd.append('message', message);
+  if (attachmentFile) {
+    fd.append('attachment', attachmentFile);
+  }
+  const data = await wpFormRequest<{ ticket: SupportTicket }>(
+    siteUrl,
+    `/tickets/${encodeURIComponent(String(ticketId))}/reply`,
+    fd,
+    true
+  );
+  return data.ticket;
 }
 
 export interface WordPressAuthResponse {
@@ -278,9 +527,16 @@ export async function loginWordPress(
 export async function registerWordPress(
   siteUrl: string,
   payload: {
-    email: string;
+    mobile: string;
+    email?: string;
     password: string;
-    displayName: string;
+    firstName: string;
+    lastName: string;
+    displayName?: string;
+    state: string;
+    city: string;
+    address1: string;
+    postcode: string;
     childName: string;
     childAge: number;
     childAvatar: AvatarId;

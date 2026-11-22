@@ -120,6 +120,24 @@ class KN_Admin {
 
 		add_submenu_page(
 			'kn-soroban',
+			'فروشگاه اپلیکیشن و تایید واریزی‌ها',
+			'فروشگاه اپلیکیشن',
+			'manage_options',
+			'kn-soroban-shop',
+			array( __CLASS__, 'render_shop_page' )
+		);
+
+		add_submenu_page(
+			'kn-soroban',
+			'تیکت‌ها و پشتیبانی',
+			'تیکت‌ها و پشتیبانی',
+			'manage_options',
+			'kn-soroban-tickets',
+			array( __CLASS__, 'render_tickets_page' )
+		);
+
+		add_submenu_page(
+			'kn-soroban',
 			'تنظیمات هدلس و API',
 			'تنظیمات هدلس',
 			'manage_options',
@@ -337,10 +355,17 @@ class KN_Admin {
 		if ( $action === 'admin_create_user' && check_admin_referer( 'kn_admin_create_user' ) ) {
 			$result = KN_Auth::register_user(
 				array(
+					'mobile'      => sanitize_text_field( wp_unslash( $_POST['mobile'] ?? '' ) ),
 					'email'       => sanitize_email( wp_unslash( $_POST['email'] ?? '' ) ),
 					'username'    => sanitize_user( wp_unslash( $_POST['username'] ?? '' ), true ),
 					'password'    => (string) ( $_POST['password'] ?? '' ),
+					'firstName'   => sanitize_text_field( wp_unslash( $_POST['first_name'] ?? '' ) ),
+					'lastName'    => sanitize_text_field( wp_unslash( $_POST['last_name'] ?? '' ) ),
 					'displayName' => sanitize_text_field( wp_unslash( $_POST['display_name'] ?? '' ) ),
+					'state'       => sanitize_text_field( wp_unslash( $_POST['state'] ?? '' ) ),
+					'city'        => sanitize_text_field( wp_unslash( $_POST['city'] ?? '' ) ),
+					'address1'    => sanitize_text_field( wp_unslash( $_POST['address1'] ?? '' ) ),
+					'postcode'    => sanitize_text_field( wp_unslash( $_POST['postcode'] ?? '' ) ),
 					'childName'   => sanitize_text_field( wp_unslash( $_POST['child_name'] ?? 'آرتین' ) ),
 					'childAge'    => absint( $_POST['child_age'] ?? 6 ),
 					'childAvatar' => sanitize_key( wp_unslash( $_POST['child_avatar'] ?? 'owl' ) ),
@@ -415,6 +440,59 @@ class KN_Admin {
 		if ( $action === 'reseed_defaults' && check_admin_referer( 'kn_reseed_defaults' ) ) {
 			KN_DB::seed_defaults_if_empty();
 			self::redirect_with_notice( 'kn-soroban-settings', 'داده‌های پیش‌فرض (در صورت خالی بودن) بازیابی شدند.' );
+		}
+
+		// 11. Save Storefront Settings
+		if ( $action === 'save_store_settings' && check_admin_referer( 'kn_save_store_settings' ) ) {
+			$sel_cats = isset( $_POST['selected_categories'] ) && is_array( $_POST['selected_categories'] )
+				? array_values( array_filter( array_map( 'absint', wp_unslash( $_POST['selected_categories'] ) ) ) )
+				: array();
+			$sel_prods = isset( $_POST['selected_products'] ) && is_array( $_POST['selected_products'] )
+				? array_values( array_filter( array_map( 'absint', wp_unslash( $_POST['selected_products'] ) ) ) )
+				: array();
+			$feat_prods = isset( $_POST['featured_products'] ) && is_array( $_POST['featured_products'] )
+				? array_values( array_filter( array_map( 'absint', wp_unslash( $_POST['featured_products'] ) ) ) )
+				: array();
+
+			$store_settings = array(
+				'enabled'             => ! empty( $_POST['enabled'] ) ? 1 : 0,
+				'banner_title'        => sanitize_text_field( wp_unslash( $_POST['banner_title'] ?? 'فروشگاه کودک نابغه' ) ),
+				'banner_subtitle'     => sanitize_text_field( wp_unslash( $_POST['banner_subtitle'] ?? '' ) ),
+				'show_all_if_empty'   => ! empty( $_POST['show_all_if_empty'] ) ? 1 : 0,
+				'selected_categories' => $sel_cats,
+				'selected_products'   => $sel_prods,
+				'featured_products'   => $feat_prods,
+			);
+			update_option( 'kn_soroban_store_settings', $store_settings );
+			self::redirect_with_notice( 'kn-soroban-shop', 'تنظیمات فروشگاه اپلیکیشن با موفقیت ذخیره شد.' );
+		}
+
+		// 12. One-click Approve Pending Bank Transfer Order
+		if ( $action === 'approve_bacs_order' && check_admin_referer( 'kn_approve_bacs_order' ) ) {
+			$order_id = absint( $_POST['order_id'] ?? 0 );
+			if ( $order_id > 0 && KN_Woo::is_woo_active() ) {
+				$order = wc_get_order( $order_id );
+				if ( $order ) {
+					$order->update_status( 'completed', 'فیش بانکی توسط مدیر از پنل کودک نابغه تایید شد.' );
+					KN_Woo::grant_access_from_order( $order_id );
+					self::redirect_with_notice( 'kn-soroban-shop', 'سفارش #' . $order->get_order_number() . ' تایید و دسترسی مربوطه فعال شد!' );
+				}
+			}
+			self::redirect_with_notice( 'kn-soroban-shop', 'سفارش یافت نشد.', true );
+		}
+
+		// 13. Admin Reply to Support Ticket
+		if ( $action === 'admin_reply_ticket' && check_admin_referer( 'kn_admin_reply_ticket' ) ) {
+			$ticket_id  = absint( $_POST['ticket_id'] ?? 0 );
+			$reply_text = sanitize_textarea_field( wp_unslash( $_POST['reply_message'] ?? '' ) );
+			$new_status = sanitize_key( wp_unslash( $_POST['ticket_status'] ?? 'answered' ) );
+			if ( $ticket_id > 0 && ! empty( $reply_text ) ) {
+				KN_DB::add_ticket_reply( $ticket_id, get_current_user_id(), true, $reply_text, '', $new_status );
+				self::redirect_with_notice( 'kn-soroban-tickets', 'پاسخ شما در تیکت ثبت شد.' );
+			} elseif ( $ticket_id > 0 && in_array( $new_status, array( 'open', 'answered', 'closed' ), true ) ) {
+				KN_DB::update_ticket_status( $ticket_id, $new_status );
+				self::redirect_with_notice( 'kn-soroban-tickets', 'وضعیت تیکت به‌روزرسانی شد.' );
+			}
 		}
 	}
 
@@ -696,6 +774,9 @@ class KN_Admin {
 							<span class="kn-pill <?php echo $term['isFree'] ? 'kn-pill-green' : 'kn-pill-amber'; ?>">
 								<?php echo $term['isFree'] ? 'رایگان (استارتر)' : 'پولی: ' . esc_html( $term['priceFormatted'] ); ?>
 							</span>
+							<?php if ( ! $term['isFree'] && ! empty( $term['onSale'] ) ) : ?>
+								<span class="kn-pill kn-pill-green">تخفیف ویژه <?php echo esc_html( $term['discountPercent'] ); ?>٪ (اصلی: <?php echo esc_html( $term['regularPriceFormatted'] ); ?>)</span>
+							<?php endif; ?>
 							<?php if ( ! $term['isFree'] && ! empty( $term['wooProductId'] ) ) : ?>
 								<span class="kn-pill kn-pill-blue">محصول ووکامرس #<?php echo esc_html( $term['wooProductId'] ); ?></span>
 							<?php endif; ?>
@@ -1397,12 +1478,12 @@ class KN_Admin {
 						<input type="hidden" name="kn_action" value="admin_create_user" />
 						<div class="kn-grid-3">
 							<div class="kn-field">
-								<label>ایمیل والد / کاربر</label>
-								<input type="email" name="email" required dir="ltr" placeholder="parent@example.com" />
+								<label>شماره موبایل والد / کاربر (الزامی)</label>
+								<input type="text" name="mobile" required dir="ltr" placeholder="09123456789" />
 							</div>
 							<div class="kn-field">
-								<label>نام کاربری (اختیاری)</label>
-								<input type="text" name="username" dir="ltr" placeholder="ali_parent" />
+								<label>ایمیل (اختیاری)</label>
+								<input type="email" name="email" dir="ltr" placeholder="parent@example.com" />
 							</div>
 							<div class="kn-field">
 								<label>رمز عبور (حداقل ۶ کاراکتر)</label>
@@ -1412,16 +1493,34 @@ class KN_Admin {
 						<div class="kn-grid-3">
 							<div class="kn-field">
 								<label>نام والد</label>
-								<input type="text" name="display_name" placeholder="مثلاً آقای رضایی" />
+								<input type="text" name="first_name" placeholder="مثلاً علی" />
 							</div>
 							<div class="kn-field">
-								<label>نام کودک</label>
-								<input type="text" name="child_name" required placeholder="مثلاً آرتین" />
+								<label>نام خانوادگی والد</label>
+								<input type="text" name="last_name" placeholder="مثلاً رضایی" />
 							</div>
 							<div class="kn-field">
-								<label>سن و شخصیت کودک</label>
+								<label>استان و شهر</label>
 								<div style="display:flex;gap:6px;">
-									<input type="number" name="child_age" value="6" min="4" max="12" style="width:90px;" />
+									<input type="text" name="state" placeholder="استان (مثلاً تهران)" />
+									<input type="text" name="city" placeholder="شهر (مثلاً تهران)" />
+								</div>
+							</div>
+						</div>
+						<div class="kn-grid-3">
+							<div class="kn-field">
+								<label>آدرس پستی کامل</label>
+								<input type="text" name="address1" placeholder="خیابان، کوچه، پلاک..." />
+							</div>
+							<div class="kn-field">
+								<label>کد پستی</label>
+								<input type="text" name="postcode" dir="ltr" placeholder="1234567890" />
+							</div>
+							<div class="kn-field">
+								<label>نام، سن (۴ تا ۱۵) و شخصیت کودک</label>
+								<div style="display:flex;gap:6px;">
+									<input type="text" name="child_name" required placeholder="نام کودک" />
+									<input type="number" name="child_age" value="6" min="4" max="15" style="width:70px;" />
 									<select name="child_avatar">
 										<?php foreach ( self::$avatars as $k => $lbl ) : ?>
 											<option value="<?php echo esc_attr( $k ); ?>"><?php echo esc_html( $lbl ); ?></option>
@@ -1637,4 +1736,282 @@ class KN_Admin {
 		</div>
 		<?php
 	}
+
+	/**
+	 * Page 7: In-App Storefront Manager & Pending Bank Transfer Receipts Approval
+	 */
+	public static function render_shop_page() {
+		$store = get_option(
+			'kn_soroban_store_settings',
+			array(
+				'enabled'             => 1,
+				'banner_title'        => 'فروشگاه کودک نابغه',
+				'banner_subtitle'     => 'چرتکه‌های آموزشی، پک‌های تمرین، کتاب کار و ابزارهای هوش ریاضی',
+				'show_all_if_empty'   => 1,
+				'selected_categories' => array(),
+				'selected_products'   => array(),
+				'featured_products'   => array(),
+			)
+		);
+		$woo_active     = KN_Woo::is_woo_active();
+		$categories     = $woo_active ? KN_Woo::get_admin_product_categories() : array();
+		$products       = $woo_active ? KN_Woo::get_admin_products_list() : array();
+		$pending_orders = $woo_active ? KN_Woo::get_pending_bacs_orders_admin() : array();
+		$sel_cats       = array_map( 'intval', (array) ( $store['selected_categories'] ?? array() ) );
+		$sel_prods      = array_map( 'intval', (array) ( $store['selected_products'] ?? array() ) );
+		$feat_prods     = array_map( 'intval', (array) ( $store['featured_products'] ?? array() ) );
+		?>
+		<div class="kn-wrap">
+			<?php self::render_header( 'فروشگاه اپلیکیشن و تایید فیش‌های واریزی', 'انتخاب دسته‌ها و محصولات نمایش داده‌شده در فروشگاه اپلیکیشن کودک نابغه + بررسی و تایید یک‌کلیکی فیش‌های بانکی.' ); ?>
+
+			<div class="kn-card">
+				<div class="kn-card-header">
+					<h2>تایید سفارش‌های واریز به حساب و فیش‌های بانکی (<?php echo esc_html( count( $pending_orders ) ); ?>)</h2>
+				</div>
+				<?php if ( empty( $pending_orders ) ) : ?>
+					<p style="font-size:13px;color:#5c3a1f;">در حال حاضر هیچ سفارش در انتظار تاییدی وجود ندارد.</p>
+				<?php else : ?>
+					<table class="kn-table">
+						<thead>
+							<tr>
+								<th>سفارش</th>
+								<th>خریدار / موبایل</th>
+								<th>اقلام و مبلغ</th>
+								<th>فیش بانکی و توضیحات</th>
+								<th>عملیات مدیر</th>
+							</tr>
+						</thead>
+						<tbody>
+							<?php foreach ( $pending_orders as $po ) : ?>
+								<tr>
+									<td>
+										<strong>#<?php echo esc_html( $po['orderNumber'] ); ?></strong>
+										<div style="font-size:11px;color:#7c5b43;"><?php echo esc_html( $po['dateCreated'] ); ?></div>
+										<span class="kn-pill kn-pill-amber"><?php echo esc_html( $po['statusLabel'] ); ?></span>
+									</td>
+									<td>
+										<strong><?php echo esc_html( $po['customerName'] ?: 'کاربر' ); ?></strong>
+										<div style="font-size:12px;color:#475569;" dir="ltr"><?php echo esc_html( $po['customerPhone'] ); ?></div>
+									</td>
+									<td>
+										<?php foreach ( $po['items'] as $it ) : ?>
+											<div style="font-size:12px;">• <?php echo esc_html( $it['name'] ); ?> × <?php echo esc_html( $it['qty'] ); ?></div>
+										<?php endforeach; ?>
+										<div style="font-weight:800;color:#047857;margin-top:4px;"><?php echo esc_html( $po['totalFormatted'] ); ?></div>
+									</td>
+									<td>
+										<?php if ( ! empty( $po['receiptUrl'] ) ) : ?>
+											<a href="<?php echo esc_url( $po['receiptUrl'] ); ?>" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-bottom:4px;">
+												<img src="<?php echo esc_url( $po['receiptUrl'] ); ?>" alt="فیش" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:2px solid #F59E0B;" />
+											</a>
+										<?php else : ?>
+											<span class="kn-pill kn-pill-slate">بدون تصویر فیش</span>
+										<?php endif; ?>
+										<?php if ( ! empty( $po['paymentNote'] ) ) : ?>
+											<div style="font-size:11px;color:#334155;margin-top:4px;max-width:260px;">📝 <?php echo esc_html( $po['paymentNote'] ); ?></div>
+										<?php endif; ?>
+									</td>
+									<td>
+										<form method="post" onsubmit="return confirm('پرداخت این سفارش تایید و دسترسی آن فعال شود؟');">
+											<?php wp_nonce_field( 'kn_approve_bacs_order' ); ?>
+											<input type="hidden" name="kn_action" value="approve_bacs_order" />
+											<input type="hidden" name="order_id" value="<?php echo esc_attr( $po['id'] ); ?>" />
+											<button type="submit" class="kn-btn kn-btn-green">تایید پرداخت و فعال‌سازی</button>
+										</form>
+									</td>
+								</tr>
+							<?php endforeach; ?>
+						</tbody>
+					</table>
+				<?php endif; ?>
+			</div>
+
+			<div class="kn-card">
+				<div class="kn-card-header">
+					<h2>تنظیمات و محصولات فروشگاه داخل اپلیکیشن</h2>
+				</div>
+				<form method="post">
+					<?php wp_nonce_field( 'kn_save_store_settings' ); ?>
+					<input type="hidden" name="kn_action" value="save_store_settings" />
+
+					<div class="kn-grid-2">
+						<div class="kn-field">
+							<label>عنوان بنر فروشگاه</label>
+							<input type="text" name="banner_title" value="<?php echo esc_attr( $store['banner_title'] ?? 'فروشگاه کودک نابغه' ); ?>" />
+						</div>
+						<div class="kn-field">
+							<label>توضیح کوتاه بالای فروشگاه</label>
+							<input type="text" name="banner_subtitle" value="<?php echo esc_attr( $store['banner_subtitle'] ?? '' ); ?>" />
+						</div>
+					</div>
+
+					<div style="display:flex;gap:18px;flex-wrap:wrap;margin:10px 0 18px;">
+						<label><input type="checkbox" name="enabled" value="1" <?php checked( ! empty( $store['enabled'] ) ); ?> /> بخش فروشگاه در اپلیکیشن فعال باشد</label>
+						<label><input type="checkbox" name="show_all_if_empty" value="1" <?php checked( ! empty( $store['show_all_if_empty'] ) ); ?> /> در صورت خالی بودن انتخاب‌ها، همه محصولات منتشرشده ووکامرس نمایش داده شوند</label>
+					</div>
+
+					<div class="kn-grid-2">
+						<div class="kn-field">
+							<label>انتخاب دسته‌بندی‌های ووکامرس برای نمایش در فروشگاه اپ</label>
+							<div style="max-height:220px;overflow-y:auto;border:2px solid #eedcc5;border-radius:12px;padding:10px;background:#fffaf3;">
+								<?php if ( empty( $categories ) ) : ?>
+									<p style="font-size:12px;color:#7c5b43;">دسته‌بندی محصولی یافت نشد.</p>
+								<?php else : ?>
+									<?php foreach ( $categories as $cat ) : ?>
+										<label style="display:block;margin-bottom:6px;font-weight:600;">
+											<input type="checkbox" name="selected_categories[]" value="<?php echo esc_attr( $cat['id'] ); ?>" <?php checked( in_array( (int) $cat['id'], $sel_cats, true ) ); ?> />
+											<?php echo esc_html( $cat['name'] ); ?> (<?php echo esc_html( $cat['count'] ); ?>)
+										</label>
+									<?php endforeach; ?>
+								<?php endif; ?>
+							</div>
+						</div>
+
+						<div class="kn-field">
+							<label>انتخاب محصولات خاص (و علامت‌گذاری محصولات ویژه)</label>
+							<div style="max-height:220px;overflow-y:auto;border:2px solid #eedcc5;border-radius:12px;padding:10px;background:#fffaf3;">
+								<?php if ( empty( $products ) ) : ?>
+									<p style="font-size:12px;color:#7c5b43;">محصولی در ووکامرس یافت نشد.</p>
+								<?php else : ?>
+									<?php foreach ( $products as $prod ) : ?>
+										<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0;border-bottom:1px dashed #eedcc5;">
+											<label style="font-weight:600;">
+												<input type="checkbox" name="selected_products[]" value="<?php echo esc_attr( $prod['id'] ); ?>" <?php checked( in_array( (int) $prod['id'], $sel_prods, true ) ); ?> />
+												#<?php echo esc_html( $prod['id'] . ' — ' . $prod['name'] ); ?>
+												<?php if ( ! empty( $prod['on_sale'] ) ) : ?>
+													<span class="kn-pill kn-pill-green">حراج</span>
+												<?php endif; ?>
+											</label>
+											<label style="font-size:11px;color:#b45309;white-space:nowrap;">
+												<input type="checkbox" name="featured_products[]" value="<?php echo esc_attr( $prod['id'] ); ?>" <?php checked( in_array( (int) $prod['id'], $feat_prods, true ) ); ?> /> ویژه
+											</label>
+										</div>
+									<?php endforeach; ?>
+								<?php endif; ?>
+							</div>
+						</div>
+					</div>
+
+					<button type="submit" class="kn-btn kn-btn-primary" style="margin-top:10px;">ذخیره تنظیمات فروشگاه اپلیکیشن</button>
+				</form>
+			</div>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Page 8: Customer Support Ticketing Inbox & Reply Manager
+	 */
+	public static function render_tickets_page() {
+		$status_filter = sanitize_key( wp_unslash( $_GET['ticket_status'] ?? '' ) );
+		$tickets       = KN_DB::get_all_tickets_admin( $status_filter );
+		$view_id       = absint( $_GET['view_ticket'] ?? 0 );
+		$active_ticket = $view_id > 0 ? KN_DB::get_ticket_detail( $view_id, 0, true ) : null;
+		?>
+		<div class="kn-wrap">
+			<?php self::render_header( 'تیکت‌ها و پشتیبانی کاربران', 'مشاهده پیام‌ها و پیوست‌های ارسالی کاربران از اپلیکیشن و ارسال پاسخ مستقیم.' ); ?>
+
+			<div class="kn-card" style="padding:14px 20px;">
+				<form method="get" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+					<input type="hidden" name="page" value="kn-soroban-tickets" />
+					<strong>فیلتر وضعیت:</strong>
+					<select name="ticket_status" onchange="this.form.submit()">
+						<option value="">همه تیکت‌ها</option>
+						<option value="open" <?php selected( $status_filter, 'open' ); ?>>در انتظار پاسخ</option>
+						<option value="answered" <?php selected( $status_filter, 'answered' ); ?>>پاسخ داده شده</option>
+						<option value="closed" <?php selected( $status_filter, 'closed' ); ?>>بسته شده</option>
+					</select>
+				</form>
+			</div>
+
+			<?php if ( $active_ticket ) : ?>
+				<div class="kn-card" style="border:2px solid #3B82F6;">
+					<div class="kn-card-header">
+						<h2>تیکت #<?php echo esc_html( $active_ticket['id'] ); ?>: <?php echo esc_html( $active_ticket['subject'] ); ?></h2>
+						<span class="kn-pill kn-pill-blue"><?php echo esc_html( $active_ticket['statusLabel'] ); ?></span>
+					</div>
+					<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
+						<?php foreach ( $active_ticket['messages'] as $msg ) : ?>
+							<div style="padding:12px 14px;border-radius:12px;background:<?php echo $msg['isAdmin'] ? '#EFF6FF' : '#FFFBEB'; ?>;border:1px solid <?php echo $msg['isAdmin'] ? '#BFDBFE' : '#FDE68A'; ?>;">
+								<div style="font-size:12px;font-weight:800;margin-bottom:4px;">
+									<?php echo esc_html( $msg['senderName'] ); ?> · <span style="font-weight:400;color:#64748B;"><?php echo esc_html( $msg['createdAt'] ); ?></span>
+								</div>
+								<div style="font-size:13px;line-height:1.8;white-space:pre-wrap;"><?php echo esc_html( $msg['message'] ); ?></div>
+								<?php if ( ! empty( $msg['attachmentUrl'] ) ) : ?>
+									<div style="margin-top:8px;">
+										<a href="<?php echo esc_url( $msg['attachmentUrl'] ); ?>" target="_blank" rel="noopener noreferrer">
+											<img src="<?php echo esc_url( $msg['attachmentUrl'] ); ?>" alt="پیوست" style="max-width:220px;border-radius:10px;border:1px solid #cbd5e1;" />
+										</a>
+									</div>
+								<?php endif; ?>
+							</div>
+						<?php endforeach; ?>
+					</div>
+
+					<form method="post">
+						<?php wp_nonce_field( 'kn_admin_reply_ticket' ); ?>
+						<input type="hidden" name="kn_action" value="admin_reply_ticket" />
+						<input type="hidden" name="ticket_id" value="<?php echo esc_attr( $active_ticket['id'] ); ?>" />
+						<div class="kn-field">
+							<label>پاسخ مدیریت</label>
+							<textarea name="reply_message" rows="3" placeholder="پاسخ خود را بنویسید..."></textarea>
+						</div>
+						<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+							<select name="ticket_status">
+								<option value="answered">وضعیت: پاسخ داده شده</option>
+								<option value="open">وضعیت: در انتظار پاسخ</option>
+								<option value="closed">وضعیت: بسته شده</option>
+							</select>
+							<button type="submit" class="kn-btn kn-btn-primary">ارسال پاسخ و ذخیره وضعیت</button>
+						</div>
+					</form>
+				</div>
+			<?php endif; ?>
+
+			<div class="kn-card">
+				<div class="kn-card-header">
+					<h2>فهرست تیکت‌ها (<?php echo esc_html( count( $tickets ) ); ?>)</h2>
+				</div>
+				<?php if ( empty( $tickets ) ) : ?>
+					<p>تیکتی ثبت نشده است.</p>
+				<?php else : ?>
+					<table class="kn-table">
+						<thead>
+							<tr>
+								<th>شناسه</th>
+								<th>موضوع</th>
+								<th>کاربر</th>
+								<th>دسته‌بندی</th>
+								<th>وضعیت</th>
+								<th>به‌روزرسانی</th>
+								<th>مشاهده</th>
+							</tr>
+						</thead>
+						<tbody>
+							<?php foreach ( $tickets as $tk ) : ?>
+								<?php $sum = KN_DB::format_ticket_summary( $tk ); ?>
+								<tr>
+									<td>#<?php echo esc_html( $tk['id'] ); ?></td>
+									<td><strong><?php echo esc_html( $tk['subject'] ); ?></strong> (<?php echo esc_html( $sum['messageCount'] ); ?> پیام)</td>
+									<td><?php echo esc_html( $tk['display_name'] ?: $tk['user_login'] ); ?></td>
+									<td><?php echo esc_html( $tk['category'] ); ?></td>
+									<td>
+										<span class="kn-pill <?php echo $tk['status'] === 'open' ? 'kn-pill-amber' : ( $tk['status'] === 'answered' ? 'kn-pill-green' : 'kn-pill-slate' ); ?>">
+											<?php echo esc_html( $sum['statusLabel'] ); ?>
+										</span>
+									</td>
+									<td><?php echo esc_html( $tk['updated_at'] ); ?></td>
+									<td>
+										<a class="kn-btn kn-btn-primary" style="padding:5px 10px;font-size:12px;" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-tickets&view_ticket=' . $tk['id'] ) ); ?>">باز کردن و پاسخ</a>
+									</td>
+								</tr>
+							<?php endforeach; ?>
+						</tbody>
+					</table>
+				<?php endif; ?>
+			</div>
+		</div>
+		<?php
+	}
 }
+

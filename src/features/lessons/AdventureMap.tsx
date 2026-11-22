@@ -228,7 +228,7 @@ export const AdventureMap: React.FC<AdventureMapProps> = ({
         <div className="relative px-3 sm:px-6 pt-6 pb-7">
           {stages.length === 0 ? (
             <div className="rounded-2xl bg-white/95 dark:bg-slate-900 p-6 text-center text-sm font-bold text-slate-700 dark:text-slate-200 shadow-sm">
-              هنوز مرحله‌ای برای این ترم تعریف نشده است. از پیشخوان وردپرس اضافه کنید.
+              مراحل این دوره آموزشی به‌زودی اضافه می‌شوند.
             </div>
           ) : (
             <>

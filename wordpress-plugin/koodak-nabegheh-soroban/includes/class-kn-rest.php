@@ -96,6 +96,47 @@ class KN_REST {
 			)
 		);
 
+		// Account profile update & orders history
+		register_rest_route(
+			$ns,
+			'/account/profile',
+			array(
+				'methods'             => 'PUT',
+				'callback'            => array( __CLASS__, 'handle_update_account' ),
+				'permission_callback' => array( __CLASS__, 'require_auth' ),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/account/orders',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'handle_get_orders' ),
+				'permission_callback' => array( __CLASS__, 'require_auth' ),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/orders/(?P<id>\d+)/receipt',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'handle_upload_order_receipt' ),
+				'permission_callback' => array( __CLASS__, 'require_auth' ),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/checkout/offline',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'handle_offline_checkout' ),
+				'permission_callback' => array( __CLASS__, 'require_auth' ),
+			)
+		);
+
 		// Dynamic Terms + Learning Roads + Stages & Steps
 		register_rest_route(
 			$ns,
@@ -107,7 +148,7 @@ class KN_REST {
 			)
 		);
 
-		// WooCommerce Term Checkout & Order Verification
+		// Term Checkout & Order Verification
 		register_rest_route(
 			$ns,
 			'/terms/(?P<id>\d+)/checkout',
@@ -124,6 +165,65 @@ class KN_REST {
 			array(
 				'methods'             => 'POST',
 				'callback'            => array( __CLASS__, 'handle_term_verify_purchase' ),
+				'permission_callback' => array( __CLASS__, 'require_auth' ),
+			)
+		);
+
+		// In-App Store Catalog & Cart Checkout
+		register_rest_route(
+			$ns,
+			'/store/products',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'handle_store_products' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/store/checkout',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'handle_store_checkout' ),
+				'permission_callback' => array( __CLASS__, 'require_auth' ),
+			)
+		);
+
+		// Support Ticketing System
+		register_rest_route(
+			$ns,
+			'/tickets',
+			array(
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( __CLASS__, 'handle_get_tickets' ),
+					'permission_callback' => array( __CLASS__, 'require_auth' ),
+				),
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( __CLASS__, 'handle_create_ticket' ),
+					'permission_callback' => array( __CLASS__, 'require_auth' ),
+				),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/tickets/(?P<id>\d+)',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'handle_get_ticket_detail' ),
+				'permission_callback' => array( __CLASS__, 'require_auth' ),
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/tickets/(?P<id>\d+)/reply',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'handle_reply_ticket' ),
 				'permission_callback' => array( __CLASS__, 'require_auth' ),
 			)
 		);
@@ -299,12 +399,13 @@ class KN_REST {
 		$password = isset( $params['password'] ) ? (string) $params['password'] : '';
 
 		if ( empty( $login ) || empty( $password ) ) {
-			return new WP_Error( 'missing_credentials', 'نام کاربری/ایمیل و رمز عبور الزامی است.', array( 'status' => 400 ) );
+			return new WP_Error( 'missing_credentials', 'شماره موبایل یا ایمیل و رمز عبور الزامی است.', array( 'status' => 400 ) );
 		}
 
-		$user = wp_authenticate( $login, $password );
+		$resolved_login = KN_Auth::find_login_username( $login );
+		$user           = wp_authenticate( $resolved_login, $password );
 		if ( is_wp_error( $user ) ) {
-			return new WP_Error( 'invalid_credentials', 'ایمیل/نام کاربری یا رمز عبور اشتباه است.', array( 'status' => 401 ) );
+			return new WP_Error( 'invalid_credentials', 'مشخصات ورود یا رمز عبور اشتباه است.', array( 'status' => 401 ) );
 		}
 
 		$profiles = KN_DB::get_user_profiles( $user->ID );
@@ -356,6 +457,89 @@ class KN_REST {
 		);
 	}
 
+	public static function handle_update_account( WP_REST_Request $request ) {
+		$user   = self::get_authed_user( $request );
+		$params = $request->get_json_params();
+		if ( ! is_array( $params ) ) {
+			$params = $request->get_params();
+		}
+
+		$updated = KN_Auth::update_account_profile( $user, $params );
+		if ( is_wp_error( $updated ) ) {
+			return $updated;
+		}
+
+		return rest_ensure_response(
+			array(
+				'user'    => KN_Auth::format_user( $updated ),
+				'message' => 'مشخصات حساب کاربری با موفقیت به‌روزرسانی شد.',
+			)
+		);
+	}
+
+	public static function handle_get_orders( WP_REST_Request $request ) {
+		$user = self::get_authed_user( $request );
+		return rest_ensure_response(
+			array(
+				'orders'       => KN_Woo::get_user_orders( $user->ID ),
+				'bacsAccounts' => KN_Woo::get_bacs_accounts(),
+			)
+		);
+	}
+
+	public static function handle_upload_order_receipt( WP_REST_Request $request ) {
+		$user     = self::get_authed_user( $request );
+		$order_id = absint( $request->get_param( 'id' ) );
+		$files    = $request->get_file_params();
+		$file     = ! empty( $files['receipt'] ) ? $files['receipt'] : null;
+		$note     = (string) $request->get_param( 'note' );
+
+		$res = KN_Woo::attach_receipt_to_order( $user, $order_id, $file, $note );
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+
+		return rest_ensure_response(
+			array(
+				'order'   => $res,
+				'message' => 'رسید بانکی و توضیحات شما با موفقیت ثبت شد.',
+			)
+		);
+	}
+
+	public static function handle_offline_checkout( WP_REST_Request $request ) {
+		$user   = self::get_authed_user( $request );
+		$params = $request->get_json_params();
+		if ( ! is_array( $params ) ) {
+			$params = $request->get_params();
+		}
+
+		$items = array();
+		if ( ! empty( $params['items'] ) ) {
+			$raw_items = is_string( $params['items'] ) ? json_decode( $params['items'], true ) : $params['items'];
+			if ( is_array( $raw_items ) ) {
+				$items = $raw_items;
+			}
+		} elseif ( ! empty( $params['termDbId'] ) ) {
+			$items[] = array(
+				'termDbId'  => absint( $params['termDbId'] ),
+				'productId' => absint( $params['productId'] ?? 0 ),
+				'qty'       => 1,
+			);
+		}
+
+		$note  = isset( $params['note'] ) ? (string) $params['note'] : (string) $request->get_param( 'note' );
+		$files = $request->get_file_params();
+		$file  = ! empty( $files['receipt'] ) ? $files['receipt'] : null;
+
+		$res = KN_Woo::create_offline_bacs_order( $user, $items, $note, $file );
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+
+		return rest_ensure_response( $res );
+	}
+
 	public static function handle_curriculum( WP_REST_Request $request ) {
 		$authed_user = KN_Auth::authenticate_request( $request );
 		$user_id     = $authed_user ? (int) $authed_user->ID : 0;
@@ -381,6 +565,7 @@ class KN_REST {
 				'unlockedTermIds' => $unlocked_term_ids,
 				'wooActive'       => KN_Woo::is_woo_active(),
 				'wooCurrency'     => KN_Woo::get_currency_label(),
+				'bacsAccounts'    => KN_Woo::get_bacs_accounts(),
 				'config'          => array(
 					'appTitle'            => $settings['app_title'] ?? 'کودک نابغه',
 					'dailyChallengeCount' => isset( $settings['daily_challenge_count'] ) ? absint( $settings['daily_challenge_count'] ) : 5,
@@ -413,23 +598,33 @@ class KN_REST {
 		);
 
 		if ( ! $term ) {
-			return new WP_Error( 'term_not_found', 'ترم مورد نظر یافت نشد.', array( 'status' => 404 ) );
+			return new WP_Error( 'term_not_found', 'دوره مورد نظر یافت نشد.', array( 'status' => 404 ) );
 		}
 
 		$entitlements     = KN_DB::get_user_entitlement_map( $user->ID );
 		$already_unlocked = ! empty( $term['is_free'] ) || isset( $entitlements[ $term_db_id ] ) || user_can( $user->ID, 'manage_options' );
 		$commerce         = KN_Woo::get_term_commerce_meta( $term, $user->ID, true );
+		$pending_map      = KN_Woo::get_pending_term_order_map( $user->ID );
 
 		return rest_ensure_response(
 			array(
-				'termDbId'        => $term_db_id,
-				'termTitle'       => $term['title'],
-				'alreadyUnlocked' => $already_unlocked,
-				'wooActive'       => KN_Woo::is_woo_active(),
-				'wooProductId'    => (int) $term['woo_product_id'],
-				'priceAmount'     => (int) $commerce['priceAmount'],
-				'priceFormatted'  => $commerce['priceFormatted'],
-				'checkoutUrl'     => $commerce['checkoutUrl'],
+				'termDbId'              => $term_db_id,
+				'termTitle'             => $term['title'],
+				'alreadyUnlocked'       => $already_unlocked,
+				'pendingOrder'          => $pending_map[ $term_db_id ] ?? null,
+				'wooActive'             => KN_Woo::is_woo_active(),
+				'wooProductId'          => (int) $term['woo_product_id'],
+				'priceAmount'           => (int) $commerce['priceAmount'],
+				'priceFormatted'        => $commerce['priceFormatted'],
+				'regularPriceAmount'    => (int) $commerce['regularPriceAmount'],
+				'regularPriceFormatted' => $commerce['regularPriceFormatted'],
+				'salePriceAmount'       => $commerce['salePriceAmount'],
+				'salePriceFormatted'    => $commerce['salePriceFormatted'],
+				'onSale'                => (bool) $commerce['onSale'],
+				'discountPercent'       => (int) $commerce['discountPercent'],
+				'saleEndTimestamp'      => $commerce['saleEndTimestamp'],
+				'checkoutUrl'           => $commerce['checkoutUrl'],
+				'bacsAccounts'          => KN_Woo::get_bacs_accounts(),
 			)
 		);
 	}
@@ -443,10 +638,130 @@ class KN_REST {
 			return $res;
 		}
 
-		$ent_map = KN_DB::get_user_entitlement_map( $user->ID );
+		$ent_map                = KN_DB::get_user_entitlement_map( $user->ID );
 		$res['unlockedTermIds'] = array_map( 'intval', array_keys( $ent_map ) );
 
 		return rest_ensure_response( $res );
+	}
+
+	public static function handle_store_products( WP_REST_Request $request ) {
+		$category_id = absint( $request->get_param( 'category' ) );
+		$search      = sanitize_text_field( (string) $request->get_param( 'search' ) );
+		return rest_ensure_response( KN_Woo::get_store_catalog( $category_id, $search ) );
+	}
+
+	public static function handle_store_checkout( WP_REST_Request $request ) {
+		$user   = self::get_authed_user( $request );
+		$params = $request->get_json_params();
+		if ( ! is_array( $params ) ) {
+			$params = $request->get_params();
+		}
+		$items = isset( $params['items'] ) ? $params['items'] : array();
+		$res   = KN_Woo::create_store_sso_checkout_url( $user->ID, $items );
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+		return rest_ensure_response( $res );
+	}
+
+	public static function handle_get_tickets( WP_REST_Request $request ) {
+		$user = self::get_authed_user( $request );
+		return rest_ensure_response(
+			array(
+				'tickets' => KN_DB::get_tickets_for_user( $user->ID ),
+			)
+		);
+	}
+
+	public static function handle_create_ticket( WP_REST_Request $request ) {
+		$user    = self::get_authed_user( $request );
+		$params  = $request->get_json_params();
+		if ( ! is_array( $params ) ) {
+			$params = $request->get_params();
+		}
+		$subject  = isset( $params['subject'] ) ? (string) $params['subject'] : (string) $request->get_param( 'subject' );
+		$category = isset( $params['category'] ) ? (string) $params['category'] : (string) $request->get_param( 'category' );
+		$message  = isset( $params['message'] ) ? (string) $params['message'] : (string) $request->get_param( 'message' );
+
+		if ( empty( trim( $subject ) ) || empty( trim( $message ) ) ) {
+			return new WP_Error( 'invalid_ticket', 'موضوع و متن پیام تیکت الزامی است.', array( 'status' => 400 ) );
+		}
+
+		$attachment_url = '';
+		$files          = $request->get_file_params();
+		if ( ! empty( $files['attachment'] ) && ! empty( $files['attachment']['tmp_name'] ) ) {
+			$saved = KN_Woo::save_compressed_user_image( $user, $files['attachment'], 'ticket' );
+			if ( is_wp_error( $saved ) ) {
+				return $saved;
+			}
+			$attachment_url = $saved['url'];
+		}
+
+		$ticket = KN_DB::create_ticket( $user->ID, $subject, $category, $message, $attachment_url );
+		if ( ! $ticket ) {
+			return new WP_Error( 'ticket_failed', 'امکان ثبت تیکت در این لحظه وجود ندارد.', array( 'status' => 500 ) );
+		}
+
+		return rest_ensure_response(
+			array(
+				'ticket'  => $ticket,
+				'message' => 'تیکت پشتیبانی شما با موفقیت ثبت شد و کارشناسان ما به‌زودی پاسخ می‌دهند.',
+			)
+		);
+	}
+
+	public static function handle_get_ticket_detail( WP_REST_Request $request ) {
+		$user      = self::get_authed_user( $request );
+		$ticket_id = absint( $request->get_param( 'id' ) );
+		$is_admin  = user_can( $user, 'manage_options' );
+		$ticket    = KN_DB::get_ticket_detail( $ticket_id, $user->ID, $is_admin );
+
+		if ( ! $ticket ) {
+			return new WP_Error( 'ticket_not_found', 'تیکت مورد نظر یافت نشد.', array( 'status' => 404 ) );
+		}
+
+		return rest_ensure_response( array( 'ticket' => $ticket ) );
+	}
+
+	public static function handle_reply_ticket( WP_REST_Request $request ) {
+		$user      = self::get_authed_user( $request );
+		$ticket_id = absint( $request->get_param( 'id' ) );
+		$is_admin  = user_can( $user, 'manage_options' );
+		$existing  = KN_DB::get_ticket_detail( $ticket_id, $user->ID, $is_admin );
+
+		if ( ! $existing ) {
+			return new WP_Error( 'ticket_not_found', 'تیکت مورد نظر یافت نشد.', array( 'status' => 404 ) );
+		}
+
+		$params  = $request->get_json_params();
+		if ( ! is_array( $params ) ) {
+			$params = $request->get_params();
+		}
+		$message = isset( $params['message'] ) ? (string) $params['message'] : (string) $request->get_param( 'message' );
+		if ( empty( trim( $message ) ) ) {
+			return new WP_Error( 'empty_reply', 'متن پاسخ را وارد کنید.', array( 'status' => 400 ) );
+		}
+
+		$attachment_url = '';
+		$files          = $request->get_file_params();
+		if ( ! empty( $files['attachment'] ) && ! empty( $files['attachment']['tmp_name'] ) ) {
+			$saved = KN_Woo::save_compressed_user_image( $user, $files['attachment'], 'ticket' );
+			if ( is_wp_error( $saved ) ) {
+				return $saved;
+			}
+			$attachment_url = $saved['url'];
+		}
+
+		$ok = KN_DB::add_ticket_reply( $ticket_id, $user->ID, $is_admin, $message, $attachment_url );
+		if ( ! $ok ) {
+			return new WP_Error( 'reply_failed', 'خطا در ارسال پاسخ.', array( 'status' => 500 ) );
+		}
+
+		return rest_ensure_response(
+			array(
+				'ticket' => KN_DB::get_ticket_detail( $ticket_id, $user->ID, $is_admin ),
+			)
+		);
 	}
 
 	public static function handle_questions( WP_REST_Request $request ) {

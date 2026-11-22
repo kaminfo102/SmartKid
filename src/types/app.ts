@@ -8,13 +8,22 @@ export type ScreenId =
   | 'games'
   | 'simulator'
   | 'result'
+  | 'shop'
+  | 'tickets'
   | 'parents';
 
 export interface WordPressUser {
   id: number;
   username: string;
   email: string;
+  mobile?: string;
+  firstName?: string;
+  lastName?: string;
   displayName: string;
+  state?: string;
+  city?: string;
+  address1?: string;
+  postcode?: string;
   roles: string[];
   isAdmin: boolean;
 }
@@ -29,6 +38,114 @@ export interface WordPressConfig {
   siteName?: string;
   wooActive?: boolean;
   wooCurrency?: string;
+}
+
+export interface BacsAccount {
+  accountName: string;
+  accountNumber: string;
+  bankName: string;
+  iban: string;
+  sortCode?: string;
+}
+
+export interface PendingOrderInfo {
+  orderId: number;
+  orderNumber: string;
+  orderStatus: string;
+  receiptUrl?: string;
+  paymentNote?: string;
+  totalFormatted?: string;
+  dateCreated?: string;
+}
+
+export interface OrderLineItem {
+  productId: number;
+  name: string;
+  qty: number;
+  totalFormatted: string;
+  termDbId?: number;
+}
+
+export interface UserOrder {
+  id: number;
+  orderNumber: string;
+  status: string;
+  statusLabel: string;
+  pendingReview: boolean;
+  dateCreated: string;
+  totalAmount: number;
+  totalFormatted: string;
+  paymentMethod: string;
+  paymentMethodTitle: string;
+  items: OrderLineItem[];
+  receiptUrl?: string;
+  paymentNote?: string;
+  canUploadReceipt: boolean;
+}
+
+export interface StoreCategory {
+  id: number;
+  name: string;
+  slug: string;
+}
+
+export interface StoreProduct {
+  id: number;
+  name: string;
+  slug: string;
+  shortDescription: string;
+  description: string;
+  imageUrl: string;
+  priceAmount: number;
+  priceFormatted: string;
+  regularPriceAmount: number;
+  regularPriceFormatted: string;
+  salePriceAmount: number | null;
+  salePriceFormatted: string;
+  onSale: boolean;
+  discountPercent: number;
+  saleEndTimestamp: number | null;
+  inStock: boolean;
+  stockStatus: string;
+  categories: StoreCategory[];
+  featured: boolean;
+}
+
+export interface StoreCatalogResponse {
+  enabled: boolean;
+  settings: {
+    bannerTitle: string;
+    bannerSubtitle: string;
+  };
+  categories: StoreCategory[];
+  products: StoreProduct[];
+  bacsAccounts: BacsAccount[];
+  currency: string;
+}
+
+export interface TicketMessage {
+  id: number;
+  ticketId: number;
+  senderId: number;
+  senderName: string;
+  isAdmin: boolean;
+  message: string;
+  attachmentUrl?: string;
+  createdAt: string;
+}
+
+export interface SupportTicket {
+  id: number;
+  userId: number;
+  subject: string;
+  category: string;
+  status: 'open' | 'answered' | 'closed' | string;
+  statusLabel: string;
+  priority: string;
+  messageCount: number;
+  createdAt: string;
+  updatedAt: string;
+  messages?: TicketMessage[];
 }
 
 export type TermBiome = 'farm' | 'forest' | 'island' | 'space';
@@ -169,10 +286,18 @@ export interface TermDefinition {
   isFree: boolean;
   priceAmount: number;
   priceFormatted: string;
+  regularPriceAmount?: number;
+  regularPriceFormatted?: string;
+  salePriceAmount?: number | null;
+  salePriceFormatted?: string;
+  onSale?: boolean;
+  discountPercent?: number;
+  saleEndTimestamp?: number | null;
   wooProductId?: number;
   checkoutUrl?: string;
   unlocked: boolean;
   unlockedSource?: 'free' | 'woocommerce' | 'admin' | null;
+  pendingOrder?: PendingOrderInfo | null;
   stages: LessonDefinition[];
 }
 

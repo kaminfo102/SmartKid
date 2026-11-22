@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express, { type Request, type Response } from 'express';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
@@ -31,7 +32,7 @@ type VoiceTone = 'teach' | 'cheer' | 'encourage';
 
 const TONE_STYLES: Record<VoiceTone, string> = {
   teach:
-    'Warm, gentle, cheerful Iranian female kindergarten teacher speaking clear, friendly Persian (fa-IR) warmly and slowly for children ages 4 to 10.',
+    'Warm, gentle, cheerful Iranian female kindergarten teacher speaking clear, friendly Persian (fa-IR) warmly and slowly for children ages 4 to 15.',
   cheer:
     'Joyful, bright, encouraging Iranian female teacher speaking natural enthusiastic Persian (fa-IR) to celebrate a young child success.',
   encourage:
@@ -41,6 +42,25 @@ const TONE_STYLES: Record<VoiceTone, string> = {
 async function startServer() {
   const app = express();
   app.use(express.json({ limit: '16kb' }));
+
+  // Explicit binary download route for the custom WordPress plugin archive
+  app.get('/downloads/koodak-nabegheh-soroban.zip', (_req: Request, res: Response) => {
+    const candidates = [
+      path.resolve(__dirname, 'public', 'downloads', 'koodak-nabegheh-soroban.zip'),
+      path.resolve(__dirname, 'dist', 'downloads', 'koodak-nabegheh-soroban.zip'),
+    ];
+    const targetFile = candidates.find((p) => fs.existsSync(p));
+    if (!targetFile) {
+      res.status(404).send('Plugin archive not found');
+      return;
+    }
+    const stat = fs.statSync(targetFile);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="koodak-nabegheh-soroban.zip"');
+    res.setHeader('Content-Length', String(stat.size));
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    fs.createReadStream(targetFile).pipe(res);
+  });
 
   // Health endpoint
   app.get('/api/health', (_req: Request, res: Response) => {

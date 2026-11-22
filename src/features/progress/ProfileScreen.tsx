@@ -141,7 +141,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 سن: {formatNumber(newAge, digitMode)} سال
               </label>
               <div className="flex items-center gap-1.5 flex-wrap">
-                {[4, 5, 6, 7, 8, 9, 10].map((ageOpt) => (
+                {[4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map((ageOpt) => (
                   <button
                     key={ageOpt}
                     type="button"

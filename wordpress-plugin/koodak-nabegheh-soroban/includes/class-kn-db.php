@@ -40,6 +40,16 @@ class KN_DB {
 		return $wpdb->prefix . 'kn_entitlements';
 	}
 
+	public static function table_tickets() {
+		global $wpdb;
+		return $wpdb->prefix . 'kn_tickets';
+	}
+
+	public static function table_ticket_messages() {
+		global $wpdb;
+		return $wpdb->prefix . 'kn_ticket_messages';
+	}
+
 	/**
 	 * Create or upgrade custom database tables via dbDelta.
 	 */
@@ -49,13 +59,15 @@ class KN_DB {
 
 		$charset_collate = $wpdb->get_charset_collate();
 
-		$t_terms        = self::table_terms();
-		$t_stages       = self::table_stages();
-		$t_steps        = self::table_steps();
-		$t_questions    = self::table_questions();
-		$t_profiles     = self::table_profiles();
-		$t_tokens       = self::table_tokens();
-		$t_entitlements = self::table_entitlements();
+		$t_terms           = self::table_terms();
+		$t_stages          = self::table_stages();
+		$t_steps           = self::table_steps();
+		$t_questions       = self::table_questions();
+		$t_profiles        = self::table_profiles();
+		$t_tokens          = self::table_tokens();
+		$t_entitlements    = self::table_entitlements();
+		$t_tickets         = self::table_tickets();
+		$t_ticket_messages = self::table_ticket_messages();
 
 		$sql_terms = "CREATE TABLE {$t_terms} (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -192,6 +204,32 @@ class KN_DB {
 			KEY term_id (term_id)
 		) {$charset_collate};";
 
+		$sql_tickets = "CREATE TABLE {$t_tickets} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			user_id bigint(20) unsigned NOT NULL,
+			subject varchar(255) NOT NULL,
+			category varchar(60) NOT NULL DEFAULT 'general',
+			status varchar(30) NOT NULL DEFAULT 'open',
+			priority varchar(20) NOT NULL DEFAULT 'normal',
+			created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id),
+			KEY user_id (user_id),
+			KEY status (status)
+		) {$charset_collate};";
+
+		$sql_ticket_messages = "CREATE TABLE {$t_ticket_messages} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			ticket_id bigint(20) unsigned NOT NULL,
+			sender_id bigint(20) unsigned NOT NULL DEFAULT 0,
+			is_admin tinyint(1) NOT NULL DEFAULT 0,
+			message text NOT NULL,
+			attachment_url text NOT NULL,
+			created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id),
+			KEY ticket_id (ticket_id)
+		) {$charset_collate};";
+
 		dbDelta( $sql_terms );
 		dbDelta( $sql_stages );
 		dbDelta( $sql_steps );
@@ -199,6 +237,8 @@ class KN_DB {
 		dbDelta( $sql_profiles );
 		dbDelta( $sql_tokens );
 		dbDelta( $sql_entitlements );
+		dbDelta( $sql_tickets );
+		dbDelta( $sql_ticket_messages );
 	}
 
 	/**
@@ -538,6 +578,10 @@ class KN_DB {
 		}
 
 		$formatted_terms = array();
+		$pending_orders  = ( $user_id > 0 && class_exists( 'KN_Woo' ) && method_exists( 'KN_Woo', 'get_pending_term_order_map' ) )
+			? KN_Woo::get_pending_term_order_map( $user_id )
+			: array();
+
 		foreach ( $terms as $term ) {
 			$tid        = (int) $term['id'];
 			$is_free    = ! empty( $term['is_free'] );
@@ -548,9 +592,16 @@ class KN_DB {
 			$woo_meta = class_exists( 'KN_Woo' )
 				? KN_Woo::get_term_commerce_meta( $term, $user_id )
 				: array(
-					'priceAmount'    => (int) $term['price_amount'],
-					'priceFormatted' => number_format( (int) $term['price_amount'] ) . ' تومان',
-					'checkoutUrl'    => esc_url_raw( (string) $term['checkout_url_override'] ),
+					'priceAmount'           => (int) $term['price_amount'],
+					'priceFormatted'        => number_format( (int) $term['price_amount'] ) . ' تومان',
+					'regularPriceAmount'    => (int) $term['price_amount'],
+					'regularPriceFormatted' => number_format( (int) $term['price_amount'] ) . ' تومان',
+					'salePriceAmount'       => null,
+					'salePriceFormatted'    => '',
+					'onSale'                => false,
+					'discountPercent'       => 0,
+					'saleEndTimestamp'      => null,
+					'checkoutUrl'           => esc_url_raw( (string) $term['checkout_url_override'] ),
 				);
 
 			$term_stages = $stages_by_term[ $tid ] ?? array();
@@ -560,29 +611,267 @@ class KN_DB {
 			unset( $ts );
 
 			$formatted_terms[] = array(
-				'id'                  => $term['slug'],
-				'dbId'                => $tid,
-				'termNumber'          => (int) $term['term_number'],
-				'title'               => $term['title'],
-				'subtitle'            => $term['subtitle'],
-				'storyTitle'          => $term['story_title'],
-				'storyDescription'    => $term['story_description'],
-				'biome'               => $term['biome'],
-				'accentColor'         => $term['accent_color'],
-				'isFree'              => $is_free,
-				'priceAmount'         => (int) $woo_meta['priceAmount'],
-				'priceFormatted'      => $is_free ? 'رایگان' : $woo_meta['priceFormatted'],
-				'wooProductId'        => (int) $term['woo_product_id'],
-				'checkoutUrlOverride' => (string) $term['checkout_url_override'],
-				'checkoutUrl'         => $woo_meta['checkoutUrl'],
-				'isActive'            => (bool) $term['is_active'],
-				'unlocked'            => $unlocked,
-				'unlockedSource'      => $unlock_src,
-				'stages'              => $term_stages,
+				'id'                    => $term['slug'],
+				'dbId'                  => $tid,
+				'termNumber'            => (int) $term['term_number'],
+				'title'                 => $term['title'],
+				'subtitle'              => $term['subtitle'],
+				'storyTitle'            => $term['story_title'],
+				'storyDescription'      => $term['story_description'],
+				'biome'                 => $term['biome'],
+				'accentColor'           => $term['accent_color'],
+				'isFree'                => $is_free,
+				'priceAmount'           => (int) $woo_meta['priceAmount'],
+				'priceFormatted'        => $is_free ? 'رایگان' : $woo_meta['priceFormatted'],
+				'regularPriceAmount'    => $is_free ? 0 : (int) ( $woo_meta['regularPriceAmount'] ?? $woo_meta['priceAmount'] ),
+				'regularPriceFormatted' => $is_free ? 'رایگان' : ( $woo_meta['regularPriceFormatted'] ?? $woo_meta['priceFormatted'] ),
+				'salePriceAmount'       => $is_free ? null : ( $woo_meta['salePriceAmount'] ?? null ),
+				'salePriceFormatted'    => $is_free ? '' : ( $woo_meta['salePriceFormatted'] ?? '' ),
+				'onSale'                => ! $is_free && ! empty( $woo_meta['onSale'] ),
+				'discountPercent'       => $is_free ? 0 : (int) ( $woo_meta['discountPercent'] ?? 0 ),
+				'saleEndTimestamp'      => $is_free ? null : ( $woo_meta['saleEndTimestamp'] ?? null ),
+				'wooProductId'          => (int) $term['woo_product_id'],
+				'checkoutUrlOverride'   => (string) $term['checkout_url_override'],
+				'checkoutUrl'           => $woo_meta['checkoutUrl'],
+				'isActive'              => (bool) $term['is_active'],
+				'unlocked'              => $unlocked,
+				'unlockedSource'        => $unlock_src,
+				'pendingOrder'          => ( ! $unlocked && isset( $pending_orders[ $tid ] ) ) ? $pending_orders[ $tid ] : null,
+				'stages'                => $term_stages,
 			);
 		}
 
 		return $formatted_terms;
+	}
+
+	/**
+	 * Ticket & Support Helpers
+	 */
+	public static function create_ticket( $user_id, $subject, $category, $message, $attachment_url = '' ) {
+		global $wpdb;
+		$user_id  = absint( $user_id );
+		$subject  = sanitize_text_field( $subject );
+		$category = sanitize_key( $category ?: 'general' );
+		$message  = sanitize_textarea_field( $message );
+		$att_url  = esc_url_raw( (string) $attachment_url );
+
+		if ( $user_id <= 0 || empty( $subject ) || empty( $message ) ) {
+			return false;
+		}
+
+		$now = current_time( 'mysql' );
+		$ok  = $wpdb->insert(
+			self::table_tickets(),
+			array(
+				'user_id'    => $user_id,
+				'subject'    => $subject,
+				'category'   => $category,
+				'status'     => 'open',
+				'priority'   => 'normal',
+				'created_at' => $now,
+				'updated_at' => $now,
+			),
+			array( '%d', '%s', '%s', '%s', '%s', '%s', '%s' )
+		);
+
+		if ( ! $ok ) {
+			return false;
+		}
+
+		$ticket_id = (int) $wpdb->insert_id;
+		$wpdb->insert(
+			self::table_ticket_messages(),
+			array(
+				'ticket_id'      => $ticket_id,
+				'sender_id'      => $user_id,
+				'is_admin'       => 0,
+				'message'        => $message,
+				'attachment_url' => $att_url,
+				'created_at'     => $now,
+			),
+			array( '%d', '%d', '%d', '%s', '%s', '%s' )
+		);
+
+		return self::get_ticket_detail( $ticket_id, $user_id, false );
+	}
+
+	public static function get_tickets_for_user( $user_id ) {
+		global $wpdb;
+		$user_id = absint( $user_id );
+		if ( $user_id <= 0 ) {
+			return array();
+		}
+		$t_tickets = self::table_tickets();
+		$t_msgs    = self::table_ticket_messages();
+		$rows      = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT t.*, (SELECT COUNT(*) FROM {$t_msgs} m WHERE m.ticket_id = t.id) AS message_count FROM {$t_tickets} t WHERE t.user_id = %d ORDER BY t.updated_at DESC, t.id DESC",
+				$user_id
+			),
+			ARRAY_A
+		);
+
+		return array_map( array( __CLASS__, 'format_ticket_summary' ), is_array( $rows ) ? $rows : array() );
+	}
+
+	public static function get_all_tickets_admin( $status_filter = '' ) {
+		global $wpdb;
+		$t_tickets = self::table_tickets();
+		$t_msgs    = self::table_ticket_messages();
+
+		$where  = '';
+		$params = array();
+		if ( ! empty( $status_filter ) && in_array( $status_filter, array( 'open', 'answered', 'closed' ), true ) ) {
+			$where    = 'WHERE t.status = %s';
+			$params[] = $status_filter;
+		}
+
+		$sql = "SELECT t.*, u.user_login, u.display_name, u.user_email, (SELECT COUNT(*) FROM {$t_msgs} m WHERE m.ticket_id = t.id) AS message_count
+			FROM {$t_tickets} t
+			LEFT JOIN {$wpdb->users} u ON t.user_id = u.ID
+			{$where}
+			ORDER BY FIELD(t.status, 'open', 'answered', 'closed'), t.updated_at DESC, t.id DESC";
+
+		$rows = ! empty( $params )
+			? $wpdb->get_results( $wpdb->prepare( $sql, ...$params ), ARRAY_A )
+			: $wpdb->get_results( $sql, ARRAY_A );
+
+		return is_array( $rows ) ? $rows : array();
+	}
+
+	public static function format_ticket_summary( $row ) {
+		$status_labels = array(
+			'open'     => 'در انتظار پاسخ',
+			'answered' => 'پاسخ داده شده',
+			'closed'   => 'بسته شده',
+		);
+		$status = isset( $row['status'] ) ? $row['status'] : 'open';
+		return array(
+			'id'           => (int) $row['id'],
+			'userId'       => (int) $row['user_id'],
+			'subject'      => $row['subject'],
+			'category'     => $row['category'],
+			'status'       => $status,
+			'statusLabel'  => $status_labels[ $status ] ?? $status,
+			'priority'     => $row['priority'],
+			'messageCount' => isset( $row['message_count'] ) ? (int) $row['message_count'] : 0,
+			'createdAt'    => $row['created_at'],
+			'updatedAt'    => $row['updated_at'],
+		);
+	}
+
+	public static function get_ticket_detail( $ticket_id, $requester_id = 0, $is_admin = false ) {
+		global $wpdb;
+		$ticket_id    = absint( $ticket_id );
+		$requester_id = absint( $requester_id );
+
+		$t_tickets = self::table_tickets();
+		$t_msgs    = self::table_ticket_messages();
+
+		$row = $wpdb->get_row(
+			$wpdb->prepare( "SELECT * FROM {$t_tickets} WHERE id = %d", $ticket_id ),
+			ARRAY_A
+		);
+
+		if ( ! $row ) {
+			return null;
+		}
+		if ( ! $is_admin && (int) $row['user_id'] !== $requester_id ) {
+			return null;
+		}
+
+		$msgs = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT m.*, u.display_name AS sender_name FROM {$t_msgs} m LEFT JOIN {$wpdb->users} u ON m.sender_id = u.ID WHERE m.ticket_id = %d ORDER BY m.id ASC",
+				$ticket_id
+			),
+			ARRAY_A
+		);
+
+		$formatted_msgs = array();
+		if ( is_array( $msgs ) ) {
+			foreach ( $msgs as $m ) {
+				$formatted_msgs[] = array(
+					'id'            => (int) $m['id'],
+					'ticketId'      => (int) $m['ticket_id'],
+					'senderId'      => (int) $m['sender_id'],
+					'senderName'    => ! empty( $m['is_admin'] ) ? 'پشتیبانی کودک نابغه' : ( $m['sender_name'] ?: 'کاربر' ),
+					'isAdmin'       => (bool) $m['is_admin'],
+					'message'       => $m['message'],
+					'attachmentUrl' => $m['attachment_url'],
+					'createdAt'     => $m['created_at'],
+				);
+			}
+		}
+
+		$summary             = self::format_ticket_summary( $row );
+		$summary['messages'] = $formatted_msgs;
+		$summary['messageCount'] = count( $formatted_msgs );
+		return $summary;
+	}
+
+	public static function add_ticket_reply( $ticket_id, $sender_id, $is_admin, $message, $attachment_url = '', $new_status = '' ) {
+		global $wpdb;
+		$ticket_id = absint( $ticket_id );
+		$sender_id = absint( $sender_id );
+		$message   = sanitize_textarea_field( $message );
+		$att_url   = esc_url_raw( (string) $attachment_url );
+
+		if ( $ticket_id <= 0 || empty( $message ) ) {
+			return false;
+		}
+
+		$now = current_time( 'mysql' );
+		$ok  = $wpdb->insert(
+			self::table_ticket_messages(),
+			array(
+				'ticket_id'      => $ticket_id,
+				'sender_id'      => $sender_id,
+				'is_admin'       => $is_admin ? 1 : 0,
+				'message'        => $message,
+				'attachment_url' => $att_url,
+				'created_at'     => $now,
+			),
+			array( '%d', '%d', '%d', '%s', '%s', '%s' )
+		);
+
+		if ( ! $ok ) {
+			return false;
+		}
+
+		$status_to_set = in_array( $new_status, array( 'open', 'answered', 'closed' ), true )
+			? $new_status
+			: ( $is_admin ? 'answered' : 'open' );
+
+		$wpdb->update(
+			self::table_tickets(),
+			array(
+				'status'     => $status_to_set,
+				'updated_at' => $now,
+			),
+			array( 'id' => $ticket_id ),
+			array( '%s', '%s' ),
+			array( '%d' )
+		);
+
+		return true;
+	}
+
+	public static function update_ticket_status( $ticket_id, $status ) {
+		global $wpdb;
+		if ( ! in_array( $status, array( 'open', 'answered', 'closed' ), true ) ) {
+			return false;
+		}
+		return false !== $wpdb->update(
+			self::table_tickets(),
+			array(
+				'status'     => $status,
+				'updated_at' => current_time( 'mysql' ),
+			),
+			array( 'id' => absint( $ticket_id ) ),
+			array( '%s', '%s' ),
+			array( '%d' )
+		);
 	}
 
 	/**

@@ -10,8 +10,10 @@ import {
   ShoppingBag,
   Unlock,
   BookOpen,
+  Clock,
 } from 'lucide-react';
 import type {
+  BacsAccount,
   ChildProfile,
   DigitDisplayMode,
   LessonDefinition,
@@ -21,6 +23,7 @@ import type {
 import { formatNumber } from '../../lib/numbers';
 import { AudioButton } from '../../components/AudioButton';
 import { BuyCoffeeButton } from '../../components/BuyCoffeeButton';
+import { SaleCountdown } from '../../components/SaleCountdown';
 import { AdventureMap } from './AdventureMap';
 import { StoryCardMascot } from './StoryLandmarkSvg';
 import { TermPurchaseModal } from './TermPurchaseModal';
@@ -36,6 +39,7 @@ interface LessonMapProps {
   wpUrl?: string;
   wpUser?: WordPressUser | null;
   wpConnected?: boolean;
+  bacsAccounts?: BacsAccount[];
   isRefreshing?: boolean;
   onRefreshCurriculum?: () => void;
   onTermUnlocked?: (termDbId?: number) => void;
@@ -58,6 +62,7 @@ export const LessonMap: React.FC<LessonMapProps> = ({
   wpUrl = '',
   wpUser = null,
   wpConnected = false,
+  bacsAccounts = [],
   isRefreshing = false,
   onRefreshCurriculum,
   onTermUnlocked,
@@ -84,6 +89,7 @@ export const LessonMap: React.FC<LessonMapProps> = ({
       : 0;
 
   const isTermUnlocked = Boolean(activeTerm?.isFree || activeTerm?.unlocked);
+  const activePendingOrder = !isTermUnlocked ? activeTerm?.pendingOrder : null;
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FFF7EB] dark:bg-slate-950">
@@ -111,7 +117,7 @@ export const LessonMap: React.FC<LessonMapProps> = ({
 
             <div className="text-center min-w-0">
               <h1 className="text-lg sm:text-xl font-extrabold text-[#593400] dark:text-white truncate">
-                نقشه ماجراجویی و ترم‌ها
+                نقشه ماجراجویی و دوره‌ها
               </h1>
             </div>
 
@@ -130,6 +136,7 @@ export const LessonMap: React.FC<LessonMapProps> = ({
             {terms.map((term) => {
               const selected = term.id === activeTerm?.id;
               const unlocked = term.isFree || term.unlocked;
+              const isPending = !unlocked && Boolean(term.pendingOrder);
               return (
                 <button
                   key={term.id}
@@ -145,6 +152,8 @@ export const LessonMap: React.FC<LessonMapProps> = ({
                 >
                   {unlocked ? (
                     <Unlock className="w-3.5 h-3.5 shrink-0" />
+                  ) : isPending ? (
+                    <Clock className="w-3.5 h-3.5 shrink-0 text-amber-500" />
                   ) : (
                     <Lock className="w-3.5 h-3.5 shrink-0" />
                   )}
@@ -155,10 +164,20 @@ export const LessonMap: React.FC<LessonMapProps> = ({
                         ? 'text-amber-200'
                         : term.isFree
                         ? 'text-emerald-700 dark:text-emerald-400'
+                        : isPending
+                        ? 'text-amber-700 dark:text-amber-300'
                         : 'text-amber-700 dark:text-amber-300'
                     }`}
                   >
-                    ({term.isFree ? 'رایگان' : unlocked ? 'فعال' : term.priceFormatted})
+                    (
+                    {term.isFree
+                      ? 'رایگان'
+                      : unlocked
+                      ? 'فعال'
+                      : isPending
+                      ? 'در انتظار تایید'
+                      : term.priceFormatted}
+                    )
                   </span>
                 </button>
               );
@@ -196,13 +215,13 @@ export const LessonMap: React.FC<LessonMapProps> = ({
                   <button
                     type="button"
                     onClick={onRefreshCurriculum}
-                    aria-label="به‌روزرسانی ترم‌ها و مراحل از وردپرس"
+                    aria-label="به‌روزرسانی وضعیت دوره‌ها و مراحل"
                     className="min-h-[44px] px-3 rounded-2xl bg-[#FFF6EB] hover:bg-amber-100 dark:bg-slate-800 border-2 border-[#EFE0CE] border-b-4 border-b-[#DFC6A8] dark:border-slate-700 text-xs font-extrabold text-slate-800 dark:text-slate-200 inline-flex items-center gap-1.5 active:translate-y-0.5 transition-all"
                   >
                     <RefreshCw
                       className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`}
                     />
-                    <span>همگام‌سازی</span>
+                    <span>به‌روزرسانی</span>
                   </button>
                 )}
               </div>
@@ -236,19 +255,70 @@ export const LessonMap: React.FC<LessonMapProps> = ({
               </div>
             </div>
 
-            {/* Paid Term Unlock Callout if Locked */}
-            {!isTermUnlocked && (
+            {/* Paid Term Callout: Pending Admin Review vs. Purchase CTA */}
+            {!isTermUnlocked && activePendingOrder && (
+              <div className="rounded-2xl bg-gradient-to-l from-amber-50 to-amber-100/80 dark:from-amber-950/60 dark:to-slate-800 border-2 border-amber-300 dark:border-amber-700 p-3.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="w-11 h-11 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                    <Clock className="w-5 h-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="font-extrabold text-sm text-amber-950 dark:text-amber-200">
+                      سفارش در حال بررسی و تایید توسط مدیر می‌باشد
+                    </div>
+                    <div className="text-xs text-amber-800 dark:text-amber-300/90 mt-0.5">
+                      سفارش #{formatNumber(activePendingOrder.orderNumber, digitMode)} ثبت شده است. می‌توانید وضعیت سفارش را بررسی یا رسید واریزی را ارسال کنید.
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPurchasingTerm(activeTerm)}
+                  className="min-h-[46px] px-4 rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-xs sm:text-sm inline-flex items-center justify-center gap-2 shrink-0 shadow-sm transition-all"
+                >
+                  <Clock className="w-4 h-4" />
+                  <span>مشاهده وضعیت / ارسال رسید واریزی</span>
+                </button>
+              </div>
+            )}
+
+            {!isTermUnlocked && !activePendingOrder && (
               <div className="rounded-2xl bg-gradient-to-l from-[#FFF4D6] to-[#FFE7B3] dark:from-amber-950/60 dark:to-slate-800 border-2 border-[#F5C55B] p-3.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <span className="w-11 h-11 rounded-2xl bg-[#F59E0B] text-white flex items-center justify-center shrink-0 shadow-sm">
                     <Lock className="w-5 h-5" />
                   </span>
-                  <div className="min-w-0">
-                    <div className="font-extrabold text-sm text-[#5C3A00] dark:text-amber-200">
-                      این نقشه داستانی نیازمند تهیه ترم است ({activeTerm.priceFormatted})
+                  <div className="min-w-0 space-y-1">
+                    <div className="font-extrabold text-sm text-[#5C3A00] dark:text-amber-200 flex items-center gap-2 flex-wrap">
+                      <span>این نقشه داستانی نیازمند تهیه دوره است</span>
+                      {activeTerm.onSale && activeTerm.regularPriceFormatted ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="text-xs text-amber-800/70 dark:text-amber-300/70 line-through">
+                            {activeTerm.regularPriceFormatted}
+                          </span>
+                          <span className="text-emerald-800 dark:text-emerald-300">
+                            ({activeTerm.priceFormatted})
+                          </span>
+                          {activeTerm.discountPercent && activeTerm.discountPercent > 0 ? (
+                            <span className="px-2 py-0.5 rounded-lg bg-rose-600 text-white text-[10px]">
+                              {formatNumber(activeTerm.discountPercent, digitMode)}٪ تخفیف
+                            </span>
+                          ) : null}
+                        </span>
+                      ) : (
+                        <span>({activeTerm.priceFormatted})</span>
+                      )}
                     </div>
-                    <div className="text-xs text-[#7A4E00] dark:text-amber-300/90 mt-0.5">
-                      ایستگاه‌های داستان را ببینید و با پرداخت از طریق ووکامرس وردپرس کل ترم را باز کنید.
+                    {activeTerm.onSale && (
+                      <div>
+                        <SaleCountdown
+                          saleEndTimestamp={activeTerm.saleEndTimestamp}
+                          digitMode={digitMode}
+                        />
+                      </div>
+                    )}
+                    <div className="text-xs text-[#7A4E00] dark:text-amber-300/90">
+                      ایستگاه‌های داستان را ببینید و با پرداخت آنلاین یا کارت به کارت کل این دوره را باز کنید.
                     </div>
                   </div>
                 </div>
@@ -258,7 +328,7 @@ export const LessonMap: React.FC<LessonMapProps> = ({
                   className="min-h-[46px] px-4 rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-xs sm:text-sm inline-flex items-center justify-center gap-2 shrink-0 shadow-sm transition-all"
                 >
                   <ShoppingBag className="w-4 h-4" />
-                  <span>خرید و فعال‌سازی با ووکامرس</span>
+                  <span>خرید و فعال‌سازی دوره</span>
                 </button>
               </div>
             )}
@@ -348,12 +418,14 @@ export const LessonMap: React.FC<LessonMapProps> = ({
           term={purchasingTerm}
           wpUrl={wpUrl}
           wpUser={wpUser}
+          bacsAccounts={bacsAccounts}
           digitMode={digitMode}
           onClose={() => setPurchasingTerm(null)}
           onOpenAuth={onOpenAuth}
           onUnlocked={(termDbId) => {
             onTermUnlocked?.(termDbId);
           }}
+          onOrderPending={onRefreshCurriculum}
         />
       )}
     </div>
