@@ -29,11 +29,14 @@ import {
 } from './lib/rewards';
 import {
   createProfileInWordPress,
+  detectSameOriginWordPressUrl,
   fetchWordPressCurriculum,
   fetchWordPressQuestions,
   getSavedWordPressUrl,
   hasMemoryBearerToken,
+  restoreWordPressSession,
   setMemoryBearerToken,
+  setOnUnauthorizedSession,
   syncProfileToWordPress,
   syncSettingsToWordPress,
   type WordPressAuthResponse,
@@ -161,11 +164,56 @@ export default function App() {
     [wpUrl]
   );
 
-  // Auto-load WordPress dynamic terms & questions on boot if WP URL is configured
+  // Auto-detect same-origin WordPress if VITE_WORDPRESS_URL was not set at build time
   useEffect(() => {
-    if (wpUrl) {
-      void refreshFromWordPress(wpUrl);
-    }
+    if (wpUrl) return;
+    let cancelled = false;
+    void detectSameOriginWordPressUrl().then((detected) => {
+      if (!cancelled && detected) {
+        setWpUrl(detected);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [wpUrl]);
+
+  // Auto-restore authenticated WordPress session (via HttpOnly cookie) + load dynamic terms on boot
+  useEffect(() => {
+    if (!wpUrl) return;
+    let cancelled = false;
+    void (async () => {
+      const restored = await restoreWordPressSession(wpUrl);
+      if (cancelled) return;
+      if (restored) {
+        const normalizedProfiles =
+          restored.profiles.length > 0 ? restored.profiles.map(normalizeChildProfile) : [];
+        setWpUser(restored.user);
+        setWpConnected(true);
+        setData((prev) => ({
+          profiles: normalizedProfiles.length > 0 ? normalizedProfiles : prev.profiles,
+          activeProfileId:
+            normalizedProfiles.length > 0 ? normalizedProfiles[0].id : prev.activeProfileId,
+          settings: restored.settings
+            ? { ...prev.settings, ...restored.settings }
+            : prev.settings,
+        }));
+        if (Array.isArray(restored.unlockedTermIds) && restored.unlockedTermIds.length > 0) {
+          const unlockedSet = new Set(restored.unlockedTermIds);
+          setTerms((prev) =>
+            prev.map((t) =>
+              t.isFree || (t.dbId && unlockedSet.has(t.dbId))
+                ? { ...t, unlocked: true }
+                : t
+            )
+          );
+        }
+      }
+      await refreshFromWordPress(wpUrl);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [wpUrl, refreshFromWordPress]);
 
   // Persist to localStorage whenever data changes
@@ -211,7 +259,7 @@ export default function App() {
         const updatedActive = updatedProfiles.find(
           (p) => p.id === prev.activeProfileId
         );
-        if (wpUrl && hasMemoryBearerToken() && updatedActive) {
+        if (wpUrl && (hasMemoryBearerToken() || Boolean(wpUser)) && updatedActive) {
           void syncProfileToWordPress(wpUrl, updatedActive).catch(() => {});
         }
         return {
@@ -222,12 +270,12 @@ export default function App() {
     }, 60000);
 
     return () => window.clearInterval(timer);
-  }, [screen, wpUrl]);
+  }, [screen, wpUrl, wpUser]);
 
   const updateSettings = (patch: Partial<AppSettings>) => {
     setData((prev) => {
       const nextSettings = { ...prev.settings, ...patch };
-      if (wpUrl && hasMemoryBearerToken()) {
+      if (wpUrl && (hasMemoryBearerToken() || Boolean(wpUser))) {
         void syncSettingsToWordPress(wpUrl, nextSettings).catch(() => {});
       }
       return {
@@ -245,7 +293,7 @@ export default function App() {
       const updatedActive = updatedProfiles.find(
         (p) => p.id === prev.activeProfileId
       );
-      if (wpUrl && hasMemoryBearerToken() && updatedActive) {
+      if (wpUrl && (hasMemoryBearerToken() || Boolean(wpUser)) && updatedActive) {
         void syncProfileToWordPress(wpUrl, updatedActive).catch(() => {});
       }
       return {
@@ -414,7 +462,7 @@ export default function App() {
     void refreshFromWordPress();
   };
 
-  const handleWordPressLogout = () => {
+  const handleWordPressLogout = useCallback(() => {
     setMemoryBearerToken(null);
     setWpUser(null);
     setTerms((prev) =>
@@ -425,7 +473,14 @@ export default function App() {
         pendingOrder: null,
       }))
     );
-  };
+  }, []);
+
+  useEffect(() => {
+    setOnUnauthorizedSession(() => {
+      handleWordPressLogout();
+    });
+    return () => setOnUnauthorizedSession(null);
+  }, [handleWordPressLogout]);
 
   const handleTermUnlocked = useCallback(
     (termDbId?: number) => {
@@ -582,7 +637,7 @@ export default function App() {
               profiles: [...prev.profiles, created],
               activeProfileId: created.id,
             }));
-            if (wpUrl && hasMemoryBearerToken()) {
+            if (wpUrl && (hasMemoryBearerToken() || Boolean(wpUser))) {
               void createProfileInWordPress(wpUrl, created).catch(() => {});
             }
           }}
@@ -736,6 +791,7 @@ export default function App() {
             wpUser={wpUser}
             wpConnected={wpConnected}
             onOpenWordPressAuth={() => setScreen('auth')}
+            onOpenTickets={() => setScreen('tickets')}
             onRefreshWordPress={() => void refreshFromWordPress()}
             onUpdateSettings={updateSettings}
             onClearAllData={() => {

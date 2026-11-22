@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import {
   Check,
+  ChevronDown,
+  ChevronUp,
   Coins,
   Flame,
   Gift,
@@ -18,6 +20,7 @@ import {
 interface DailyBonusCardProps {
   profile: ChildProfile;
   digitMode: DigitDisplayMode;
+  compact?: boolean;
   onClaimBonus: () => {
     awardedPoints: number;
     newBadgeTitles: string[];
@@ -28,9 +31,11 @@ interface DailyBonusCardProps {
 export const DailyBonusCard: React.FC<DailyBonusCardProps> = ({
   profile,
   digitMode,
+  compact = false,
   onClaimBonus,
   onOpenShop,
 }) => {
+  const [expanded, setExpanded] = useState(!compact);
   const [justClaimedInfo, setJustClaimedInfo] = useState<{
     points: number;
     badgeTitles: string[];
@@ -48,6 +53,75 @@ export const DailyBonusCard: React.FC<DailyBonusCardProps> = ({
       });
     }
   };
+
+  if (compact && !expanded) {
+    return (
+      <section
+        aria-label="پاداش حضور روزانه"
+        className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_10px_24px_-10px_rgba(170,104,40,0.18)] p-3.5 sm:p-4 space-y-2.5"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-11 h-11 rounded-2xl bg-[#FFF3D6] dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 flex items-center justify-center shrink-0">
+              <Gift className="w-6 h-6 text-[#EA8800]" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-extrabold text-slate-900 dark:text-white truncate">
+                پاداش روزانه امروز
+              </div>
+              <div className="text-xs font-bold text-slate-600 dark:text-slate-400 flex items-center gap-2 flex-wrap tabular-nums">
+                <span className="text-orange-600 dark:text-orange-400">
+                  {formatNumber(preview.currentStreak, digitMode)} روز پشت‌سرهم
+                </span>
+                <span aria-hidden="true">·</span>
+                <span className="text-amber-700 dark:text-amber-300">
+                  {formatNumber(preview.rewardPointsBalance, digitMode)} امتیاز
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {preview.canClaimToday ? (
+              <button
+                type="button"
+                onClick={handleClaim}
+                className="flex-1 sm:flex-initial min-h-[44px] px-4 rounded-2xl bg-[#FF9500] hover:bg-[#EA8800] border-b-4 border-[#C56E00] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-xs sm:text-sm inline-flex items-center justify-center gap-1.5 shadow-xs transition-all"
+              >
+                <Gift className="w-4 h-4" />
+                <span className="tabular-nums">
+                  دریافت +{formatNumber(preview.todayRewardPoints, digitMode)}
+                </span>
+              </button>
+            ) : (
+              <span className="min-h-[40px] px-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 font-extrabold text-xs inline-flex items-center gap-1">
+                <Check className="w-4 h-4" />
+                <span>امروز دریافت شد</span>
+              </span>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              aria-label="نمایش تقویم ۷ روزه پاداش"
+              className="min-h-[44px] min-w-[44px] px-2.5 rounded-2xl bg-[#FFF6EB] hover:bg-amber-100 dark:bg-slate-800 border border-[#EEDCC5] dark:border-slate-700 text-[#783F1D] dark:text-slate-200 inline-flex items-center justify-center"
+            >
+              <ChevronDown className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {justClaimedInfo && (
+          <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 p-2.5 text-xs font-extrabold text-emerald-900 dark:text-emerald-200">
+            آفرین! +{formatNumber(justClaimedInfo.points, digitMode)} امتیاز جایزه به حسابت اضافه شد
+            {justClaimedInfo.badgeTitles.length > 0
+              ? ` و مدال «${justClaimedInfo.badgeTitles.join('، ')}» باز شد!`
+              : '!'}
+          </div>
+        )}
+      </section>
+    );
+  }
 
   return (
     <section
@@ -76,14 +150,27 @@ export const DailyBonusCard: React.FC<DailyBonusCardProps> = ({
           </h2>
         </div>
 
-        <button
-          type="button"
-          onClick={onOpenShop}
-          className="min-h-[42px] px-3.5 py-2 rounded-2xl bg-[#FFF6EB] hover:bg-amber-100 dark:bg-slate-800 border border-[#EEDCC5] dark:border-slate-700 text-xs font-extrabold text-[#783F1D] dark:text-amber-200 inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 transition-colors"
-        >
-          <ShoppingBag className="w-4 h-4 text-[#5472EB]" />
-          <span>خرج امتیاز در فروشگاه</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={onOpenShop}
+            className="min-h-[42px] px-3.5 py-2 rounded-2xl bg-[#FFF6EB] hover:bg-amber-100 dark:bg-slate-800 border border-[#EEDCC5] dark:border-slate-700 text-xs font-extrabold text-[#783F1D] dark:text-amber-200 inline-flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors"
+          >
+            <ShoppingBag className="w-4 h-4 text-[#5472EB]" />
+            <span>خرج امتیاز در فروشگاه</span>
+          </button>
+
+          {compact && (
+            <button
+              type="button"
+              onClick={() => setExpanded(false)}
+              aria-label="بستن جزئیات ۷ روزه"
+              className="min-h-[42px] min-w-[42px] rounded-2xl bg-[#FFF6EB] hover:bg-amber-100 dark:bg-slate-800 border border-[#EEDCC5] dark:border-slate-700 text-[#783F1D] dark:text-slate-200 inline-flex items-center justify-center"
+            >
+              <ChevronUp className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 7-Day Reward Ladder */}

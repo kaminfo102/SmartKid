@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Cloud,
   Download,
+  Headphones,
   RefreshCw,
 } from 'lucide-react';
 import type {
@@ -31,6 +32,7 @@ interface SettingsPanelProps {
   wpUser?: WordPressUser | null;
   wpConnected?: boolean;
   onOpenWordPressAuth: () => void;
+  onOpenTickets?: () => void;
   onRefreshWordPress?: () => void;
   onUpdateSettings: (patch: Partial<AppSettings>) => void;
   onClearAllData: () => void;
@@ -45,6 +47,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   wpUser = null,
   wpConnected = false,
   onOpenWordPressAuth,
+  onOpenTickets,
   onRefreshWordPress,
   onUpdateSettings,
   onClearAllData,
@@ -159,6 +162,33 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 </a>
               </div>
             </div>
+          </section>
+        )}
+
+        {/* Parent Support & Tickets Shortcut */}
+        {onOpenTickets && (
+          <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] p-4 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3 min-w-0">
+              <KidIconTile color="sky" size="md">
+                <Headphones className="w-5 h-5" />
+              </KidIconTile>
+              <div>
+                <h2 className="font-extrabold text-sm text-slate-900 dark:text-white">
+                  پشتیبانی و ارسال تیکت
+                </h2>
+                <p className="text-xs text-slate-600 dark:text-slate-400">
+                  پیگیری سفارش‌ها، راهنمایی دوره‌ها و ارتباط مستقیم با تیم پشتیبانی
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onOpenTickets}
+              className="min-h-[44px] px-4 rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] text-white font-extrabold text-xs inline-flex items-center gap-1.5"
+            >
+              <Headphones className="w-4 h-4" />
+              <span>باز کردن پشتیبانی</span>
+            </button>
           </section>
         )}
 

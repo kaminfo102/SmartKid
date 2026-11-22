@@ -5,6 +5,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class KN_Auth {
 
+	const SESSION_COOKIE_NAME = 'kn_session';
+
 	/**
 	 * Return signing key derived from WordPress auth salt (never hardcoded).
 	 */
@@ -17,7 +19,73 @@ class KN_Auth {
 	}
 
 	/**
-	 * Issue a signed Bearer token and persist its SHA-256 hash in wp_kn_tokens.
+	 * Detect HTTPS cleanly behind reverse proxies / Cloudflare / cPanel.
+	 */
+	private static function is_https_request() {
+		if ( is_ssl() ) {
+			return true;
+		}
+		if ( ! empty( $_SERVER['HTTP_X_FORWARDED_PROTO'] ) && stripos( (string) $_SERVER['HTTP_X_FORWARDED_PROTO'], 'https' ) !== false ) {
+			return true;
+		}
+		if ( ! empty( $_SERVER['HTTP_FRONT_END_HTTPS'] ) && strtolower( (string) $_SERVER['HTTP_FRONT_END_HTTPS'] ) === 'on' ) {
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Set an HttpOnly session cookie so page refreshes keep the user signed in without localStorage tokens.
+	 */
+	public static function set_session_cookie( $token, $expires_timestamp ) {
+		if ( headers_sent() ) {
+			return;
+		}
+		$max_age  = max( 60, (int) $expires_timestamp - time() );
+		$expires  = gmdate( 'D, d M Y H:i:s T', (int) $expires_timestamp );
+		$encoded  = rawurlencode( (string) $token );
+		$is_https = self::is_https_request();
+
+		$cookie = self::SESSION_COOKIE_NAME . '=' . $encoded
+			. '; Expires=' . $expires
+			. '; Max-Age=' . $max_age
+			. '; Path=/'
+			. '; HttpOnly';
+
+		if ( $is_https ) {
+			$cookie .= '; Secure; SameSite=None; Partitioned';
+		} else {
+			$cookie .= '; SameSite=Lax';
+		}
+
+		header( 'Set-Cookie: ' . $cookie, false );
+	}
+
+	/**
+	 * Clear the HttpOnly session cookie on logout or invalid session.
+	 */
+	public static function clear_session_cookie() {
+		if ( headers_sent() ) {
+			return;
+		}
+		$is_https = self::is_https_request();
+		$cookie   = self::SESSION_COOKIE_NAME . '='
+			. '; Expires=Thu, 01 Jan 1970 00:00:00 GMT'
+			. '; Max-Age=0'
+			. '; Path=/'
+			. '; HttpOnly';
+
+		if ( $is_https ) {
+			$cookie .= '; Secure; SameSite=None; Partitioned';
+		} else {
+			$cookie .= '; SameSite=Lax';
+		}
+
+		header( 'Set-Cookie: ' . $cookie, false );
+	}
+
+	/**
+	 * Issue a signed 3-segment HMAC-SHA256 token and persist its SHA-256 hash in wp_kn_tokens.
 	 */
 	public static function issue_token( $user_id, $device_label = '' ) {
 		global $wpdb;
@@ -27,15 +95,22 @@ class KN_Auth {
 		$exp      = time() + ( $ttl_days * DAY_IN_SECONDS );
 		$jti      = wp_generate_password( 24, false, false );
 
+		$header = array(
+			'alg' => 'HS256',
+			'typ' => 'JWT',
+		);
+
 		$payload = array(
 			'uid' => absint( $user_id ),
 			'exp' => $exp,
 			'jti' => $jti,
 		);
 
+		$encoded_header  = self::base64url_encode( wp_json_encode( $header ) );
 		$encoded_payload = self::base64url_encode( wp_json_encode( $payload ) );
-		$signature       = hash_hmac( 'sha256', $encoded_payload, self::get_signing_secret() );
-		$token           = $encoded_payload . '.' . $signature;
+		$signing_input   = $encoded_header . '.' . $encoded_payload;
+		$signature       = self::base64url_encode( hash_hmac( 'sha256', $signing_input, self::get_signing_secret(), true ) );
+		$token           = $signing_input . '.' . $signature;
 
 		$wpdb->insert(
 			KN_DB::table_tokens(),
@@ -56,9 +131,28 @@ class KN_Auth {
 	}
 
 	/**
-	 * Extract Bearer token from standard or Apache/CGI headers.
+	 * Extract token from X-KN-Auth, Authorization: Bearer, or HttpOnly kn_session cookie.
 	 */
-	public static function extract_bearer_token( WP_REST_Request $request ) {
+	public static function extract_token_with_source( WP_REST_Request $request ) {
+		// 1) Custom X-KN-Auth header (avoids third-party WP JWT plugin collisions & Apache auth stripping)
+		$kn_header = $request->get_header( 'x-kn-auth' );
+		if ( empty( $kn_header ) && ! empty( $_SERVER['HTTP_X_KN_AUTH'] ) ) {
+			$kn_header = sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_KN_AUTH'] ) );
+		}
+		if ( ! empty( $kn_header ) ) {
+			$raw = trim( (string) $kn_header );
+			if ( stripos( $raw, 'Bearer ' ) === 0 ) {
+				$raw = trim( substr( $raw, 7 ) );
+			}
+			if ( ! empty( $raw ) ) {
+				return array(
+					'token'  => $raw,
+					'source' => 'header',
+				);
+			}
+		}
+
+		// 2) Standard Authorization: Bearer header
 		$header = $request->get_header( 'authorization' );
 		if ( empty( $header ) && ! empty( $_SERVER['HTTP_AUTHORIZATION'] ) ) {
 			$header = sanitize_text_field( wp_unslash( $_SERVER['HTTP_AUTHORIZATION'] ) );
@@ -76,34 +170,84 @@ class KN_Auth {
 			}
 		}
 
-		if ( empty( $header ) || stripos( $header, 'Bearer ' ) !== 0 ) {
-			return null;
+		if ( ! empty( $header ) && stripos( $header, 'Bearer ' ) === 0 ) {
+			$raw = trim( substr( $header, 7 ) );
+			if ( ! empty( $raw ) ) {
+				return array(
+					'token'  => $raw,
+					'source' => 'header',
+				);
+			}
 		}
 
-		return trim( substr( $header, 7 ) );
+		// 3) HttpOnly session cookie fallback (survives page refreshes securely)
+		if ( ! empty( $_COOKIE[ self::SESSION_COOKIE_NAME ] ) ) {
+			$cookie_val = sanitize_text_field( wp_unslash( $_COOKIE[ self::SESSION_COOKIE_NAME ] ) );
+			if ( ! empty( $cookie_val ) ) {
+				return array(
+					'token'  => trim( $cookie_val ),
+					'source' => 'cookie',
+				);
+			}
+		}
+
+		return array(
+			'token'  => null,
+			'source' => null,
+		);
 	}
 
 	/**
-	 * Verify Bearer token signature, expiration, and non-revoked status in DB.
+	 * Extract Bearer token string (compatibility helper).
+	 */
+	public static function extract_bearer_token( WP_REST_Request $request ) {
+		$found = self::extract_token_with_source( $request );
+		return $found['token'];
+	}
+
+	/**
+	 * Verify token signature (supports 3-segment HS256 JWT and legacy 2-segment format),
+	 * expiration, CSRF custom header on cookie mutations, and non-revoked status in DB.
 	 * Returns WP_User or null.
 	 */
 	public static function authenticate_request( WP_REST_Request $request ) {
 		global $wpdb;
 
-		$token = self::extract_bearer_token( $request );
+		$found  = self::extract_token_with_source( $request );
+		$token  = $found['token'];
+		$source = $found['source'];
 		if ( empty( $token ) ) {
 			return null;
 		}
 
-		$parts = explode( '.', $token );
-		if ( count( $parts ) !== 2 ) {
-			return null;
+		// Require custom X-KN-App header when state-changing calls authenticate via HttpOnly cookie (CSRF protection)
+		if ( $source === 'cookie' && in_array( strtoupper( $request->get_method() ), array( 'POST', 'PUT', 'PATCH', 'DELETE' ), true ) ) {
+			$app_header = $request->get_header( 'x-kn-app' );
+			if ( empty( $app_header ) && ! empty( $_SERVER['HTTP_X_KN_APP'] ) ) {
+				$app_header = sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_KN_APP'] ) );
+			}
+			if ( empty( $app_header ) ) {
+				return null;
+			}
 		}
 
-		list( $encoded_payload, $provided_sig ) = $parts;
-		$expected_sig = hash_hmac( 'sha256', $encoded_payload, self::get_signing_secret() );
+		$parts           = explode( '.', $token );
+		$encoded_payload = '';
 
-		if ( ! hash_equals( $expected_sig, $provided_sig ) ) {
+		if ( count( $parts ) === 3 ) {
+			list( $encoded_header, $encoded_payload, $provided_sig ) = $parts;
+			$signing_input = $encoded_header . '.' . $encoded_payload;
+			$expected_sig  = self::base64url_encode( hash_hmac( 'sha256', $signing_input, self::get_signing_secret(), true ) );
+			if ( ! hash_equals( $expected_sig, $provided_sig ) ) {
+				return null;
+			}
+		} elseif ( count( $parts ) === 2 ) {
+			list( $encoded_payload, $provided_sig ) = $parts;
+			$expected_sig = hash_hmac( 'sha256', $encoded_payload, self::get_signing_secret() );
+			if ( ! hash_equals( $expected_sig, $provided_sig ) ) {
+				return null;
+			}
+		} else {
 			return null;
 		}
 
@@ -139,25 +283,38 @@ class KN_Auth {
 			return null;
 		}
 
+		$request->set_param( '_kn_auth_source', $source );
 		return $user;
 	}
 
 	/**
-	 * Revoke the active Bearer token (logout).
+	 * Revoke the active token(s) and clear HttpOnly session cookie (logout).
 	 */
 	public static function revoke_request_token( WP_REST_Request $request ) {
 		global $wpdb;
-		$token = self::extract_bearer_token( $request );
-		if ( empty( $token ) ) {
-			return false;
+		$found = self::extract_token_with_source( $request );
+		if ( ! empty( $found['token'] ) ) {
+			$wpdb->update(
+				KN_DB::table_tokens(),
+				array( 'revoked' => 1 ),
+				array( 'token_hash' => hash( 'sha256', $found['token'] ) ),
+				array( '%d' ),
+				array( '%s' )
+			);
 		}
-		$wpdb->update(
-			KN_DB::table_tokens(),
-			array( 'revoked' => 1 ),
-			array( 'token_hash' => hash( 'sha256', $token ) ),
-			array( '%d' ),
-			array( '%s' )
-		);
+		if ( ! empty( $_COOKIE[ self::SESSION_COOKIE_NAME ] ) ) {
+			$cookie_tok = trim( sanitize_text_field( wp_unslash( $_COOKIE[ self::SESSION_COOKIE_NAME ] ) ) );
+			if ( ! empty( $cookie_tok ) ) {
+				$wpdb->update(
+					KN_DB::table_tokens(),
+					array( 'revoked' => 1 ),
+					array( 'token_hash' => hash( 'sha256', $cookie_tok ) ),
+					array( '%d' ),
+					array( '%s' )
+				);
+			}
+		}
+		self::clear_session_cookie();
 		return true;
 	}
 

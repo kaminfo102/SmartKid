@@ -8,7 +8,6 @@ import {
   Globe,
   Headphones,
   Loader2,
-  Lock,
   LogIn,
   LogOut,
   Package,
@@ -84,7 +83,6 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
   onBack,
 }) => {
   const [siteInput, setSiteInput] = useState(wpUrl);
-  const [showAdminSetup, setShowAdminSetup] = useState(!wpUrl);
 
   // Logged-out auth tabs
   const [authTab, setAuthTab] = useState<'login' | 'register'>('login');
@@ -193,6 +191,10 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
 
   const handleTestAndSaveUrl = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!wpUser?.isAdmin) {
+      setErrorMsg('تغییر آدرس سرور فقط برای مدیر مجاز است.');
+      return;
+    }
     setErrorMsg(null);
     setStatusMsg(null);
     const saved = saveWordPressUrl(siteInput);
@@ -211,7 +213,6 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
           digitMode
         )} مرحله و ${formatNumber(health.questionsCount, digitMode)} سؤال بارگذاری شد)`
       );
-      setShowAdminSetup(false);
     } catch (err) {
       setErrorMsg(
         err instanceof Error ? err.message : 'ارتباط با سرور برقرار نشد.'
@@ -225,10 +226,9 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
     e.preventDefault();
     setErrorMsg(null);
     setStatusMsg(null);
-    const activeUrl = saveWordPressUrl(siteInput || wpUrl);
+    const activeUrl = wpUrl;
     if (!activeUrl) {
-      setShowAdminSetup(true);
-      setErrorMsg('سرور برنامه هنوز تنظیم نشده است. مدیر سایت باید آدرس سرور را وارد کند.');
+      setErrorMsg('سرویس ورود هنوز توسط مدیر سیستم پیکربندی نشده است.');
       return;
     }
     setLoading(true);
@@ -266,10 +266,9 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
       return;
     }
 
-    const activeUrl = saveWordPressUrl(siteInput || wpUrl);
+    const activeUrl = wpUrl;
     if (!activeUrl) {
-      setShowAdminSetup(true);
-      setErrorMsg('سرور برنامه هنوز تنظیم نشده است. مدیر سایت باید آدرس سرور را وارد کند.');
+      setErrorMsg('سرویس ثبت‌نام هنوز توسط مدیر سیستم پیکربندی نشده است.');
       return;
     }
 
@@ -920,7 +919,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                     </KidIconTile>
                     <div>
                       <h2 className="font-extrabold text-sm sm:text-base text-[#35207A] dark:text-white">
-                        بسته افزونه مدیریت سرور (نسخه ۲.۳.۰)
+                        بسته افزونه مدیریت سرور (نسخه ۲.۵.۰)
                       </h2>
                       <p className="text-xs text-[#59449E] dark:text-slate-300">
                         دارای مدیریت فروشگاه، تایید فیش‌های بانکی، تیکتینگ پشتیبانی، مدیریت فایل‌های صوتی، تخفیف‌ها و جاده مراحل
@@ -1280,56 +1279,6 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                 </form>
               )}
             </section>
-
-            {/* Discreet Admin Setup Accordion (hidden unless unconfigured or explicitly toggled by admin) */}
-            <div className="text-center pt-2">
-              {!showAdminSetup ? (
-                <button
-                  type="button"
-                  onClick={() => setShowAdminSetup(true)}
-                  className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#8B623D] dark:text-slate-500 hover:text-slate-800"
-                >
-                  <Lock className="w-3 h-3" />
-                  <span>تنظیمات اتصال سرور (ویژه مدیر سیستم)</span>
-                </button>
-              ) : (
-                <section className="rounded-2xl bg-white/95 dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 p-4 space-y-3 text-right">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-xs font-extrabold text-[#3B2618] dark:text-white flex items-center gap-1.5">
-                      <Shield className="w-4 h-4 text-[#8E63EB]" />
-                      <span>پیکربندی آدرس سرور (ویژه مدیر)</span>
-                    </div>
-                    {wpUrl && (
-                      <button
-                        type="button"
-                        onClick={() => setShowAdminSetup(false)}
-                        className="text-[11px] font-bold text-slate-500"
-                      >
-                        بستن
-                      </button>
-                    )}
-                  </div>
-                  <form onSubmit={handleTestAndSaveUrl} className="flex flex-col sm:flex-row gap-2">
-                    <input
-                      type="url"
-                      dir="ltr"
-                      value={siteInput}
-                      onChange={(e) => setSiteInput(e.target.value)}
-                      placeholder="https://yoursite.com"
-                      className="flex-1 min-h-[44px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
-                    />
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="min-h-[44px] px-4 rounded-2xl bg-[#5472EB] text-white font-extrabold text-xs inline-flex items-center justify-center gap-1.5"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                      <span>ذخیره و اتصال</span>
-                    </button>
-                  </form>
-                </section>
-              )}
-            </div>
           </>
         )}
       </main>

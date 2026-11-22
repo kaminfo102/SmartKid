@@ -8,6 +8,22 @@ class KN_REST {
 	public static function init() {
 		add_action( 'rest_api_init', array( __CLASS__, 'register_routes' ) );
 		add_filter( 'rest_pre_serve_request', array( __CLASS__, 'add_cors_headers' ), 10, 4 );
+		add_filter( 'rest_authentication_errors', array( __CLASS__, 'bypass_third_party_jwt_errors' ), 999 );
+	}
+
+	/**
+	 * Prevent third-party WordPress JWT plugins ("Wrong number of segments") from blocking
+	 * koodak-nabegheh/v1 routes that perform their own strict token/cookie authentication.
+	 */
+	public static function bypass_third_party_jwt_errors( $result ) {
+		if ( ! is_wp_error( $result ) ) {
+			return $result;
+		}
+		$uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '';
+		if ( strpos( $uri, KN_SOROBAN_API_NS ) !== false && $result->get_error_code() !== 'kn_unauthorized' ) {
+			return null;
+		}
+		return $result;
 	}
 
 	/**
@@ -23,19 +39,21 @@ class KN_REST {
 		$allowed_raw    = isset( $settings['allowed_origins'] ) ? trim( (string) $settings['allowed_origins'] ) : '*';
 		$request_origin = isset( $_SERVER['HTTP_ORIGIN'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ) : '';
 
-		if ( $allowed_raw === '*' && ! empty( $request_origin ) ) {
-			header( 'Access-Control-Allow-Origin: ' . esc_url_raw( $request_origin ) );
-			header( 'Vary: Origin' );
-		} elseif ( ! empty( $request_origin ) ) {
-			$allowed_list = array_filter( array_map( 'trim', explode( ',', $allowed_raw ) ) );
-			if ( in_array( $request_origin, $allowed_list, true ) ) {
+		if ( ! empty( $request_origin ) ) {
+			if ( $allowed_raw === '*' ) {
 				header( 'Access-Control-Allow-Origin: ' . esc_url_raw( $request_origin ) );
 				header( 'Vary: Origin' );
+			} else {
+				$allowed_list = array_filter( array_map( 'trim', explode( ',', $allowed_raw ) ) );
+				if ( in_array( $request_origin, $allowed_list, true ) ) {
+					header( 'Access-Control-Allow-Origin: ' . esc_url_raw( $request_origin ) );
+					header( 'Vary: Origin' );
+				}
 			}
 		}
 
 		header( 'Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS' );
-		header( 'Access-Control-Allow-Headers: Authorization, Content-Type, X-WP-Nonce' );
+		header( 'Access-Control-Allow-Headers: Authorization, Content-Type, X-WP-Nonce, X-KN-Auth, X-KN-App, X-Requested-With' );
 		header( 'Access-Control-Allow-Credentials: true' );
 
 		return $served;
@@ -82,6 +100,16 @@ class KN_REST {
 			array(
 				'methods'             => 'POST',
 				'callback'            => array( __CLASS__, 'handle_logout' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/auth/session',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'handle_session_restore' ),
 				'permission_callback' => '__return_true',
 			)
 		);
@@ -373,6 +401,7 @@ class KN_REST {
 
 		$device     = isset( $params['deviceLabel'] ) ? (string) $params['deviceLabel'] : 'Web App';
 		$token_data = KN_Auth::issue_token( $user->ID, $device );
+		KN_Auth::set_session_cookie( $token_data['token'], intval( $token_data['expiresAt'] / 1000 ) );
 		$profiles   = KN_DB::get_user_profiles( $user->ID );
 		$settings   = self::get_user_app_settings( $user->ID );
 		$ent_map    = KN_DB::get_user_entitlement_map( $user->ID );
@@ -424,6 +453,7 @@ class KN_REST {
 
 		$device     = isset( $params['deviceLabel'] ) ? (string) $params['deviceLabel'] : 'Web App';
 		$token_data = KN_Auth::issue_token( $user->ID, $device );
+		KN_Auth::set_session_cookie( $token_data['token'], intval( $token_data['expiresAt'] / 1000 ) );
 		$settings   = self::get_user_app_settings( $user->ID );
 		$ent_map    = KN_DB::get_user_entitlement_map( $user->ID );
 
@@ -434,6 +464,45 @@ class KN_REST {
 				'user'            => KN_Auth::format_user( $user ),
 				'profiles'        => $profiles,
 				'settings'        => $settings,
+				'unlockedTermIds' => array_map( 'intval', array_keys( $ent_map ) ),
+			)
+		);
+	}
+
+	public static function handle_session_restore( WP_REST_Request $request ) {
+		$app_header = $request->get_header( 'x-kn-app' );
+		if ( empty( $app_header ) && ! empty( $_SERVER['HTTP_X_KN_APP'] ) ) {
+			$app_header = sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_KN_APP'] ) );
+		}
+		if ( empty( $app_header ) ) {
+			return rest_ensure_response( array( 'authenticated' => false ) );
+		}
+
+		$user = KN_Auth::authenticate_request( $request );
+		if ( ! $user ) {
+			KN_Auth::clear_session_cookie();
+			return rest_ensure_response( array( 'authenticated' => false ) );
+		}
+
+		$found = KN_Auth::extract_token_with_source( $request );
+		$token = $found['token'];
+		$exp   = time() + ( 30 * DAY_IN_SECONDS );
+		if ( empty( $token ) ) {
+			$issued = KN_Auth::issue_token( $user->ID, 'Session Restore' );
+			$token  = $issued['token'];
+			$exp    = intval( $issued['expiresAt'] / 1000 );
+		}
+		KN_Auth::set_session_cookie( $token, $exp );
+
+		$ent_map = KN_DB::get_user_entitlement_map( $user->ID );
+		return rest_ensure_response(
+			array(
+				'authenticated'   => true,
+				'token'           => $token,
+				'expiresAt'       => $exp * 1000,
+				'user'            => KN_Auth::format_user( $user ),
+				'profiles'        => KN_DB::get_user_profiles( $user->ID ),
+				'settings'        => self::get_user_app_settings( $user->ID ),
 				'unlockedTermIds' => array_map( 'intval', array_keys( $ent_map ) ),
 			)
 		);

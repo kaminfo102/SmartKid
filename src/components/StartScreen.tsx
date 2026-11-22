@@ -9,11 +9,8 @@ import {
   Star,
   Sparkles,
   PlayCircle,
-  Check,
-  ChevronLeft,
   User,
   ShoppingBag,
-  Headphones,
   Award,
 } from 'lucide-react';
 import type {
@@ -29,8 +26,6 @@ import { KiaAvatar } from './KiaAvatar';
 import { KidIconTile } from './KidIconTile';
 import { AbacusAdventureIllustration } from './KidIllustrations';
 import { AudioButton } from './AudioButton';
-import { PWAInstallButton } from './PWAInstallButton';
-import { BuyCoffeeButton } from './BuyCoffeeButton';
 import { DailyBonusCard } from './DailyBonusCard';
 import { audioEngine } from '../lib/audioEngine';
 
@@ -48,7 +43,7 @@ interface StartScreenProps {
   onOpenGames: () => void;
   onOpenSimulator: () => void;
   onOpenShop: () => void;
-  onOpenTickets: () => void;
+  onOpenTickets?: () => void;
   onOpenProfiles: () => void;
   onOpenProfileDetails: () => void;
   onClaimDailyBonus: () => { awardedPoints: number; newBadgeTitles: string[] };
@@ -70,7 +65,6 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   onOpenGames,
   onOpenSimulator,
   onOpenShop,
-  onOpenTickets,
   onOpenProfiles,
   onOpenProfileDetails,
   onClaimDailyBonus,
@@ -78,7 +72,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   onOpenParents,
 }) => {
   const [kiaBubble, setKiaBubble] = useState<string>(
-    `سلام ${activeProfile.name}! من کیا هستم، آماده‌ای با هم چرتکه بازی کنیم؟`
+    `سلام ${activeProfile.name}! من کیا هستم، بزن بریم چرتکه بازی!`
   );
 
   const completedLessons = lessons.filter(
@@ -101,45 +95,41 @@ export const StartScreen: React.FC<StartScreenProps> = ({
     audioEngine.speakPersian(msg);
   };
 
-  const quests = [
+  const activities = [
     {
-      id: 'quest-map',
-      title: 'نقشه ماجراجویی و ترم‌ها',
-      subtitle: `${formatNumber(Math.max(1, terms.length), digitMode)} ترم داستانی · ${formatNumber(
+      id: 'act-map',
+      title: 'نقشه دوره‌ها',
+      subtitle: `${formatNumber(Math.max(1, terms.length), digitMode)} ترم · ${formatNumber(
         completedLessons,
         digitMode
-      )} از ${formatNumber(lessons.length, digitMode)} مرحله کامل شده`,
-      done: completedLessons > 0,
+      )} مرحله`,
       color: 'green' as const,
       icon: <Map className="w-8 h-8" />,
       onClick: onContinueMap,
       ariaLabel: 'باز کردن نقشه ماجراجویی ترم‌ها',
     },
     {
-      id: 'quest-games',
-      title: 'بازی‌های شاد و امتیازی',
-      subtitle: 'بشمار، بساز و ستاره‌های بیشتر بگیر',
-      done: activeProfile.totalStars >= 3,
+      id: 'act-games',
+      title: 'بازی‌های شاد',
+      subtitle: 'بشمار و ستاره بگیر',
       color: 'pink' as const,
       icon: <Gamepad2 className="w-8 h-8" />,
       onClick: onOpenGames,
       ariaLabel: 'ورود به بازی‌های چرتکه',
     },
     {
-      id: 'quest-practice',
-      title: 'تمرین آزاد و هوشمند',
-      subtitle: 'تقویت سرعت ذهن با چرتکه سه‌بعدی',
-      done: activeProfile.totalCorrect >= 5,
+      id: 'act-practice',
+      title: 'تمرین چرتکه',
+      subtitle: 'تقویت سرعت ذهن',
       color: 'blue' as const,
       icon: <Sparkles className="w-8 h-8" />,
       onClick: onOpenPractice,
       ariaLabel: 'شروع تمرین آزاد چرتکه',
     },
     {
-      id: 'quest-sim',
-      title: 'آموزش انیمیشنی با کیا',
-      subtitle: 'نمایش حرکت قدم‌به‌گام مهره‌ها با فلش',
-      done: false,
+      id: 'act-sim',
+      title: 'آموزش تصویری',
+      subtitle: 'نمایش حرکت مهره‌ها',
       color: 'sky' as const,
       icon: <PlayCircle className="w-8 h-8" />,
       onClick: onOpenSimulator,
@@ -149,14 +139,13 @@ export const StartScreen: React.FC<StartScreenProps> = ({
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F5E4CE] dark:bg-slate-950">
-      {/* Top Sunny Peach Adventure Hero Banner (inspired by kids adventure UI) */}
-      <div className="relative overflow-hidden bg-gradient-to-b from-[#F49A67] via-[#F7B684] to-[#FCE0BE] dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 pb-12">
-        {/* Decorative background hills & clouds */}
+      {/* Clean Sunny Hero Header */}
+      <div className="relative overflow-hidden bg-gradient-to-b from-[#F49A67] via-[#F7B684] to-[#FCE0BE] dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 pb-11">
         <svg
           aria-hidden="true"
           viewBox="0 0 800 200"
           preserveAspectRatio="none"
-          className="pointer-events-none absolute bottom-0 left-0 right-0 w-full h-24 opacity-45 dark:opacity-15"
+          className="pointer-events-none absolute bottom-0 left-0 right-0 w-full h-20 opacity-40 dark:opacity-15"
         >
           <path
             d="M0 160 Q 150 60 320 130 T 640 110 T 800 140 L 800 200 L 0 200 Z"
@@ -168,8 +157,8 @@ export const StartScreen: React.FC<StartScreenProps> = ({
           />
         </svg>
 
-        {/* Top Bar */}
-        <header className="relative z-10 w-full max-w-4xl mx-auto px-4 pt-3 flex items-center justify-between gap-2">
+        {/* Simple Top Navigation Bar */}
+        <header className="relative z-10 w-full max-w-3xl mx-auto px-4 pt-3 flex items-center justify-between gap-2">
           <button
             type="button"
             onClick={onOpenProfiles}
@@ -177,14 +166,9 @@ export const StartScreen: React.FC<StartScreenProps> = ({
             className="min-h-[46px] inline-flex items-center gap-2 rounded-2xl bg-white/95 dark:bg-slate-900 border-b-4 border-[#E5D3BE] dark:border-slate-800 px-3 py-1.5 shadow-sm hover:bg-white transition-all active:translate-y-0.5"
           >
             <AvatarGraphic avatar={activeProfile.avatar} className="w-8 h-8 shrink-0" />
-            <div className="text-right leading-tight">
-              <div className="text-[11px] font-bold text-amber-700 dark:text-amber-300">
-                قهرمان
-              </div>
-              <div className="text-sm font-extrabold text-slate-900 dark:text-white truncate max-w-[96px]">
-                {activeProfile.name}
-              </div>
-            </div>
+            <span className="text-sm font-extrabold text-slate-900 dark:text-white truncate max-w-[96px]">
+              {activeProfile.name}
+            </span>
             <Users className="w-4 h-4 text-slate-400" />
           </button>
 
@@ -197,20 +181,20 @@ export const StartScreen: React.FC<StartScreenProps> = ({
             <button
               type="button"
               onClick={onOpenAuth}
-              aria-label="حساب کاربری و سفارش‌ها"
+              aria-label="حساب کاربری"
               className="min-h-[46px] min-w-[46px] inline-flex items-center gap-1.5 rounded-2xl bg-white/95 dark:bg-slate-900 border-b-4 border-[#E5D3BE] dark:border-slate-800 px-3 py-2 text-xs font-extrabold text-slate-800 dark:text-slate-100 shadow-sm hover:bg-white transition-all active:translate-y-0.5"
             >
               <User className={`w-4 h-4 ${wpUser || wpConnected ? 'text-[#4BB543]' : 'text-[#5472EB]'}`} />
               <span className="hidden sm:inline">
-                {wpUser ? wpUser.displayName : 'ورود / حساب کاربری'}
+                {wpUser ? wpUser.displayName : 'ورود'}
               </span>
             </button>
 
             <button
               type="button"
               onClick={onOpenParents}
-              aria-label="ورود به بخش والدین و تنظیمات"
-              className="min-h-[46px] min-w-[46px] inline-flex items-center gap-1.5 rounded-2xl bg-white/95 dark:bg-slate-900 border-b-4 border-[#E5D3BE] dark:border-slate-800 px-3 py-2 text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-100 shadow-sm hover:bg-white transition-all active:translate-y-0.5"
+              aria-label="بخش والدین و تنظیمات"
+              className="min-h-[46px] min-w-[46px] inline-flex items-center gap-1.5 rounded-2xl bg-white/95 dark:bg-slate-900 border-b-4 border-[#E5D3BE] dark:border-slate-800 px-3 py-2 text-xs font-extrabold text-slate-800 dark:text-slate-100 shadow-sm hover:bg-white transition-all active:translate-y-0.5"
             >
               <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               <span className="hidden sm:inline">والدین</span>
@@ -218,9 +202,9 @@ export const StartScreen: React.FC<StartScreenProps> = ({
           </div>
         </header>
 
-        {/* Hero Kia Scene */}
-        <section className="relative z-10 w-full max-w-4xl mx-auto px-4 pt-4 flex flex-col items-center text-center">
-          <div className="mb-2 px-4 py-2 rounded-2xl bg-white/95 dark:bg-slate-900 border-2 border-white dark:border-slate-700 text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-100 shadow-md max-w-xs">
+        {/* Friendly Minimal Kia Hero */}
+        <section className="relative z-10 w-full max-w-3xl mx-auto px-4 pt-3 flex flex-col items-center text-center">
+          <div className="mb-1.5 px-4 py-1.5 rounded-2xl bg-white/95 dark:bg-slate-900 border-2 border-white dark:border-slate-700 text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-100 shadow-sm max-w-xs">
             {kiaBubble}
           </div>
 
@@ -228,53 +212,40 @@ export const StartScreen: React.FC<StartScreenProps> = ({
             mood="happy"
             interactive
             onTap={handleKiaTap}
-            className="w-32 h-32 sm:w-40 sm:h-40"
+            className="w-28 h-28 sm:w-32 sm:h-32"
             reducedMotion={reducedMotion}
           />
 
-          <h1 className="mt-1 text-3xl sm:text-4xl font-extrabold text-white drop-shadow-[0_2px_0_rgba(148,70,22,0.55)] tracking-tight">
+          <h1 className="mt-0.5 text-3xl sm:text-4xl font-extrabold text-white drop-shadow-[0_2px_0_rgba(148,70,22,0.55)] tracking-tight">
             کودک نابغه
           </h1>
-          <p className="mt-1 text-sm sm:text-base font-bold text-[#6A2E0B] dark:text-slate-200 max-w-sm">
-            سفر شاد یادگیری چرتکه ژاپنی و محاسبات ذهنی با کیا
-          </p>
 
-          <div className="mt-3 flex items-center gap-2 flex-wrap justify-center">
+          <div className="mt-2.5">
             <AudioButton
-              textToSpeak={`سلام ${activeProfile.name}! من کیا هستم. روی دکمه سبز شروع یادگیری بزن تا سفر چرتکه‌ای را شروع کنیم.`}
+              textToSpeak={`سلام ${activeProfile.name}! من کیا هستم. روی دکمه سبز شروع یادگیری بزن تا چرتکه بازی کنیم.`}
               label="صدای کیا"
               size="sm"
             />
-            <button
-              type="button"
-              onClick={onOpenProfileDetails}
-              className="min-h-[40px] px-3.5 py-2 rounded-2xl bg-white/95 hover:bg-white dark:bg-slate-900 border-b-4 border-[#E5D3BE] dark:border-slate-800 text-xs font-extrabold text-[#5C3A00] dark:text-amber-200 inline-flex items-center gap-1.5 shadow-sm transition-all active:translate-y-0.5"
-            >
-              <Award className="w-4 h-4 text-[#5472EB]" />
-              <span>کارنامه و مدال‌ها</span>
-            </button>
-            <PWAInstallButton />
           </div>
         </section>
       </div>
 
-      {/* Main Content Area on Creamy Sand Canvas */}
-      <main className="relative z-20 -mt-7 flex-1 w-full max-w-2xl mx-auto px-4 pb-8 space-y-5">
-        {/* Reward & Primary Play Card (mirrors "Hooray, you earned a reward! + Claim >") */}
+      {/* Spacious Child-Friendly Home Canvas */}
+      <main className="relative z-20 -mt-7 flex-1 w-full max-w-2xl mx-auto px-4 pb-8 space-y-4">
+        {/* Primary Adventure Start Card */}
         <motion.section
-          initial={reducedMotion ? false : { opacity: 0, y: 12 }}
+          initial={reducedMotion ? false : { opacity: 0, y: 10 }}
           animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 shadow-[0_12px_28px_-8px_rgba(180,115,45,0.22)] p-3.5 sm:p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3"
+          transition={{ duration: 0.25 }}
+          className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 shadow-[0_12px_28px_-8px_rgba(180,115,45,0.22)] p-3.5 sm:p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3"
         >
           <div className="flex items-center gap-3 min-w-0 flex-1">
-            <AbacusAdventureIllustration className="w-14 h-14 sm:w-16 sm:h-16 shrink-0" />
-
+            <AbacusAdventureIllustration className="w-14 h-14 shrink-0" />
             <div className="min-w-0 flex-1 space-y-1.5">
-              <div className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">
+              <div className="text-sm font-extrabold text-slate-900 dark:text-white truncate">
                 {hasProgress
-                  ? `آفرین ${activeProfile.name}! به سفر چرتکه ادامه بده`
-                  : 'سفر ماجراجویی چرتکه را شروع کن!'}
+                  ? `آفرین ${activeProfile.name}! به سفرت ادامه بده`
+                  : 'ماجراجویی چرتکه را شروع کن!'}
               </div>
               <div className="relative h-6 rounded-xl bg-amber-100 dark:bg-slate-800 overflow-hidden border border-amber-200 dark:border-slate-700 flex items-center justify-center">
                 <div
@@ -296,138 +267,85 @@ export const StartScreen: React.FC<StartScreenProps> = ({
             type="button"
             onClick={onContinueMap}
             aria-label="شروع یادگیری و مشاهده نقشه دوره‌ها"
-            className="min-h-[54px] px-5 rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] active:border-b-0 active:translate-y-1 text-white font-extrabold text-base flex items-center justify-center gap-2 shrink-0 transition-all shadow-sm"
+            className="min-h-[54px] px-6 rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] active:border-b-0 active:translate-y-1 text-white font-extrabold text-base flex items-center justify-center gap-2 shrink-0 transition-all shadow-sm"
           >
             <Play className="w-5 h-5 fill-white" />
             <span>شروع یادگیری</span>
           </button>
         </motion.section>
 
-        {/* Daily Login Bonus Card */}
+        {/* Big 2x2 Kid-Friendly Activity Tiles */}
+        <section aria-label="فعالیت‌های یادگیری و بازی" className="grid grid-cols-2 gap-3">
+          {activities.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={item.onClick}
+              aria-label={item.ariaLabel}
+              className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] hover:border-sky-400 dark:hover:border-blue-500 p-4 flex flex-col items-center text-center gap-2.5 shadow-[0_8px_20px_-8px_rgba(170,104,40,0.16)] active:translate-y-0.5 transition-all"
+            >
+              <KidIconTile color={item.color} size="lg">
+                {item.icon}
+              </KidIconTile>
+              <div className="space-y-0.5">
+                <div className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white">
+                  {item.title}
+                </div>
+                <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                  {item.subtitle}
+                </div>
+              </div>
+            </button>
+          ))}
+        </section>
+
+        {/* Compact Daily Gift Bar */}
         <DailyBonusCard
           profile={activeProfile}
           digitMode={digitMode}
+          compact
           onClaimBonus={onClaimDailyBonus}
           onOpenShop={onOpenShop}
         />
 
-        {/* Prominent Store & Support Quick Entry Cards */}
-        <section aria-label="فروشگاه و پشتیبانی" className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {/* Clean 2-Item Secondary Shortcuts: Badges & Rewards Store */}
+        <section className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={onOpenProfileDetails}
+            className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] hover:border-blue-400 p-3 flex items-center gap-2.5 text-right shadow-xs active:translate-y-0.5 transition-all"
+          >
+            <KidIconTile color="violet" size="md">
+              <Award className="w-5 h-5" />
+            </KidIconTile>
+            <div className="min-w-0">
+              <div className="font-extrabold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
+                کارنامه و مدال‌ها
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                {formatNumber(activeProfile.badges.length, digitMode)} مدال
+              </div>
+            </div>
+          </button>
+
           <button
             type="button"
             onClick={onOpenShop}
-            className="sm:col-span-2 rounded-2xl bg-gradient-to-l from-[#FFCC33] to-[#FFE074] dark:from-amber-900/60 dark:to-slate-900 border-2 border-white dark:border-amber-700 border-b-4 border-b-[#DFA71C] p-3.5 flex items-center justify-between gap-3 text-right shadow-[0_10px_22px_-6px_rgba(205,140,20,0.24)] hover:brightness-[1.02] active:translate-y-0.5 transition-all"
+            className="rounded-2xl bg-gradient-to-l from-[#FFDC5E] to-[#FFE88F] dark:from-amber-900/50 dark:to-slate-900 border-2 border-white dark:border-amber-700 border-b-4 border-b-[#DFAD19] p-3 flex items-center gap-2.5 text-right shadow-xs active:translate-y-0.5 transition-all"
           >
-            <div className="flex items-center gap-3 min-w-0">
-              <KidIconTile color="amber" size="lg">
-                <ShoppingBag className="w-7 h-7" />
-              </KidIconTile>
-              <div className="min-w-0">
-                <h2 className="font-extrabold text-sm sm:text-base text-[#593400] dark:text-amber-100 truncate">
-                  فروشگاه کودک نابغه
-                </h2>
-                <p className="text-xs font-bold text-[#7A4E00] dark:text-amber-200/80 truncate">
-                  چرتکه آموزشی، کتاب کار و بسته‌های یادگیری
-                </p>
+            <KidIconTile color="amber" size="md">
+              <ShoppingBag className="w-5 h-5" />
+            </KidIconTile>
+            <div className="min-w-0">
+              <div className="font-extrabold text-xs sm:text-sm text-[#593400] dark:text-amber-100 truncate">
+                فروشگاه و جوایز
+              </div>
+              <div className="text-[11px] font-bold text-[#7A4E00] dark:text-amber-200/80 truncate">
+                خرید چرتکه و مدال
               </div>
             </div>
-            <span className="min-h-[40px] px-3.5 rounded-2xl bg-[#5472EB] border-b-2 border-[#354EB8] text-white font-extrabold text-xs inline-flex items-center gap-1 shrink-0">
-              <span>مشاهده</span>
-              <ChevronLeft className="w-4 h-4" />
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onOpenTickets}
-            className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] hover:border-sky-400 p-3.5 flex items-center justify-between gap-2.5 text-right shadow-[0_8px_20px_-6px_rgba(170,104,40,0.16)] active:translate-y-0.5 transition-all"
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <KidIconTile color="sky" size="md">
-                <Headphones className="w-5 h-5" />
-              </KidIconTile>
-              <div className="min-w-0">
-                <div className="font-extrabold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
-                  پشتیبانی و تیکت
-                </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                  ارتباط مستقیم با ما
-                </div>
-              </div>
-            </div>
-            <ChevronLeft className="w-4 h-4 text-slate-400 shrink-0" />
           </button>
         </section>
-
-        {/* Daily Quests / Adventure Missions with Dotted Track & Big Colorful Icons */}
-        <section aria-label="ماموریت‌های شاد امروز" className="space-y-3">
-          <div className="flex items-center justify-between px-1">
-            <h2 className="text-base sm:text-lg font-extrabold text-[#5B3A1D] dark:text-white">
-              ماموریت‌های شاد امروز
-            </h2>
-            <span className="text-xs font-bold text-[#8B623D] dark:text-slate-400">
-              یک گزینه را انتخاب کن
-            </span>
-          </div>
-
-          <div className="relative space-y-3">
-            {/* Vertical dashed quest line along the start edge */}
-            <div
-              aria-hidden="true"
-              className="hidden xs:block absolute top-7 bottom-7 right-[17px] border-r-2 border-dashed border-[#D3B694] dark:border-slate-700"
-            />
-
-            {quests.map((q) => (
-              <div key={q.id} className="flex items-center gap-2.5 sm:gap-3">
-                {/* Quest Timeline Node */}
-                <div
-                  aria-hidden="true"
-                  className={`hidden xs:flex relative z-10 w-9 h-9 rounded-full items-center justify-center shrink-0 border-2 shadow-xs ${
-                    q.done
-                      ? 'bg-[#46B849] border-white text-white'
-                      : 'bg-white dark:bg-slate-800 border-[#D8BE9F] dark:border-slate-600'
-                  }`}
-                >
-                  {q.done && <Check className="w-5 h-5 stroke-[3]" />}
-                </div>
-
-                {/* Big Colorful Quest Card */}
-                <button
-                  type="button"
-                  onClick={q.onClick}
-                  aria-label={q.ariaLabel}
-                  className="flex-1 min-w-0 rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] hover:border-sky-400 dark:hover:border-blue-500 p-3 sm:p-3.5 flex items-center justify-between gap-3 text-right shadow-[0_8px_20px_-6px_rgba(170,104,40,0.16)] active:translate-y-0.5 transition-all"
-                >
-                  <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
-                    <KidIconTile color={q.color} size="lg">
-                      {q.icon}
-                    </KidIconTile>
-
-                    <div className="min-w-0">
-                      <h3 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white truncate">
-                        {q.title}
-                      </h3>
-                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 truncate">
-                        {q.subtitle}
-                      </p>
-                    </div>
-                  </div>
-
-                  <span className="w-11 h-11 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center shrink-0">
-                    <ChevronLeft className="w-5 h-5" />
-                  </span>
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Warm Support CTA */}
-        <BuyCoffeeButton
-          variant="compact"
-          reducedMotion={reducedMotion}
-          className="pt-1"
-        />
       </main>
     </div>
   );

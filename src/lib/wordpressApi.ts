@@ -16,13 +16,17 @@ import type {
   WordPressUser,
 } from '../types/app';
 
-const WP_SITE_URL_STORAGE_KEY = 'koodak_nabegheh_wp_url';
+const WP_SITE_URL_STORAGE_KEY = 'koodak_nabegheh_wp_admin_url';
+const WP_ENV_SNAPSHOT_KEY = 'koodak_nabegheh_wp_env_snapshot';
+const LEGACY_WP_URL_STORAGE_KEY = 'koodak_nabegheh_wp_url';
 const WP_API_BASE_PATH = '/wp-json/koodak-nabegheh/v1';
 
 /**
- * Auth Bearer token is kept strictly in JS memory (never written to localStorage/sessionStorage).
+ * Auth token is kept strictly in JS memory (never written to localStorage/sessionStorage).
+ * Cross-refresh persistence relies on the server-issued HttpOnly cookie (kn_session).
  */
 let memoryBearerToken: string | null = null;
+let unauthorizedHandler: (() => void) | null = null;
 
 export function setMemoryBearerToken(token: string | null): void {
   memoryBearerToken = token && token.trim() ? token.trim() : null;
@@ -30,6 +34,10 @@ export function setMemoryBearerToken(token: string | null): void {
 
 export function hasMemoryBearerToken(): boolean {
   return Boolean(memoryBearerToken);
+}
+
+export function setOnUnauthorizedSession(handler: (() => void) | null): void {
+  unauthorizedHandler = handler;
 }
 
 /**
@@ -97,37 +105,70 @@ export function validateSafeHttpUrl(raw?: string | null): string {
   }
 }
 
-export function getSavedWordPressUrl(): string {
+export function getEnvWordPressUrl(): string {
   const envUrl = import.meta.env.VITE_WORDPRESS_URL;
+  return typeof envUrl === 'string' ? normalizeWordPressUrl(envUrl) : '';
+}
+
+export function getSavedWordPressUrl(): string {
+  const envUrl = getEnvWordPressUrl();
   if (typeof window === 'undefined') {
-    return typeof envUrl === 'string' ? normalizeWordPressUrl(envUrl) : '';
+    return envUrl;
   }
   try {
-    const stored = window.localStorage.getItem(WP_SITE_URL_STORAGE_KEY);
-    if (stored) {
-      const normalized = normalizeWordPressUrl(stored);
+    // Clean up legacy non-admin URL cache if present
+    window.localStorage.removeItem(LEGACY_WP_URL_STORAGE_KEY);
+
+    const adminOverride = window.localStorage.getItem(WP_SITE_URL_STORAGE_KEY);
+    const envSnapshot = window.localStorage.getItem(WP_ENV_SNAPSHOT_KEY) || '';
+    // If .env changed since the admin override was saved, prefer the newly built .env URL
+    if (adminOverride && (!envUrl || envSnapshot === envUrl)) {
+      const normalized = normalizeWordPressUrl(adminOverride);
       if (normalized) return normalized;
     }
   } catch {
     // ignore storage errors
   }
-  return typeof envUrl === 'string' ? normalizeWordPressUrl(envUrl) : '';
+  return envUrl;
 }
 
 export function saveWordPressUrl(rawUrl: string): string {
   const normalized = normalizeWordPressUrl(rawUrl);
+  const envUrl = getEnvWordPressUrl();
   if (typeof window !== 'undefined') {
     try {
       if (normalized) {
         window.localStorage.setItem(WP_SITE_URL_STORAGE_KEY, normalized);
+        window.localStorage.setItem(WP_ENV_SNAPSHOT_KEY, envUrl);
       } else {
         window.localStorage.removeItem(WP_SITE_URL_STORAGE_KEY);
+        window.localStorage.removeItem(WP_ENV_SNAPSHOT_KEY);
       }
     } catch {
       // ignore storage errors
     }
   }
   return normalized;
+}
+
+export async function detectSameOriginWordPressUrl(): Promise<string> {
+  if (typeof window === 'undefined') return '';
+  const origin = normalizeWordPressUrl(window.location.origin);
+  if (!origin) return '';
+  try {
+    const res = await fetch(`${origin}${WP_API_BASE_PATH}/health`, {
+      method: 'GET',
+      headers: { 'X-KN-App': 'koodak-nabegheh' },
+    });
+    if (!res.ok) return '';
+    const data = (await res.json().catch(() => null)) as { ok?: boolean; pluginVersion?: string } | null;
+    if (data?.ok && typeof data.pluginVersion === 'string') {
+      return origin;
+    }
+  } catch {
+    // not hosted alongside WordPress
+  }
+  return '';
 }
 
 async function wpRequest<T>(
@@ -143,28 +184,31 @@ async function wpRequest<T>(
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'X-KN-App': 'koodak-nabegheh',
     ...(options.headers as Record<string, string> | undefined),
   };
 
-  if (requireAuth) {
-    if (!memoryBearerToken) {
-      throw new Error('لطفاً ابتدا وارد حساب کاربری خود شوید.');
-    }
-    headers['Authorization'] = `Bearer ${memoryBearerToken}`;
-  } else if (memoryBearerToken) {
-    headers['Authorization'] = `Bearer ${memoryBearerToken}`;
+  if (memoryBearerToken) {
+    headers['X-KN-Auth'] = memoryBearerToken;
   }
 
   const res = await fetch(`${base}${WP_API_BASE_PATH}${endpoint}`, {
     ...options,
+    credentials: 'include',
     headers,
   });
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    if (res.status === 401 && requireAuth) {
+      setMemoryBearerToken(null);
+      unauthorizedHandler?.();
+    }
     const msg =
       typeof data?.message === 'string' && data.message
         ? data.message
+        : res.status === 401
+        ? 'نشست کاربری منقضی شده است. لطفاً دوباره وارد حساب خود شوید.'
         : `خطا در ارتباط با سرور (${res.status})`;
     throw new Error(msg);
   }
@@ -182,27 +226,31 @@ async function wpFormRequest<T>(
     throw new Error('اتصال به سرور برنامه هنوز پیکربندی نشده است.');
   }
 
-  const headers: Record<string, string> = {};
-  if (requireAuth) {
-    if (!memoryBearerToken) {
-      throw new Error('لطفاً ابتدا وارد حساب کاربری خود شوید.');
-    }
-    headers['Authorization'] = `Bearer ${memoryBearerToken}`;
-  } else if (memoryBearerToken) {
-    headers['Authorization'] = `Bearer ${memoryBearerToken}`;
+  const headers: Record<string, string> = {
+    'X-KN-App': 'koodak-nabegheh',
+  };
+  if (memoryBearerToken) {
+    headers['X-KN-Auth'] = memoryBearerToken;
   }
 
   const res = await fetch(`${base}${WP_API_BASE_PATH}${endpoint}`, {
     method: 'POST',
+    credentials: 'include',
     headers,
     body: formData,
   });
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    if (res.status === 401 && requireAuth) {
+      setMemoryBearerToken(null);
+      unauthorizedHandler?.();
+    }
     const msg =
       typeof data?.message === 'string' && data.message
         ? data.message
+        : res.status === 401
+        ? 'نشست کاربری منقضی شده است. لطفاً دوباره وارد حساب خود شوید.'
         : `خطا در ارسال اطلاعات (${res.status})`;
     throw new Error(msg);
   }
@@ -606,11 +654,43 @@ export async function registerWordPress(
   return data;
 }
 
+export async function restoreWordPressSession(
+  siteUrl: string
+): Promise<WordPressAuthResponse | null> {
+  const base = normalizeWordPressUrl(siteUrl);
+  if (!base) return null;
+  try {
+    const res = await fetch(`${base}${WP_API_BASE_PATH}/auth/session`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-KN-App': 'koodak-nabegheh',
+        ...(memoryBearerToken ? { 'X-KN-Auth': memoryBearerToken } : {}),
+      },
+      body: JSON.stringify({}),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json().catch(() => null)) as
+      | (WordPressAuthResponse & { authenticated?: boolean })
+      | null;
+    if (data?.authenticated && data.token && data.user) {
+      setMemoryBearerToken(data.token);
+      return data;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function logoutWordPress(siteUrl: string): Promise<void> {
   try {
-    if (siteUrl && memoryBearerToken) {
-      await wpRequest(siteUrl, '/auth/logout', { method: 'POST' }, true);
+    if (siteUrl) {
+      await wpRequest(siteUrl, '/auth/logout', { method: 'POST' }, false);
     }
+  } catch {
+    // ignore network failure on logout
   } finally {
     setMemoryBearerToken(null);
   }
@@ -620,7 +700,7 @@ export async function syncProfileToWordPress(
   siteUrl: string,
   profile: ChildProfile
 ): Promise<ChildProfile[]> {
-  if (!siteUrl || !memoryBearerToken) return [];
+  if (!siteUrl) return [];
   const data = await wpRequest<{ profiles: ChildProfile[] }>(
     siteUrl,
     `/profiles/${encodeURIComponent(profile.id)}`,
@@ -637,7 +717,7 @@ export async function createProfileInWordPress(
   siteUrl: string,
   profile: ChildProfile
 ): Promise<ChildProfile[]> {
-  if (!siteUrl || !memoryBearerToken) return [];
+  if (!siteUrl) return [];
   const data = await wpRequest<{ profiles: ChildProfile[] }>(
     siteUrl,
     '/profiles',
@@ -654,7 +734,7 @@ export async function syncSettingsToWordPress(
   siteUrl: string,
   settings: AppSettings
 ): Promise<void> {
-  if (!siteUrl || !memoryBearerToken) return;
+  if (!siteUrl) return;
   await wpRequest(
     siteUrl,
     '/settings',
