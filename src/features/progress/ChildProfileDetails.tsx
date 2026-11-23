@@ -3,11 +3,13 @@ import {
   Award,
   BarChart3,
   Brain,
+  Camera,
   CheckCircle2,
   Clock,
   Coins,
   Compass,
   Crown,
+  Edit3,
   Flame,
   Gem,
   Lock,
@@ -41,6 +43,7 @@ interface ChildProfileDetailsProps {
   lessons?: LessonDefinition[];
   onPracticeSkill?: (skill: SkillKey) => void;
   onOpenShop?: () => void;
+  onEditProfile?: () => void;
 }
 
 const SKILL_SHORT_LABELS: Record<SkillKey, string> = {
@@ -104,6 +107,7 @@ export const ChildProfileDetails: React.FC<ChildProfileDetailsProps> = ({
   lessons = LESSONS,
   onPracticeSkill,
   onOpenShop,
+  onEditProfile,
 }) => {
   const [chartMode, setChartMode] = useState<'bar' | 'radar'>('bar');
   const [selectedSkill, setSelectedSkill] = useState<SkillKey>('recognition');
@@ -219,13 +223,42 @@ export const ChildProfileDetails: React.FC<ChildProfileDetailsProps> = ({
       <section className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 shadow-[0_12px_28px_-10px_rgba(170,104,40,0.2)] p-5 sm:p-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-[#F2E5D5] dark:border-slate-800">
           <div className="flex items-center gap-4 min-w-0">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-[#FFF6EB] dark:bg-slate-800 border-2 border-[#EEDCC5] dark:border-slate-700 flex items-center justify-center shrink-0">
-              <AvatarGraphic avatar={profile.avatar} className="w-14 h-14 sm:w-16 sm:h-16" />
+            <div className="relative shrink-0">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#FFF6EB] dark:bg-slate-800 border-2 border-[#EEDCC5] dark:border-slate-700 flex items-center justify-center overflow-hidden shadow-xs">
+                <AvatarGraphic
+                  avatar={profile.avatar}
+                  imageUrl={profile.avatarUrl}
+                  alt={profile.name}
+                  className="w-full h-full"
+                />
+              </div>
+              {onEditProfile && (
+                <button
+                  type="button"
+                  onClick={onEditProfile}
+                  aria-label={`ویرایش تصویر و مشخصات ${profile.name}`}
+                  className="absolute -bottom-1 -left-1 w-8 h-8 rounded-full bg-[#5472EB] hover:bg-[#425FD6] text-white border-2 border-white dark:border-slate-900 flex items-center justify-center shadow-sm transition-transform active:scale-95"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
             <div className="min-w-0 space-y-1">
-              <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white truncate">
-                کارنامه و مدال‌های {profile.name}
-              </h2>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white truncate">
+                  کارنامه و مدال‌های {profile.name}
+                </h2>
+                {onEditProfile && (
+                  <button
+                    type="button"
+                    onClick={onEditProfile}
+                    className="min-h-[34px] px-2.5 rounded-xl bg-[#FFF6EB] hover:bg-amber-100 dark:bg-slate-800 border border-[#EEDCC5] dark:border-slate-700 text-[#783F1D] dark:text-slate-200 text-xs font-extrabold inline-flex items-center gap-1 whitespace-nowrap"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-[#5472EB]" />
+                    <span>ویرایش پروفایل</span>
+                  </button>
+                )}
+              </div>
               <div className="flex items-center flex-wrap gap-2 text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-300">
                 <span>{formatNumber(profile.age, digitMode)} ساله</span>
                 <span aria-hidden="true">·</span>

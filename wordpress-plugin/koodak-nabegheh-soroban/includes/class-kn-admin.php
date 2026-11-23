@@ -209,6 +209,46 @@ class KN_Admin {
 		<?php
 	}
 
+	private static function sanitize_image_url_input( $raw ) {
+		$trimmed = trim( (string) $raw );
+		if ( $trimmed === '' ) {
+			return '';
+		}
+		$parsed = wp_parse_url( $trimmed );
+		if ( is_array( $parsed ) && isset( $parsed['scheme'] ) && in_array( strtolower( $parsed['scheme'] ), array( 'http', 'https' ), true ) ) {
+			return esc_url_raw( $trimmed );
+		}
+		return '';
+	}
+
+	private static function render_image_picker_field( $name, $value, $input_id, $label = 'تصویر کاور ترم (اختیاری - JPG / PNG / WebP)', $placeholder = 'آدرس تصویر را وارد یا از کتابخانه رسانه انتخاب کنید...' ) {
+		$val = (string) $value;
+		?>
+		<div class="kn-field">
+			<label for="<?php echo esc_attr( $input_id ); ?>"><?php echo esc_html( $label ); ?></label>
+			<div class="kn-media-row">
+				<input
+					type="text"
+					id="<?php echo esc_attr( $input_id ); ?>"
+					name="<?php echo esc_attr( $name ); ?>"
+					dir="ltr"
+					data-kn-image-input="1"
+					value="<?php echo esc_attr( $val ); ?>"
+					placeholder="<?php echo esc_attr( $placeholder ); ?>"
+				/>
+				<button type="button" class="kn-btn kn-btn-amber" data-kn-image-target="<?php echo esc_attr( $input_id ); ?>">انتخاب / آپلود تصویر</button>
+				<button type="button" class="kn-btn kn-btn-ghost" data-kn-image-clear="<?php echo esc_attr( $input_id ); ?>">پاک کردن</button>
+			</div>
+			<img
+				alt=""
+				data-kn-image-preview="<?php echo esc_attr( $input_id ); ?>"
+				<?php echo $val !== '' ? 'src="' . esc_url( $val ) . '"' : ''; ?>
+				style="margin-top:8px;max-width:160px;max-height:110px;border-radius:12px;border:2px solid #eedcc5;object-fit:cover;<?php echo $val !== '' ? 'display:block;' : 'display:none;'; ?>"
+			/>
+		</div>
+		<?php
+	}
+
 	/**
 	 * Process all secure POST form actions in WP Admin.
 	 */
@@ -254,6 +294,7 @@ class KN_Admin {
 				'story_description'     => sanitize_textarea_field( wp_unslash( $_POST['story_description'] ?? '' ) ),
 				'biome'                 => $biome,
 				'accent_color'          => sanitize_hex_color( wp_unslash( $_POST['accent_color'] ?? '#4BB543' ) ) ?: '#4BB543',
+				'image_url'             => self::sanitize_image_url_input( wp_unslash( $_POST['image_url'] ?? '' ) ),
 				'is_free'               => $is_free,
 				'price_amount'          => $is_free ? 0 : absint( $_POST['price_amount'] ?? 0 ),
 				'woo_product_id'        => $is_free ? 0 : absint( $_POST['woo_product_id'] ?? 0 ),
@@ -424,7 +465,7 @@ class KN_Admin {
 					'city'        => sanitize_text_field( wp_unslash( $_POST['city'] ?? '' ) ),
 					'address1'    => sanitize_text_field( wp_unslash( $_POST['address1'] ?? '' ) ),
 					'postcode'    => sanitize_text_field( wp_unslash( $_POST['postcode'] ?? '' ) ),
-					'childName'   => sanitize_text_field( wp_unslash( $_POST['child_name'] ?? 'آرتین' ) ),
+					'childName'   => sanitize_text_field( wp_unslash( $_POST['child_name'] ?? 'کیا' ) ),
 					'childAge'    => absint( $_POST['child_age'] ?? 6 ),
 					'childAvatar' => sanitize_key( wp_unslash( $_POST['child_avatar'] ?? 'owl' ) ),
 				)
@@ -435,23 +476,35 @@ class KN_Admin {
 			self::redirect_with_notice( 'kn-soroban-users', 'کاربر و پروفایل کودک با موفقیت ساخته شد!' );
 		}
 
-		// 8. Update Child Profile Scores/Stars from Admin
+		// 8. Update Child Profile Scores/Stars/RewardPoints from Admin
 		if ( $action === 'admin_update_profile' && check_admin_referer( 'kn_admin_update_profile' ) ) {
 			$profile_db_id = absint( $_POST['profile_db_id'] ?? 0 );
 			if ( $profile_db_id > 0 ) {
-				$update = array(
-					'name'             => sanitize_text_field( wp_unslash( $_POST['name'] ?? 'قهرمان' ) ),
+				$clean_name = sanitize_text_field( wp_unslash( $_POST['name'] ?? '' ) );
+				$update     = array(
+					'name'             => trim( $clean_name ) !== '' ? $clean_name : 'کیا',
 					'age'              => max( 3, min( 15, absint( $_POST['age'] ?? 6 ) ) ),
 					'total_stars'      => max( 0, intval( $_POST['total_stars'] ?? 0 ) ),
+					'reward_points'    => max( 0, intval( $_POST['reward_points'] ?? 0 ) ),
 					'practice_minutes' => max( 0, intval( $_POST['practice_minutes'] ?? 0 ) ),
 					'difficulty_level' => max( 1, min( 5, absint( $_POST['difficulty_level'] ?? 1 ) ) ),
 				);
 				if ( ! empty( $_POST['reset_progress'] ) ) {
-					$update['total_stars']    = 0;
-					$update['total_correct']  = 0;
-					$update['total_attempts'] = 0;
-					$update['lessons_json']   = wp_json_encode( new stdClass() );
-					$update['skills_json']    = wp_json_encode( KN_DB::default_skills_map() );
+					$update['total_stars']      = 0;
+					$update['reward_points']    = 0;
+					$update['total_correct']    = 0;
+					$update['total_attempts']   = 0;
+					$update['lessons_json']     = wp_json_encode( new stdClass() );
+					$update['skills_json']      = wp_json_encode( KN_DB::default_skills_map() );
+					$update['badges_json']      = wp_json_encode( array() );
+					$update['daily_bonus_json'] = wp_json_encode(
+						array(
+							'streak'           => 0,
+							'lastClaimDate'    => '',
+							'totalDaysClaimed' => 0,
+							'history'          => array(),
+						)
+					);
 				}
 				$wpdb->update( KN_DB::table_profiles(), $update, array( 'id' => $profile_db_id ) );
 			}
@@ -864,6 +917,8 @@ class KN_Admin {
 							</div>
 						</div>
 
+						<?php self::render_image_picker_field( 'image_url', '', 'kn-new-term-image', 'تصویر کاور ترم (نمایش در نقشه ترم‌ها و صفحه خرید)' ); ?>
+
 						<button type="submit" class="kn-btn kn-btn-green">ایجاد ترم جدید</button>
 					</form>
 				</div>
@@ -872,20 +927,25 @@ class KN_Admin {
 			<?php foreach ( $terms as $term ) : ?>
 				<div class="kn-stage-item">
 					<div class="kn-stage-head">
-						<div>
-							<span class="kn-pill kn-pill-blue">ترم <?php echo esc_html( $term['termNumber'] ); ?></span>
-							<span class="kn-pill <?php echo $term['isFree'] ? 'kn-pill-green' : 'kn-pill-amber'; ?>">
-								<?php echo $term['isFree'] ? 'رایگان (استارتر)' : 'پولی: ' . esc_html( $term['priceFormatted'] ); ?>
-							</span>
-							<?php if ( ! $term['isFree'] && ! empty( $term['onSale'] ) ) : ?>
-								<span class="kn-pill kn-pill-green">تخفیف ویژه <?php echo esc_html( $term['discountPercent'] ); ?>٪ (اصلی: <?php echo esc_html( $term['regularPriceFormatted'] ); ?>)</span>
+						<div style="display:flex;align-items:center;gap:12px;">
+							<?php if ( ! empty( $term['imageUrl'] ) ) : ?>
+								<img src="<?php echo esc_url( $term['imageUrl'] ); ?>" alt="" style="width:52px;height:52px;border-radius:12px;object-fit:cover;border:2px solid #eedcc5;flex-shrink:0;" />
 							<?php endif; ?>
-							<?php if ( ! $term['isFree'] && ! empty( $term['wooProductId'] ) ) : ?>
-								<span class="kn-pill kn-pill-blue">محصول ووکامرس #<?php echo esc_html( $term['wooProductId'] ); ?></span>
-							<?php endif; ?>
-							<strong style="font-size:16px;margin-right:6px;"><?php echo esc_html( $term['title'] ); ?></strong>
-							<div style="font-size:12px;color:#7c5b43;margin-top:4px;">
-								داستان: <strong><?php echo esc_html( $term['storyTitle'] ); ?></strong> · دنیا: <?php echo esc_html( self::$biomes[ $term['biome'] ] ?? $term['biome'] ); ?> · تعداد مراحل جاده: <?php echo esc_html( count( $term['stages'] ) ); ?>
+							<div>
+								<span class="kn-pill kn-pill-blue">ترم <?php echo esc_html( $term['termNumber'] ); ?></span>
+								<span class="kn-pill <?php echo $term['isFree'] ? 'kn-pill-green' : 'kn-pill-amber'; ?>">
+									<?php echo $term['isFree'] ? 'رایگان (استارتر)' : 'پولی: ' . esc_html( $term['priceFormatted'] ); ?>
+								</span>
+								<?php if ( ! $term['isFree'] && ! empty( $term['onSale'] ) ) : ?>
+									<span class="kn-pill kn-pill-green">تخفیف ویژه <?php echo esc_html( $term['discountPercent'] ); ?>٪ (اصلی: <?php echo esc_html( $term['regularPriceFormatted'] ); ?>)</span>
+								<?php endif; ?>
+								<?php if ( ! $term['isFree'] && ! empty( $term['wooProductId'] ) ) : ?>
+									<span class="kn-pill kn-pill-blue">محصول ووکامرس #<?php echo esc_html( $term['wooProductId'] ); ?></span>
+								<?php endif; ?>
+								<strong style="font-size:16px;margin-right:6px;"><?php echo esc_html( $term['title'] ); ?></strong>
+								<div style="font-size:12px;color:#7c5b43;margin-top:4px;">
+									داستان: <strong><?php echo esc_html( $term['storyTitle'] ); ?></strong> · دنیا: <?php echo esc_html( self::$biomes[ $term['biome'] ] ?? $term['biome'] ); ?> · تعداد مراحل جاده: <?php echo esc_html( count( $term['stages'] ) ); ?>
+								</div>
 							</div>
 						</div>
 						<div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -976,6 +1036,7 @@ class KN_Admin {
 									<input type="text" name="checkout_url_override" dir="ltr" value="<?php echo esc_attr( $term['checkoutUrlOverride'] ?? '' ); ?>" />
 								</div>
 							</div>
+							<?php self::render_image_picker_field( 'image_url', $term['imageUrl'] ?? '', 'kn-term-image-' . $term['dbId'], 'تصویر کاور ترم (نمایش در نقشه ترم‌ها و صفحه خرید)' ); ?>
 							<button type="submit" class="kn-btn kn-btn-primary">ذخیره تغییرات ترم</button>
 						</form>
 					</div>
@@ -1813,10 +1874,11 @@ class KN_Admin {
 					<table class="kn-table">
 						<thead>
 							<tr>
-								<th>نام کودک</th>
+								<th>کودک / تصویر</th>
 								<th>کاربر وردپرس</th>
 								<th>سن</th>
 								<th>ستاره‌ها</th>
+								<th>امتیاز جایزه / فروشگاه</th>
 								<th>دقیقه تمرین</th>
 								<th>سطح سختی</th>
 								<th>ویرایش امتیاز</th>
@@ -1824,29 +1886,46 @@ class KN_Admin {
 						</thead>
 						<tbody>
 							<?php foreach ( $rows as $r ) : ?>
+								<?php
+								$db_bonus   = ! empty( $r['daily_bonus_json'] ) ? json_decode( $r['daily_bonus_json'], true ) : array();
+								$streak_cnt = is_array( $db_bonus ) && isset( $db_bonus['streak'] ) ? intval( $db_bonus['streak'] ) : 0;
+								?>
 								<tr>
 									<form method="post">
 										<?php wp_nonce_field( 'kn_admin_update_profile' ); ?>
 										<input type="hidden" name="kn_action" value="admin_update_profile" />
 										<input type="hidden" name="profile_db_id" value="<?php echo esc_attr( $r['id'] ); ?>" />
 										<td>
-											<input type="text" name="name" value="<?php echo esc_attr( $r['name'] ); ?>" style="width:120px;padding:4px 8px;border:1px solid #eedcc5;border-radius:8px;" />
+											<div style="display:flex;align-items:center;gap:8px;">
+												<?php if ( ! empty( $r['avatar_url'] ) ) : ?>
+													<img src="<?php echo esc_url( $r['avatar_url'] ); ?>" alt="" style="width:36px;height:36px;border-radius:999px;object-fit:cover;border:2px solid #eedcc5;flex-shrink:0;" />
+												<?php endif; ?>
+												<div>
+													<input type="text" name="name" value="<?php echo esc_attr( $r['name'] ); ?>" style="width:115px;padding:4px 8px;border:1px solid #eedcc5;border-radius:8px;" />
+													<?php if ( $streak_cnt > 0 ) : ?>
+														<div style="font-size:11px;color:#b45309;margin-top:3px;">🔥 رشته روزانه: <?php echo esc_html( $streak_cnt ); ?> روز</div>
+													<?php endif; ?>
+												</div>
+											</div>
 										</td>
 										<td>
 											<strong><?php echo esc_html( $r['user_login'] ); ?></strong>
 											<div style="font-size:11px;color:#7c5b43;"><?php echo esc_html( $r['user_email'] ); ?></div>
 										</td>
 										<td>
-											<input type="number" name="age" value="<?php echo esc_attr( $r['age'] ); ?>" min="3" max="15" style="width:65px;padding:4px 6px;border:1px solid #eedcc5;border-radius:8px;" />
+											<input type="number" name="age" value="<?php echo esc_attr( $r['age'] ); ?>" min="3" max="15" style="width:60px;padding:4px 6px;border:1px solid #eedcc5;border-radius:8px;" />
 										</td>
 										<td>
-											<input type="number" name="total_stars" value="<?php echo esc_attr( $r['total_stars'] ); ?>" min="0" style="width:75px;padding:4px 6px;border:1px solid #eedcc5;border-radius:8px;" />
+											<input type="number" name="total_stars" value="<?php echo esc_attr( $r['total_stars'] ); ?>" min="0" style="width:70px;padding:4px 6px;border:1px solid #eedcc5;border-radius:8px;" />
 										</td>
 										<td>
-											<input type="number" name="practice_minutes" value="<?php echo esc_attr( $r['practice_minutes'] ); ?>" min="0" style="width:70px;padding:4px 6px;border:1px solid #eedcc5;border-radius:8px;" />
+											<input type="number" name="reward_points" value="<?php echo esc_attr( $r['reward_points'] ?? 0 ); ?>" min="0" style="width:78px;padding:4px 6px;border:1px solid #eedcc5;border-radius:8px;" />
 										</td>
 										<td>
-											<input type="number" name="difficulty_level" value="<?php echo esc_attr( $r['difficulty_level'] ); ?>" min="1" max="5" style="width:60px;padding:4px 6px;border:1px solid #eedcc5;border-radius:8px;" />
+											<input type="number" name="practice_minutes" value="<?php echo esc_attr( $r['practice_minutes'] ); ?>" min="0" style="width:65px;padding:4px 6px;border:1px solid #eedcc5;border-radius:8px;" />
+										</td>
+										<td>
+											<input type="number" name="difficulty_level" value="<?php echo esc_attr( $r['difficulty_level'] ); ?>" min="1" max="5" style="width:58px;padding:4px 6px;border:1px solid #eedcc5;border-radius:8px;" />
 										</td>
 										<td>
 											<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">

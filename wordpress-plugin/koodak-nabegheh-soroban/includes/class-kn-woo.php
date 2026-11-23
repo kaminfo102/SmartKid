@@ -1270,9 +1270,9 @@ class KN_Woo {
 
 	/**
 	 * Validate and persist an uploaded image strictly <= 100 KB into a dedicated user folder on WordPress host:
-	 * wp-content/uploads/kn-receipts/<sanitized_username>/
+	 * wp-content/uploads/<kn-receipts|kn-avatars>/<sanitized_username>/
 	 */
-	public static function save_compressed_user_image( WP_User $user, $file_array, $prefix = 'receipt' ) {
+	public static function save_compressed_user_image( WP_User $user, $file_array, $prefix = 'receipt', $folder_slug = 'kn-receipts' ) {
 		if ( empty( $file_array ) || ! is_array( $file_array ) || empty( $file_array['tmp_name'] ) ) {
 			return new WP_Error( 'missing_file', 'فایل تصویری دریافت نشد.', array( 'status' => 400 ) );
 		}
@@ -1305,7 +1305,7 @@ class KN_Woo {
 		}
 		$ext = $allowed_mimes[ $mime ];
 
-		$dirs = self::ensure_user_receipt_dir( $user );
+		$dirs = self::ensure_user_receipt_dir( $user, $folder_slug );
 		if ( is_wp_error( $dirs ) ) {
 			return $dirs;
 		}
@@ -1371,13 +1371,15 @@ class KN_Woo {
 	}
 
 	/**
-	 * Auto-create wp-content/uploads/kn-receipts/<sanitized_username>/ with script-execution disabled.
+	 * Auto-create wp-content/uploads/<kn-receipts|kn-avatars>/<sanitized_username>/ with script-execution disabled.
 	 */
-	private static function ensure_user_receipt_dir( WP_User $user ) {
+	private static function ensure_user_receipt_dir( WP_User $user, $folder_slug = 'kn-receipts' ) {
 		$upload_dir = wp_upload_dir();
 		if ( ! empty( $upload_dir['error'] ) ) {
 			return new WP_Error( 'upload_dir_error', $upload_dir['error'], array( 'status' => 500 ) );
 		}
+
+		$safe_root = in_array( $folder_slug, array( 'kn-receipts', 'kn-avatars' ), true ) ? $folder_slug : 'kn-receipts';
 
 		$raw_folder = preg_replace( '/[^a-zA-Z0-9_\-]/', '_', strtolower( (string) $user->user_login ) );
 		$raw_folder = trim( (string) $raw_folder, '_-' );
@@ -1386,8 +1388,8 @@ class KN_Woo {
 		}
 		$user_folder = sanitize_file_name( $raw_folder );
 
-		$root_path = trailingslashit( $upload_dir['basedir'] ) . 'kn-receipts';
-		$root_url  = trailingslashit( $upload_dir['baseurl'] ) . 'kn-receipts';
+		$root_path = trailingslashit( $upload_dir['basedir'] ) . $safe_root;
+		$root_url  = trailingslashit( $upload_dir['baseurl'] ) . $safe_root;
 		$user_path = trailingslashit( $root_path ) . $user_folder;
 		$user_url  = trailingslashit( $root_url ) . $user_folder;
 

@@ -79,6 +79,7 @@ class KN_DB {
 			story_description text NOT NULL,
 			biome varchar(40) NOT NULL DEFAULT 'farm',
 			accent_color varchar(20) NOT NULL DEFAULT '#4BB543',
+			image_url varchar(500) NOT NULL DEFAULT '',
 			is_free tinyint(1) NOT NULL DEFAULT 0,
 			price_amount bigint(20) unsigned NOT NULL DEFAULT 0,
 			woo_product_id bigint(20) unsigned NOT NULL DEFAULT 0,
@@ -165,6 +166,7 @@ class KN_DB {
 			client_profile_id varchar(80) NOT NULL,
 			name varchar(120) NOT NULL,
 			avatar varchar(40) NOT NULL DEFAULT 'owl',
+			avatar_url varchar(500) NOT NULL DEFAULT '',
 			age tinyint(3) unsigned NOT NULL DEFAULT 6,
 			total_stars int(11) NOT NULL DEFAULT 0,
 			practice_minutes int(11) NOT NULL DEFAULT 0,
@@ -271,6 +273,7 @@ class KN_DB {
 						'story_description'     => $term['story_description'],
 						'biome'                 => $term['biome'],
 						'accent_color'          => $term['accent_color'],
+						'image_url'             => '',
 						'is_free'               => $term['is_free'],
 						'price_amount'          => $term['price_amount'],
 						'woo_product_id'        => 0,
@@ -628,6 +631,7 @@ class KN_DB {
 				'storyDescription'      => $term['story_description'],
 				'biome'                 => $term['biome'],
 				'accentColor'           => $term['accent_color'],
+				'imageUrl'              => esc_url_raw( (string) ( $term['image_url'] ?? '' ) ),
 				'isFree'                => $is_free,
 				'priceAmount'           => (int) $woo_meta['priceAmount'],
 				'priceFormatted'        => $is_free ? 'رایگان' : $woo_meta['priceFormatted'],
@@ -1023,6 +1027,7 @@ class KN_DB {
 			'userId'          => (int) $row['user_id'],
 			'name'            => $row['name'],
 			'avatar'          => $row['avatar'],
+			'avatarUrl'       => esc_url_raw( (string) ( $row['avatar_url'] ?? '' ) ),
 			'age'             => (int) $row['age'],
 			'createdAt'       => (int) $row['created_at'],
 			'totalStars'      => (int) $row['total_stars'],
@@ -1074,18 +1079,38 @@ class KN_DB {
 		$client_id = sanitize_text_field( $payload['id'] ?? ( 'child_' . time() . '_' . wp_rand( 100, 999 ) ) );
 		$existing  = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT id FROM {$t_profiles} WHERE user_id = %d AND client_profile_id = %s",
+				"SELECT id, avatar_url FROM {$t_profiles} WHERE user_id = %d AND client_profile_id = %s",
 				absint( $user_id ),
 				$client_id
 			),
 			ARRAY_A
 		);
 
+		$existing_avatar_url = is_array( $existing ) ? (string) ( $existing['avatar_url'] ?? '' ) : '';
+		$avatar_url_to_save  = $existing_avatar_url;
+		if ( array_key_exists( 'avatarUrl', $payload ) ) {
+			$raw_avatar_url = trim( (string) $payload['avatarUrl'] );
+			if ( $raw_avatar_url === '' ) {
+				$avatar_url_to_save = '';
+			} elseif ( stripos( $raw_avatar_url, 'data:image/' ) !== 0 ) {
+				$parsed_av = wp_parse_url( $raw_avatar_url );
+				if ( is_array( $parsed_av ) && ! empty( $parsed_av['scheme'] ) && in_array( strtolower( $parsed_av['scheme'] ), array( 'http', 'https' ), true ) ) {
+					$avatar_url_to_save = esc_url_raw( $raw_avatar_url );
+				}
+			}
+		}
+
+		$clean_name = sanitize_text_field( $payload['name'] ?? '' );
+		if ( trim( $clean_name ) === '' ) {
+			$clean_name = 'کیا';
+		}
+
 		$data = array(
 			'user_id'           => absint( $user_id ),
 			'client_profile_id' => $client_id,
-			'name'              => sanitize_text_field( $payload['name'] ?? 'قهرمان کوچک' ),
+			'name'              => $clean_name,
 			'avatar'            => sanitize_key( $payload['avatar'] ?? 'owl' ),
+			'avatar_url'        => $avatar_url_to_save,
 			'age'               => max( 3, min( 15, absint( $payload['age'] ?? 6 ) ) ),
 			'total_stars'       => max( 0, intval( $payload['totalStars'] ?? 0 ) ),
 			'practice_minutes'  => max( 0, intval( $payload['practiceMinutes'] ?? 0 ) ),

@@ -13,12 +13,18 @@ interface ProgressPanelProps {
   profile: ChildProfile;
   digitMode: DigitDisplayMode;
   lessons?: LessonDefinition[];
+  onPracticeSkill?: (skill: SkillKey) => void;
+  onOpenShop?: () => void;
+  onEditProfile?: () => void;
 }
 
 export const ProgressPanel: React.FC<ProgressPanelProps> = ({
   profile,
   digitMode,
   lessons = LESSONS,
+  onPracticeSkill,
+  onOpenShop,
+  onEditProfile,
 }) => {
   const skillEntries = (Object.keys(SKILL_LABELS) as SkillKey[]).map((key) => {
     const stat = profile.skills[key] ?? { correct: 0, attempts: 0 };
@@ -35,6 +41,9 @@ export const ProgressPanel: React.FC<ProgressPanelProps> = ({
         profile={profile}
         digitMode={digitMode}
         lessons={lessons}
+        onPracticeSkill={onPracticeSkill}
+        onOpenShop={onOpenShop}
+        onEditProfile={onEditProfile}
       />
 
       {/* Strong & Weak Skills Quick Summary for Parents */}

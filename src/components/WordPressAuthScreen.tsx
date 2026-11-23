@@ -62,6 +62,7 @@ interface WordPressAuthScreenProps {
   onOpenProfiles?: () => void;
   onOpenTickets?: () => void;
   onBack: () => void;
+  embedded?: boolean;
 }
 
 const CHILD_AGES = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
@@ -81,6 +82,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
   onOpenProfiles,
   onOpenTickets,
   onBack,
+  embedded = false,
 }) => {
   const [siteInput, setSiteInput] = useState(wpUrl);
 
@@ -289,7 +291,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
         city: regCity.trim(),
         address1: regAddress1.trim(),
         postcode: normalizePersianDigits(regPostcode.trim()),
-        childName: regChildName.trim() || 'قهرمان کوچک',
+        childName: regChildName.trim() || 'کیا',
         childAge: regChildAge,
         childAvatar: regAvatar,
       });
@@ -381,26 +383,8 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
     }
   };
 
-  return (
-    <div className="min-h-screen flex flex-col bg-[#F5E4CE] dark:bg-slate-950">
-      <header className="sticky top-0 z-20 bg-gradient-to-b from-[#F49A67] to-[#F8BA88] dark:from-slate-900 dark:to-slate-900 border-b-2 border-[#E3B488] dark:border-slate-800 px-4 h-16 flex items-center justify-between">
-        <button
-          type="button"
-          onClick={onBack}
-          aria-label="بازگشت"
-          className="min-h-[44px] min-w-[44px] rounded-2xl bg-white/95 hover:bg-white dark:bg-slate-800 border-b-4 border-[#DFC6A8] dark:border-slate-700 flex items-center justify-center text-[#783F1D] dark:text-slate-200"
-        >
-          <ArrowRight className="w-5 h-5" />
-        </button>
-
-        <h1 className="text-base sm:text-lg font-extrabold text-white drop-shadow-[0_2px_0_rgba(148,70,22,0.45)]">
-          {wpUser ? 'حساب کاربری و سفارش‌ها' : 'ورود و ثبت‌نام'}
-        </h1>
-
-        <div className="w-11" />
-      </header>
-
-      <main className="flex-1 w-full max-w-2xl mx-auto p-4 space-y-5 pb-12">
+  const contentBody = (
+      <div className={embedded ? 'space-y-4' : 'flex-1 w-full max-w-2xl mx-auto p-4 space-y-5 pb-12'}>
         {statusMsg && (
           <div className="rounded-2xl bg-[#E7F9E5] border-2 border-[#8EE086] border-b-4 p-3 text-xs sm:text-sm font-extrabold text-[#1E6B19] flex items-center gap-2">
             <CheckCircle2 className="w-5 h-5 shrink-0" />
@@ -919,7 +903,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                     </KidIconTile>
                     <div>
                       <h2 className="font-extrabold text-sm sm:text-base text-[#35207A] dark:text-white">
-                        بسته افزونه مدیریت سرور (نسخه ۲.۵.۰)
+                        بسته افزونه مدیریت سرور (نسخه ۲.۶.۰)
                       </h2>
                       <p className="text-xs text-[#59449E] dark:text-slate-300">
                         دارای مدیریت فروشگاه، تایید فیش‌های بانکی، تیکتینگ پشتیبانی، مدیریت فایل‌های صوتی، تخفیف‌ها و جاده مراحل
@@ -1215,7 +1199,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                         required
                         value={regChildName}
                         onChange={(e) => setRegChildName(e.target.value)}
-                        placeholder="مثلاً آرتین یا باران"
+                        placeholder="مثلاً کیا یا باران"
                         className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                       />
                     </div>
@@ -1281,6 +1265,34 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
             </section>
           </>
         )}
+      </div>
+  );
+
+  if (embedded) {
+    return contentBody;
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col bg-[#F5E4CE] dark:bg-slate-950">
+      <header className="sticky top-0 z-20 bg-gradient-to-b from-[#F49A67] to-[#F8BA88] dark:from-slate-900 dark:to-slate-900 border-b-2 border-[#E3B488] dark:border-slate-800 px-4 h-16 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="بازگشت"
+          className="min-h-[44px] min-w-[44px] rounded-2xl bg-white/95 hover:bg-white dark:bg-slate-800 border-b-4 border-[#DFC6A8] dark:border-slate-700 flex items-center justify-center text-[#783F1D] dark:text-slate-200"
+        >
+          <ArrowRight className="w-5 h-5" />
+        </button>
+
+        <h1 className="text-base sm:text-lg font-extrabold text-white drop-shadow-[0_2px_0_rgba(148,70,22,0.45)]">
+          {wpUser ? 'حساب کاربری و سفارش‌ها' : 'ورود و ثبت‌نام'}
+        </h1>
+
+        <div className="w-11" />
+      </header>
+
+      <main className="flex-1 flex flex-col">
+        {contentBody}
       </main>
     </div>
   );

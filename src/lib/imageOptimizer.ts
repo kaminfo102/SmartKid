@@ -112,3 +112,90 @@ export async function optimizeReceiptImage(
 
   throw new Error('امکان کاهش حجم این تصویر به زیر ۱۰۰ کیلوبایت نبود؛ لطفاً تصویر واضح‌تری انتخاب کنید.');
 }
+
+export interface OptimizedAvatarResult {
+  file: File;
+  dataUrl: string;
+  compressedSizeKb: number;
+  compressedBytes: number;
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+      } else {
+        reject(new Error('خطا در خواندن تصویر پردازش‌شده.'));
+      }
+    };
+    reader.onerror = () => reject(new Error('خطا در خواندن تصویر پردازش‌شده.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/**
+ * Export a cropped square canvas as JPEG strictly <= maxBytes (default 100 KB),
+ * returning both a File for server upload and a dataUrl for immediate/guest display.
+ */
+export async function optimizeCroppedAvatarCanvas(
+  sourceCanvas: HTMLCanvasElement,
+  maxBytes: number = MAX_TARGET_BYTES
+): Promise<OptimizedAvatarResult> {
+  const sizeSteps = [Math.min(280, Math.max(sourceCanvas.width, 160)), 256, 192, 160];
+  const qualitySteps = [0.88, 0.76, 0.64, 0.5, 0.36, 0.24, 0.16];
+  const workCanvas = document.createElement('canvas');
+  const workCtx = workCanvas.getContext('2d');
+  if (!workCtx) {
+    throw new Error('مرورگر امکان پردازش تصویر پروفایل را ندارد.');
+  }
+
+  let bestBlob: Blob | null = null;
+
+  for (const dim of sizeSteps) {
+    workCanvas.width = dim;
+    workCanvas.height = dim;
+    workCtx.fillStyle = '#FFFFFF';
+    workCtx.fillRect(0, 0, dim, dim);
+    workCtx.drawImage(sourceCanvas, 0, 0, dim, dim);
+
+    for (const q of qualitySteps) {
+      const blob = await canvasToBlob(workCanvas, 'image/jpeg', q);
+      if (!blob) continue;
+      if (!bestBlob || blob.size < bestBlob.size) {
+        bestBlob = blob;
+      }
+      if (blob.size <= maxBytes) {
+        const file = new File([blob], 'child-avatar.jpg', {
+          type: 'image/jpeg',
+          lastModified: Date.now(),
+        });
+        const dataUrl = await blobToDataUrl(blob);
+        return {
+          file,
+          dataUrl,
+          compressedSizeKb: Math.max(1, Math.round(blob.size / 1024)),
+          compressedBytes: blob.size,
+        };
+      }
+    }
+  }
+
+  if (bestBlob && bestBlob.size <= maxBytes) {
+    const file = new File([bestBlob], 'child-avatar.jpg', {
+      type: 'image/jpeg',
+      lastModified: Date.now(),
+    });
+    const dataUrl = await blobToDataUrl(bestBlob);
+    return {
+      file,
+      dataUrl,
+      compressedSizeKb: Math.max(1, Math.round(bestBlob.size / 1024)),
+      compressedBytes: bestBlob.size,
+    };
+  }
+
+  throw new Error('حجم تصویر پروفایل بیش از حد مجاز است؛ لطفاً عکس دیگری انتخاب کنید.');
+}
+

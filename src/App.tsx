@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AppSettings,
-  AvatarId,
   BacsAccount,
   ChildProfile,
   LessonDefinition,
@@ -29,6 +28,8 @@ import {
 } from './lib/rewards';
 import {
   createProfileInWordPress,
+  dataUrlToImageFile,
+  deleteProfileInWordPress,
   detectSameOriginWordPressUrl,
   fetchWordPressCurriculum,
   fetchWordPressQuestions,
@@ -39,11 +40,13 @@ import {
   setOnUnauthorizedSession,
   syncProfileToWordPress,
   syncSettingsToWordPress,
+  uploadChildAvatarInWordPress,
   type WordPressAuthResponse,
 } from './lib/wordpressApi';
 import { audioEngine } from './lib/audioEngine';
 import { StartScreen } from './components/StartScreen';
 import { WordPressAuthScreen } from './components/WordPressAuthScreen';
+import type { ChildAvatarSavePayload } from './components/ChildAvatarEditorModal';
 import { ProfileScreen } from './features/progress/ProfileScreen';
 import { LessonMap } from './features/lessons/LessonMap';
 import { LessonScreen } from './features/lessons/LessonScreen';
@@ -52,7 +55,7 @@ import { GameScreen } from './features/games/GameScreen';
 import { SorobanStepSimulator } from './features/abacus/SorobanStepSimulator';
 import { ResultScreen } from './features/progress/ResultScreen';
 import { ParentGate } from './components/ParentGate';
-import { SettingsPanel } from './features/progress/SettingsPanel';
+import { SettingsPanel, type ParentsHubTab } from './features/progress/SettingsPanel';
 import { ShopScreen } from './features/shop/ShopScreen';
 import { SupportScreen } from './features/support/SupportScreen';
 import { OfflineIndicator } from './components/PWAInstallButton';
@@ -78,7 +81,34 @@ export default function App() {
   const [practiceSkill, setPracticeSkill] = useState<SkillKey>('recognition');
   const [lastResult, setLastResult] = useState<SessionResult | null>(null);
   const [parentUnlocked, setParentUnlocked] = useState(false);
+  const [parentsTab, setParentsTab] = useState<ParentsHubTab>('children');
   const [profileTab, setProfileTab] = useState<'details' | 'profiles'>('details');
+
+  // Refs to execute network persistence strictly outside React state updaters
+  const dataRef = useRef<StoredAppData>(data);
+  const wpUrlRef = useRef<string>(wpUrl);
+  const wpUserRef = useRef<WordPressUser | null>(wpUser);
+  const syncTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
+  useEffect(() => {
+    wpUrlRef.current = wpUrl;
+  }, [wpUrl]);
+
+  useEffect(() => {
+    wpUserRef.current = wpUser;
+  }, [wpUser]);
+
+  useEffect(() => {
+    return () => {
+      if (syncTimerRef.current !== null) {
+        window.clearTimeout(syncTimerRef.current);
+      }
+    };
+  }, []);
 
   const lessons = useMemo<LessonDefinition[]>(() => {
     const flattened = terms.flatMap((t) => t.stages);
@@ -98,7 +128,51 @@ export default function App() {
     return normalizeChildProfile(found);
   }, [data.profiles, data.activeProfileId]);
 
-  // Fetch dynamic Terms, Learning Roads & Practice Questions from Headless WordPress
+  const isAuthenticatedToBackend = useCallback((): boolean => {
+    return Boolean(wpUrlRef.current) && (hasMemoryBearerToken() || Boolean(wpUserRef.current));
+  }, []);
+
+  const scheduleProfileSync = useCallback(
+    (profile: ChildProfile, immediate = false) => {
+      const targetUrl = wpUrlRef.current;
+      if (!targetUrl || (!hasMemoryBearerToken() && !wpUserRef.current)) {
+        return;
+      }
+
+      if (syncTimerRef.current !== null) {
+        window.clearTimeout(syncTimerRef.current);
+        syncTimerRef.current = null;
+      }
+
+      // Never upload large inline data-URIs via JSON profile PUT; files go to /avatar
+      const payloadToSync: ChildProfile =
+        profile.avatarUrl?.startsWith('data:')
+          ? { ...profile, avatarUrl: undefined }
+          : profile;
+
+      if (immediate) {
+        void syncProfileToWordPress(targetUrl, payloadToSync).catch(() => {});
+        return;
+      }
+
+      const targetId = profile.id;
+      syncTimerRef.current = window.setTimeout(() => {
+        syncTimerRef.current = null;
+        const currentUrl = wpUrlRef.current;
+        if (!currentUrl || (!hasMemoryBearerToken() && !wpUserRef.current)) return;
+        const latestProfile =
+          dataRef.current.profiles.find((p) => p.id === targetId) ?? payloadToSync;
+        const safeLatest: ChildProfile =
+          latestProfile.avatarUrl?.startsWith('data:')
+            ? { ...latestProfile, avatarUrl: undefined }
+            : latestProfile;
+        void syncProfileToWordPress(currentUrl, safeLatest).catch(() => {});
+      }, 500);
+    },
+    []
+  );
+
+  // Fetch dynamic Terms, Learning Roads & Practice Questions from WordPress
   const refreshFromWordPress = useCallback(
     async (overrideUrl?: string): Promise<boolean> => {
       const targetUrl = overrideUrl ?? wpUrl;
@@ -128,7 +202,6 @@ export default function App() {
             });
           }
         } else if (curriculum.stages.length > 0) {
-          // Backward compatibility if server returns flat stages only
           setTerms((prev) =>
             prev.map((t, i) =>
               i === 0 ? { ...t, stages: curriculum.stages } : t
@@ -178,7 +251,7 @@ export default function App() {
     };
   }, [wpUrl]);
 
-  // Auto-restore authenticated WordPress session (via HttpOnly cookie) + load dynamic terms on boot
+  // Auto-restore authenticated WordPress session + load dynamic terms on boot
   useEffect(() => {
     if (!wpUrl) return;
     let cancelled = false;
@@ -188,16 +261,21 @@ export default function App() {
       if (restored) {
         const normalizedProfiles =
           restored.profiles.length > 0 ? restored.profiles.map(normalizeChildProfile) : [];
+        wpUserRef.current = restored.user;
         setWpUser(restored.user);
         setWpConnected(true);
-        setData((prev) => ({
-          profiles: normalizedProfiles.length > 0 ? normalizedProfiles : prev.profiles,
-          activeProfileId:
-            normalizedProfiles.length > 0 ? normalizedProfiles[0].id : prev.activeProfileId,
-          settings: restored.settings
-            ? { ...prev.settings, ...restored.settings }
-            : prev.settings,
-        }));
+        setData((prev) => {
+          const next: StoredAppData = {
+            profiles: normalizedProfiles.length > 0 ? normalizedProfiles : prev.profiles,
+            activeProfileId:
+              normalizedProfiles.length > 0 ? normalizedProfiles[0].id : prev.activeProfileId,
+            settings: restored.settings
+              ? { ...prev.settings, ...restored.settings }
+              : prev.settings,
+          };
+          dataRef.current = next;
+          return next;
+        });
         if (Array.isArray(restored.unlockedTermIds) && restored.unlockedTermIds.length > 0) {
           const unlockedSet = new Set(restored.unlockedTermIds);
           setTerms((prev) =>
@@ -243,6 +321,45 @@ export default function App() {
     }
   }, [data.settings]);
 
+  const updateSettings = useCallback(
+    (patch: Partial<AppSettings>) => {
+      const prev = dataRef.current;
+      const nextSettings = { ...prev.settings, ...patch };
+      const nextData: StoredAppData = {
+        ...prev,
+        settings: nextSettings,
+      };
+      dataRef.current = nextData;
+      setData(nextData);
+      if (isAuthenticatedToBackend()) {
+        void syncSettingsToWordPress(wpUrlRef.current, nextSettings).catch(() => {});
+      }
+    },
+    [isAuthenticatedToBackend]
+  );
+
+  const updateActiveProfile = useCallback(
+    (updater: (p: ChildProfile) => ChildProfile, immediate = true) => {
+      const prev = dataRef.current;
+      const updatedProfiles = prev.profiles.map((p) =>
+        p.id === prev.activeProfileId ? updater(normalizeChildProfile(p)) : p
+      );
+      const nextData: StoredAppData = {
+        ...prev,
+        profiles: updatedProfiles,
+      };
+      dataRef.current = nextData;
+      setData(nextData);
+      const updatedActive = updatedProfiles.find(
+        (p) => p.id === nextData.activeProfileId
+      );
+      if (updatedActive) {
+        scheduleProfileSync(updatedActive, immediate);
+      }
+    },
+    [scheduleProfileSync]
+  );
+
   // Track active learning minutes gently every 60s
   useEffect(() => {
     const isLearningScreen =
@@ -250,58 +367,14 @@ export default function App() {
     if (!isLearningScreen) return;
 
     const timer = window.setInterval(() => {
-      setData((prev) => {
-        const updatedProfiles = prev.profiles.map((p) =>
-          p.id === prev.activeProfileId
-            ? { ...p, practiceMinutes: p.practiceMinutes + 1 }
-            : p
-        );
-        const updatedActive = updatedProfiles.find(
-          (p) => p.id === prev.activeProfileId
-        );
-        if (wpUrl && (hasMemoryBearerToken() || Boolean(wpUser)) && updatedActive) {
-          void syncProfileToWordPress(wpUrl, updatedActive).catch(() => {});
-        }
-        return {
-          ...prev,
-          profiles: updatedProfiles,
-        };
-      });
+      updateActiveProfile(
+        (p) => ({ ...p, practiceMinutes: p.practiceMinutes + 1 }),
+        true
+      );
     }, 60000);
 
     return () => window.clearInterval(timer);
-  }, [screen, wpUrl, wpUser]);
-
-  const updateSettings = (patch: Partial<AppSettings>) => {
-    setData((prev) => {
-      const nextSettings = { ...prev.settings, ...patch };
-      if (wpUrl && (hasMemoryBearerToken() || Boolean(wpUser))) {
-        void syncSettingsToWordPress(wpUrl, nextSettings).catch(() => {});
-      }
-      return {
-        ...prev,
-        settings: nextSettings,
-      };
-    });
-  };
-
-  const updateActiveProfile = (updater: (p: ChildProfile) => ChildProfile) => {
-    setData((prev) => {
-      const updatedProfiles = prev.profiles.map((p) =>
-        p.id === prev.activeProfileId ? updater(p) : p
-      );
-      const updatedActive = updatedProfiles.find(
-        (p) => p.id === prev.activeProfileId
-      );
-      if (wpUrl && (hasMemoryBearerToken() || Boolean(wpUser)) && updatedActive) {
-        void syncProfileToWordPress(wpUrl, updatedActive).catch(() => {});
-      }
-      return {
-        ...prev,
-        profiles: updatedProfiles,
-      };
-    });
-  };
+  }, [screen, updateActiveProfile]);
 
   const handleRecordAnswer = (skill: SkillKey, correct: boolean) => {
     updateActiveProfile((p) => {
@@ -334,7 +407,7 @@ export default function App() {
         ...draft,
         badges: evaluateProfileBadges(draft, lessons),
       };
-    });
+    }, false);
   };
 
   const handleCompleteLesson = (
@@ -373,7 +446,7 @@ export default function App() {
           ...draft,
           badges: evaluateProfileBadges(draft, lessons),
         };
-      });
+      }, true);
     }
     setLastResult(result);
     setScreen('result');
@@ -389,7 +462,7 @@ export default function App() {
         ...draft,
         badges: evaluateProfileBadges(draft, lessons),
       };
-    });
+    }, true);
     setLastResult(result);
     setScreen('result');
   };
@@ -438,21 +511,271 @@ export default function App() {
     setScreen('practice');
   };
 
+  const handleSelectProfile = useCallback((id: string) => {
+    audioEngine.play('uiTap');
+    const prev = dataRef.current;
+    if (!prev.profiles.some((p) => p.id === id)) return;
+    const nextData: StoredAppData = { ...prev, activeProfileId: id };
+    dataRef.current = nextData;
+    setData(nextData);
+  }, []);
+
+  const handleCreateChildProfile = useCallback(
+    async (payload: ChildAvatarSavePayload) => {
+      audioEngine.play('success');
+      const created = createChildProfile(
+        payload.name,
+        payload.avatar,
+        payload.age,
+        payload.avatarUrl
+      );
+      const prev = dataRef.current;
+      const nextData: StoredAppData = {
+        ...prev,
+        profiles: [...prev.profiles, created],
+        activeProfileId: created.id,
+      };
+      dataRef.current = nextData;
+      setData(nextData);
+
+      if (isAuthenticatedToBackend()) {
+        const currentUrl = wpUrlRef.current;
+        try {
+          await createProfileInWordPress(currentUrl, {
+            ...created,
+            avatarUrl: created.avatarUrl?.startsWith('data:') ? undefined : created.avatarUrl,
+          });
+          if (payload.avatarFile) {
+            const uploaded = await uploadChildAvatarInWordPress(
+              currentUrl,
+              created.id,
+              payload.avatarFile
+            );
+            if (uploaded.avatarUrl) {
+              setData((cur) => {
+                const updated: StoredAppData = {
+                  ...cur,
+                  profiles: cur.profiles.map((p) =>
+                    p.id === created.id ? { ...p, avatarUrl: uploaded.avatarUrl } : p
+                  ),
+                };
+                dataRef.current = updated;
+                return updated;
+              });
+            }
+          }
+        } catch {
+          // Keep optimistic local profile on transient network failure
+        }
+      }
+    },
+    [isAuthenticatedToBackend]
+  );
+
+  const handleUpdateChildProfile = useCallback(
+    async (profileId: string, payload: ChildAvatarSavePayload) => {
+      audioEngine.play('success');
+      const prev = dataRef.current;
+      const existing = prev.profiles.find((p) => p.id === profileId);
+      if (!existing) return;
+
+      const nextAvatarUrl = payload.removePhoto
+        ? undefined
+        : payload.avatarUrl !== undefined
+          ? payload.avatarUrl
+          : existing.avatarUrl;
+
+      const updatedProfile: ChildProfile = {
+        ...existing,
+        name: payload.name,
+        age: payload.age,
+        avatar: payload.avatar,
+        avatarUrl: nextAvatarUrl,
+      };
+
+      const nextData: StoredAppData = {
+        ...prev,
+        profiles: prev.profiles.map((p) => (p.id === profileId ? updatedProfile : p)),
+      };
+      dataRef.current = nextData;
+      setData(nextData);
+
+      if (isAuthenticatedToBackend()) {
+        const currentUrl = wpUrlRef.current;
+        try {
+          if (payload.avatarFile) {
+            const uploaded = await uploadChildAvatarInWordPress(
+              currentUrl,
+              profileId,
+              payload.avatarFile
+            );
+            const serverAvatarUrl = uploaded.avatarUrl || nextAvatarUrl;
+            const syncedDraft: ChildProfile = {
+              ...updatedProfile,
+              avatarUrl: serverAvatarUrl,
+            };
+            await syncProfileToWordPress(currentUrl, syncedDraft);
+            if (uploaded.avatarUrl) {
+              setData((cur) => {
+                const patched: StoredAppData = {
+                  ...cur,
+                  profiles: cur.profiles.map((p) =>
+                    p.id === profileId ? { ...p, avatarUrl: uploaded.avatarUrl } : p
+                  ),
+                };
+                dataRef.current = patched;
+                return patched;
+              });
+            }
+          } else {
+            await syncProfileToWordPress(currentUrl, {
+              ...updatedProfile,
+              avatarUrl: payload.removePhoto
+                ? ''
+                : updatedProfile.avatarUrl?.startsWith('data:')
+                  ? undefined
+                  : updatedProfile.avatarUrl,
+            });
+          }
+        } catch {
+          // Retain local state if offline
+        }
+      }
+    },
+    [isAuthenticatedToBackend]
+  );
+
+  const handleDeleteChildProfile = useCallback(
+    async (profileId: string) => {
+      const prev = dataRef.current;
+      if (prev.profiles.length <= 1) return;
+      const remaining = prev.profiles.filter((p) => p.id !== profileId);
+      if (remaining.length === 0) return;
+
+      audioEngine.play('uiTap');
+      const nextActiveId =
+        prev.activeProfileId === profileId ? remaining[0].id : prev.activeProfileId;
+
+      const nextData: StoredAppData = {
+        ...prev,
+        profiles: remaining,
+        activeProfileId: nextActiveId,
+      };
+      dataRef.current = nextData;
+      setData(nextData);
+
+      if (isAuthenticatedToBackend()) {
+        try {
+          await deleteProfileInWordPress(wpUrlRef.current, profileId);
+        } catch {
+          // Ignored on transient network issue
+        }
+      }
+    },
+    [isAuthenticatedToBackend]
+  );
+
   const handleWordPressAuthSuccess = (res: WordPressAuthResponse) => {
+    wpUserRef.current = res.user;
     setWpUser(res.user);
     setWpConnected(true);
+
     const normalizedProfiles =
       res.profiles.length > 0 ? res.profiles.map(normalizeChildProfile) : [];
-    setData((prev) => ({
-      profiles: normalizedProfiles.length > 0 ? normalizedProfiles : prev.profiles,
-      activeProfileId:
-        normalizedProfiles.length > 0 ? normalizedProfiles[0].id : prev.activeProfileId,
-      settings: res.settings ? { ...prev.settings, ...res.settings } : prev.settings,
-    }));
+
+    const prev = dataRef.current;
+    const guestProfile = normalizeChildProfile(
+      prev.profiles.find((p) => p.id === prev.activeProfileId) ?? prev.profiles[0]
+    );
+    const serverFirst = normalizedProfiles[0];
+
+    const isServerStarterEmpty =
+      normalizedProfiles.length === 1 &&
+      Boolean(serverFirst) &&
+      serverFirst.totalAttempts === 0 &&
+      serverFirst.totalStars === 0 &&
+      (serverFirst.rewardPoints ?? 0) === 0 &&
+      (serverFirst.dailyBonus?.totalDaysClaimed ?? 0) === 0 &&
+      Object.keys(serverFirst.lessons).length === 0;
+
+    const hasGuestProgress =
+      guestProfile.totalAttempts > 0 ||
+      guestProfile.totalStars > 0 ||
+      (guestProfile.rewardPoints ?? 0) > 0 ||
+      (guestProfile.dailyBonus?.totalDaysClaimed ?? 0) > 0 ||
+      Object.keys(guestProfile.lessons).length > 0 ||
+      guestProfile.name !== 'کیا' ||
+      Boolean(guestProfile.avatarUrl);
+
+    if (isServerStarterEmpty && serverFirst && hasGuestProgress) {
+      const mergedProfile: ChildProfile = {
+        ...guestProfile,
+        id: serverFirst.id,
+        avatarUrl: guestProfile.avatarUrl || serverFirst.avatarUrl,
+      };
+      const mergedData: StoredAppData = {
+        profiles: [mergedProfile],
+        activeProfileId: mergedProfile.id,
+        settings: res.settings ? { ...prev.settings, ...res.settings } : prev.settings,
+      };
+      dataRef.current = mergedData;
+      setData(mergedData);
+
+      const targetUrl = wpUrlRef.current;
+      if (targetUrl) {
+        void (async () => {
+          try {
+            await syncProfileToWordPress(targetUrl, {
+              ...mergedProfile,
+              avatarUrl: mergedProfile.avatarUrl?.startsWith('data:')
+                ? undefined
+                : mergedProfile.avatarUrl,
+            });
+            if (guestProfile.avatarUrl?.startsWith('data:image/')) {
+              const avatarFile = dataUrlToImageFile(
+                guestProfile.avatarUrl,
+                `child-avatar-${serverFirst.id}.jpg`
+              );
+              if (avatarFile) {
+                const uploaded = await uploadChildAvatarInWordPress(
+                  targetUrl,
+                  serverFirst.id,
+                  avatarFile
+                );
+                if (uploaded.avatarUrl) {
+                  setData((cur) => {
+                    const patched: StoredAppData = {
+                      ...cur,
+                      profiles: cur.profiles.map((p) =>
+                        p.id === serverFirst.id ? { ...p, avatarUrl: uploaded.avatarUrl } : p
+                      ),
+                    };
+                    dataRef.current = patched;
+                    return patched;
+                  });
+                }
+              }
+            }
+          } catch {
+            // Non-blocking background guest migration
+          }
+        })();
+      }
+    } else {
+      const nextData: StoredAppData = {
+        profiles: normalizedProfiles.length > 0 ? normalizedProfiles : prev.profiles,
+        activeProfileId:
+          normalizedProfiles.length > 0 ? normalizedProfiles[0].id : prev.activeProfileId,
+        settings: res.settings ? { ...prev.settings, ...res.settings } : prev.settings,
+      };
+      dataRef.current = nextData;
+      setData(nextData);
+    }
+
     if (Array.isArray(res.unlockedTermIds) && res.unlockedTermIds.length > 0) {
       const unlockedSet = new Set(res.unlockedTermIds);
-      setTerms((prev) =>
-        prev.map((t) =>
+      setTerms((curTerms) =>
+        curTerms.map((t) =>
           t.isFree || (t.dbId && unlockedSet.has(t.dbId))
             ? { ...t, unlocked: true }
             : t
@@ -464,6 +787,7 @@ export default function App() {
 
   const handleWordPressLogout = useCallback(() => {
     setMemoryBearerToken(null);
+    wpUserRef.current = null;
     setWpUser(null);
     setTerms((prev) =>
       prev.map((t) => ({
@@ -503,7 +827,7 @@ export default function App() {
     if (!res.alreadyClaimed) {
       audioEngine.play('levelComplete');
       audioEngine.speakPersian('آفرین! پاداش روزانه به حسابت اضافه شد!', 'cheer');
-      updateActiveProfile(() => res.updatedProfile);
+      updateActiveProfile(() => res.updatedProfile, true);
     }
     return {
       awardedPoints: res.awardedPoints,
@@ -515,7 +839,7 @@ export default function App() {
     const res = redeemShopMedalOnProfile(activeProfile, medalId, lessons);
     if (res.ok) {
       audioEngine.play('levelComplete');
-      updateActiveProfile(() => res.updatedProfile);
+      updateActiveProfile(() => res.updatedProfile, true);
     } else {
       audioEngine.play('tryAgain');
     }
@@ -528,11 +852,21 @@ export default function App() {
   const handleSpendPointsOnOrder = (points: number) => {
     const safeSpend = Math.max(0, Math.floor(points));
     if (safeSpend <= 0) return;
-    updateActiveProfile((p) => ({
-      ...p,
-      rewardPoints: Math.max(0, (p.rewardPoints ?? 0) - safeSpend),
-    }));
+    updateActiveProfile(
+      (p) => ({
+        ...p,
+        rewardPoints: Math.max(0, (p.rewardPoints ?? 0) - safeSpend),
+      }),
+      true
+    );
   };
+
+  const openParentsHub = useCallback((tab: ParentsHubTab = 'children') => {
+    audioEngine.play('uiTap');
+    setParentsTab(tab);
+    setParentUnlocked(false);
+    setScreen('parents');
+  }, []);
 
   const hasProgress = Object.keys(activeProfile.lessons).length > 0;
 
@@ -544,6 +878,7 @@ export default function App() {
           lessons={lessons}
           activeProfile={activeProfile}
           digitMode={data.settings.digitMode}
+          nightMode={data.settings.nightMode}
           reducedMotion={data.settings.reducedMotion}
           hasProgress={hasProgress}
           wpUser={wpUser}
@@ -584,15 +919,11 @@ export default function App() {
             setScreen('profiles');
           }}
           onClaimDailyBonus={handleClaimDailyBonus}
-          onOpenAuth={() => {
+          onToggleNightMode={() => {
             audioEngine.play('uiTap');
-            setScreen('auth');
+            updateSettings({ nightMode: !data.settings.nightMode });
           }}
-          onOpenParents={() => {
-            audioEngine.play('uiTap');
-            setParentUnlocked(false);
-            setScreen('parents');
-          }}
+          onOpenParentsHub={() => openParentsHub('children')}
         />
       )}
 
@@ -606,7 +937,10 @@ export default function App() {
           digitMode={data.settings.digitMode}
           onUpdateWpUrl={(url) => setWpUrl(url)}
           onAuthSuccess={handleWordPressAuthSuccess}
-          onUpdateUser={(u) => setWpUser(u)}
+          onUpdateUser={(u) => {
+            wpUserRef.current = u;
+            setWpUser(u);
+          }}
           onLogout={handleWordPressLogout}
           onRefreshFromWordPress={refreshFromWordPress}
           onOpenProfiles={() => {
@@ -625,22 +959,10 @@ export default function App() {
           digitMode={data.settings.digitMode}
           lessons={lessons}
           initialTab={profileTab}
-          onSelectProfile={(id) => {
-            audioEngine.play('uiTap');
-            setData((prev) => ({ ...prev, activeProfileId: id }));
-          }}
-          onCreateProfile={(name: string, avatar: AvatarId, age: number) => {
-            audioEngine.play('success');
-            const created = createChildProfile(name, avatar, age);
-            setData((prev) => ({
-              ...prev,
-              profiles: [...prev.profiles, created],
-              activeProfileId: created.id,
-            }));
-            if (wpUrl && (hasMemoryBearerToken() || Boolean(wpUser))) {
-              void createProfileInWordPress(wpUrl, created).catch(() => {});
-            }
-          }}
+          onSelectProfile={handleSelectProfile}
+          onCreateProfile={handleCreateChildProfile}
+          onUpdateProfile={handleUpdateChildProfile}
+          onDeleteProfile={handleDeleteChildProfile}
           onPracticeSkill={(skill) => {
             audioEngine.play('uiTap');
             setPracticeSkill(skill);
@@ -673,7 +995,7 @@ export default function App() {
           isRefreshing={wpRefreshing}
           onRefreshCurriculum={() => void refreshFromWordPress()}
           onTermUnlocked={handleTermUnlocked}
-          onOpenAuth={() => setScreen('auth')}
+          onOpenAuth={() => openParentsHub('account')}
           onSelectLesson={(lesson) => {
             audioEngine.play('uiTap');
             setActiveLesson(lesson);
@@ -760,7 +1082,7 @@ export default function App() {
           onClaimDailyBonus={handleClaimDailyBonus}
           onRedeemShopMedal={handleRedeemShopMedal}
           onSpendPointsOnOrder={handleSpendPointsOnOrder}
-          onOpenAuth={() => setScreen('auth')}
+          onOpenAuth={() => openParentsHub('account')}
           onOrderCreated={() => void refreshFromWordPress()}
           onBack={() => setScreen('start')}
         />
@@ -771,7 +1093,7 @@ export default function App() {
           wpUrl={wpUrl}
           wpUser={wpUser}
           digitMode={data.settings.digitMode}
-          onOpenAuth={() => setScreen('auth')}
+          onOpenAuth={() => openParentsHub('account')}
           onBack={() => setScreen('start')}
         />
       )}
@@ -784,18 +1106,42 @@ export default function App() {
           />
         ) : (
           <SettingsPanel
-            profile={activeProfile}
+            profiles={data.profiles}
+            activeProfile={activeProfile}
             settings={data.settings}
             lessons={lessons}
+            initialTab={parentsTab}
             wpUrl={wpUrl}
             wpUser={wpUser}
             wpConnected={wpConnected}
-            onOpenWordPressAuth={() => setScreen('auth')}
+            stagesCount={lessons.length}
+            questionsCount={wpQuestions.length}
+            onSelectProfile={handleSelectProfile}
+            onCreateProfile={handleCreateChildProfile}
+            onUpdateProfile={handleUpdateChildProfile}
+            onDeleteProfile={handleDeleteChildProfile}
+            onUpdateWpUrl={(url) => setWpUrl(url)}
+            onAuthSuccess={handleWordPressAuthSuccess}
+            onUpdateUser={(u) => {
+              wpUserRef.current = u;
+              setWpUser(u);
+            }}
+            onLogout={handleWordPressLogout}
+            onRefreshFromWordPress={refreshFromWordPress}
             onOpenTickets={() => setScreen('tickets')}
-            onRefreshWordPress={() => void refreshFromWordPress()}
+            onPracticeSkill={(skill) => {
+              audioEngine.play('uiTap');
+              setPracticeSkill(skill);
+              setScreen('practice');
+            }}
+            onOpenShop={() => {
+              audioEngine.play('uiTap');
+              setScreen('shop');
+            }}
             onUpdateSettings={updateSettings}
             onClearAllData={() => {
               const fresh = clearAppData();
+              dataRef.current = fresh;
               setData(fresh);
             }}
             onBack={() => {

@@ -1,4 +1,9 @@
 import type { LessonDefinition, SkillKey, TermDefinition } from '../types/app';
+import { validateSafeImageSrc } from '../lib/wordpressApi';
+import termFarmCover from '../assets/images/term_farm_cover_1795443853498.jpg';
+import termForestCover from '../assets/images/term_forest_cover_1795443852741.jpg';
+import termIslandCover from '../assets/images/term_island_cover_1795443852975.jpg';
+import termSpaceCover from '../assets/images/term_space_cover_1795443852987.jpg';
 
 export const SKILL_LABELS: Record<SkillKey, string> = {
   recognition: 'شناخت چرتکه و اعداد ۰ تا ۹',
@@ -21,6 +26,7 @@ export const DEFAULT_TERMS: TermDefinition[] = [
       'سلام قهرمان! کیا به مزرعه آفتابی آمده تا به دوستاش کمک کنه گوسفندها، دانه‌های گندم و گل‌های آفتاب‌گردان رو با چرتکه بشمارن.',
     biome: 'farm',
     accentColor: '#4BB543',
+    imageUrl: termFarmCover,
     isFree: true,
     priceAmount: 0,
     priceFormatted: 'رایگان',
@@ -276,6 +282,7 @@ export const DEFAULT_TERMS: TermDefinition[] = [
       'در جنگل جادویی، دوستان ۵ و ۱۰ منتظر تو هستند! هر مرحله را حل کن تا چراغ‌های پل رنگین‌کمانی روشن شود.',
     biome: 'forest',
     accentColor: '#8E63EB',
+    imageUrl: termForestCover,
     isFree: false,
     priceAmount: 190000,
     priceFormatted: '۱۹۰,۰۰۰ تومان',
@@ -395,6 +402,7 @@ export const DEFAULT_TERMS: TermDefinition[] = [
       'سوار قایق بادبانی شو! از فانوس دریایی بگذر و با محاسبه ذهنی کلید صندوقچه جواهرات را پیدا کن.',
     biome: 'island',
     accentColor: '#0EA5E9',
+    imageUrl: termIslandCover,
     isFree: false,
     priceAmount: 290000,
     priceFormatted: '۲۹۰,۰۰۰ تومان',
@@ -470,5 +478,23 @@ export const DEFAULT_TERMS: TermDefinition[] = [
     ],
   },
 ];
+
+export function getTermCoverImage(
+  term?: Pick<TermDefinition, 'imageUrl' | 'biome'> | null
+): string {
+  const safeCustom = validateSafeImageSrc(term?.imageUrl);
+  if (safeCustom) return safeCustom;
+  switch (term?.biome) {
+    case 'forest':
+      return termForestCover;
+    case 'island':
+      return termIslandCover;
+    case 'space':
+      return termSpaceCover;
+    case 'farm':
+    default:
+      return termFarmCover;
+  }
+}
 
 export const LESSONS: LessonDefinition[] = DEFAULT_TERMS.flatMap((t) => t.stages);

@@ -9,9 +9,10 @@ import {
   Star,
   Sparkles,
   PlayCircle,
-  User,
   ShoppingBag,
   Award,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import type {
   ChildProfile,
@@ -34,6 +35,7 @@ interface StartScreenProps {
   lessons: LessonDefinition[];
   activeProfile: ChildProfile;
   digitMode: DigitDisplayMode;
+  nightMode: boolean;
   reducedMotion: boolean;
   hasProgress: boolean;
   wpUser?: WordPressUser | null;
@@ -47,8 +49,8 @@ interface StartScreenProps {
   onOpenProfiles: () => void;
   onOpenProfileDetails: () => void;
   onClaimDailyBonus: () => { awardedPoints: number; newBadgeTitles: string[] };
-  onOpenAuth: () => void;
-  onOpenParents: () => void;
+  onToggleNightMode: () => void;
+  onOpenParentsHub: () => void;
 }
 
 export const StartScreen: React.FC<StartScreenProps> = ({
@@ -56,10 +58,10 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   lessons,
   activeProfile,
   digitMode,
+  nightMode,
   reducedMotion,
   hasProgress,
   wpUser,
-  wpConnected = false,
   onContinueMap,
   onOpenPractice,
   onOpenGames,
@@ -68,8 +70,8 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   onOpenProfiles,
   onOpenProfileDetails,
   onClaimDailyBonus,
-  onOpenAuth,
-  onOpenParents,
+  onToggleNightMode,
+  onOpenParentsHub,
 }) => {
   const [kiaBubble, setKiaBubble] = useState<string>(
     `سلام ${activeProfile.name}! من کیا هستم، بزن بریم چرتکه بازی!`
@@ -163,41 +165,50 @@ export const StartScreen: React.FC<StartScreenProps> = ({
             type="button"
             onClick={onOpenProfiles}
             aria-label={`انتخاب پروفایل کودک، پروفایل فعلی ${activeProfile.name}`}
-            className="min-h-[46px] inline-flex items-center gap-2 rounded-2xl bg-white/95 dark:bg-slate-900 border-b-4 border-[#E5D3BE] dark:border-slate-800 px-3 py-1.5 shadow-sm hover:bg-white transition-all active:translate-y-0.5"
+            className="min-h-[46px] inline-flex items-center gap-2 rounded-2xl bg-white/95 dark:bg-slate-900 border-b-4 border-[#E5D3BE] dark:border-slate-800 px-3 py-1.5 shadow-sm hover:bg-white transition-all active:translate-y-0.5 shrink-0"
           >
-            <AvatarGraphic avatar={activeProfile.avatar} className="w-8 h-8 shrink-0" />
+            <AvatarGraphic
+              avatar={activeProfile.avatar}
+              imageUrl={activeProfile.avatarUrl}
+              alt={activeProfile.name}
+              className="w-8 h-8 rounded-full shrink-0"
+            />
             <span className="text-sm font-extrabold text-slate-900 dark:text-white truncate max-w-[96px]">
               {activeProfile.name}
             </span>
-            <Users className="w-4 h-4 text-slate-400" />
+            <Users className="w-4 h-4 text-slate-400 shrink-0" />
           </button>
 
-          <div className="flex items-center gap-2">
-            <div className="min-h-[46px] inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-[#FFDC5E] dark:bg-amber-900/70 border-b-4 border-[#DFAD19] dark:border-amber-700 text-[#5C3A00] dark:text-amber-100 text-sm font-extrabold tabular-nums shadow-sm">
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="min-h-[46px] inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-[#FFDC5E] dark:bg-amber-900/70 border-b-4 border-[#DFAD19] dark:border-amber-700 text-[#5C3A00] dark:text-amber-100 text-sm font-extrabold tabular-nums shadow-sm whitespace-nowrap shrink-0">
               <Star className="w-4 h-4 fill-[#F59E0B] text-[#B45309]" />
               <span>{formatNumber(activeProfile.totalStars, digitMode)}</span>
             </div>
 
             <button
               type="button"
-              onClick={onOpenAuth}
-              aria-label="حساب کاربری"
-              className="min-h-[46px] min-w-[46px] inline-flex items-center gap-1.5 rounded-2xl bg-white/95 dark:bg-slate-900 border-b-4 border-[#E5D3BE] dark:border-slate-800 px-3 py-2 text-xs font-extrabold text-slate-800 dark:text-slate-100 shadow-sm hover:bg-white transition-all active:translate-y-0.5"
+              onClick={onToggleNightMode}
+              aria-label={nightMode ? 'تغییر به حالت روشن' : 'تغییر به حالت تاریک'}
+              title={nightMode ? 'حالت روشن' : 'حالت تاریک'}
+              className="min-h-[46px] min-w-[46px] inline-flex items-center justify-center rounded-2xl bg-white/95 dark:bg-slate-900 border-b-4 border-[#E5D3BE] dark:border-slate-800 text-slate-800 dark:text-amber-300 shadow-sm hover:bg-white transition-all active:translate-y-0.5 shrink-0"
             >
-              <User className={`w-4 h-4 ${wpUser || wpConnected ? 'text-[#4BB543]' : 'text-[#5472EB]'}`} />
-              <span className="hidden sm:inline">
-                {wpUser ? wpUser.displayName : 'ورود'}
-              </span>
+              {nightMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
 
             <button
               type="button"
-              onClick={onOpenParents}
-              aria-label="بخش والدین و تنظیمات"
-              className="min-h-[46px] min-w-[46px] inline-flex items-center gap-1.5 rounded-2xl bg-white/95 dark:bg-slate-900 border-b-4 border-[#E5D3BE] dark:border-slate-800 px-3 py-2 text-xs font-extrabold text-slate-800 dark:text-slate-100 shadow-sm hover:bg-white transition-all active:translate-y-0.5"
+              onClick={onOpenParentsHub}
+              aria-label="ورود به بخش والدین و حساب کاربری"
+              className="min-h-[46px] min-w-[46px] inline-flex items-center gap-1.5 rounded-2xl bg-white/95 dark:bg-slate-900 border-b-4 border-[#E5D3BE] dark:border-slate-800 px-3 py-2 text-xs font-extrabold text-slate-800 dark:text-slate-100 shadow-sm hover:bg-white transition-all active:translate-y-0.5 whitespace-nowrap shrink-0"
             >
-              <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <span className="hidden sm:inline">والدین</span>
+              <ShieldCheck
+                className={`w-4 h-4 shrink-0 ${
+                  wpUser ? 'text-[#4BB543]' : 'text-[#5472EB] dark:text-blue-400'
+                }`}
+              />
+              <span className="hidden sm:inline whitespace-nowrap">
+                {wpUser ? `والدین · ${wpUser.displayName}` : 'والدین و حساب'}
+              </span>
             </button>
           </div>
         </header>

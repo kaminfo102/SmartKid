@@ -105,6 +105,47 @@ export function validateSafeHttpUrl(raw?: string | null): string {
   }
 }
 
+export function validateSafeImageSrc(raw?: string | null): string {
+  if (!raw || typeof raw !== 'string') return '';
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  if (
+    /^data:image\/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$/i.test(trimmed)
+  ) {
+    return trimmed;
+  }
+  if (
+    trimmed.startsWith('/assets/') ||
+    trimmed.startsWith('/src/assets/') ||
+    trimmed.startsWith('data:image/jpeg;base64,') === false &&
+      trimmed.startsWith('assets/')
+  ) {
+    return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  }
+  return validateSafeHttpUrl(trimmed);
+}
+
+export function dataUrlToImageFile(
+  dataUrl: string,
+  filename = 'child-avatar.jpg'
+): File | null {
+  const match = /^data:(image\/(?:jpeg|jpg|png|webp));base64,([A-Za-z0-9+/=]+)$/i.exec(
+    dataUrl.trim()
+  );
+  if (!match) return null;
+  try {
+    const mime = match[1].toLowerCase() === 'image/jpg' ? 'image/jpeg' : match[1].toLowerCase();
+    const bin = atob(match[2]);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i += 1) {
+      bytes[i] = bin.charCodeAt(i);
+    }
+    return new File([bytes], filename, { type: mime, lastModified: Date.now() });
+  } catch {
+    return null;
+  }
+}
+
 export function getEnvWordPressUrl(): string {
   const envUrl = import.meta.env.VITE_WORDPRESS_URL;
   return typeof envUrl === 'string' ? normalizeWordPressUrl(envUrl) : '';
@@ -158,7 +199,6 @@ export async function detectSameOriginWordPressUrl(): Promise<string> {
   try {
     const res = await fetch(`${origin}${WP_API_BASE_PATH}/health`, {
       method: 'GET',
-      headers: { 'X-KN-App': 'koodak-nabegheh' },
     });
     if (!res.ok) return '';
     const data = (await res.json().catch(() => null)) as { ok?: boolean; pluginVersion?: string } | null;
@@ -182,9 +222,19 @@ async function wpRequest<T>(
     throw new Error('اتصال به سرور برنامه هنوز پیکربندی نشده است.');
   }
 
+  const method = (options.method || 'GET').toUpperCase();
+  const hasBody = options.body !== undefined && options.body !== null;
+  const needsCustomHeaders =
+    method !== 'GET' ||
+    requireAuth ||
+    Boolean(memoryBearerToken) ||
+    endpoint === '/auth/session';
+
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'X-KN-App': 'koodak-nabegheh',
+    ...(hasBody && !(typeof FormData !== 'undefined' && options.body instanceof FormData)
+      ? { 'Content-Type': 'application/json' }
+      : {}),
+    ...(needsCustomHeaders ? { 'X-KN-App': 'koodak-nabegheh' } : {}),
     ...(options.headers as Record<string, string> | undefined),
   };
 
@@ -728,6 +778,47 @@ export async function createProfileInWordPress(
     true
   );
   return Array.isArray(data.profiles) ? data.profiles : [];
+}
+
+export async function deleteProfileInWordPress(
+  siteUrl: string,
+  clientId: string
+): Promise<ChildProfile[]> {
+  if (!siteUrl || !clientId) return [];
+  const data = await wpRequest<{ ok: boolean; profiles: ChildProfile[] }>(
+    siteUrl,
+    `/profiles/${encodeURIComponent(clientId)}`,
+    {
+      method: 'DELETE',
+    },
+    true
+  );
+  return Array.isArray(data.profiles) ? data.profiles : [];
+}
+
+export async function uploadChildAvatarInWordPress(
+  siteUrl: string,
+  clientId: string,
+  file: File
+): Promise<{
+  ok: boolean;
+  avatarUrl: string;
+  profile: ChildProfile | null;
+  profiles: ChildProfile[];
+}> {
+  const fd = new FormData();
+  fd.append('avatar', file);
+  return wpFormRequest<{
+    ok: boolean;
+    avatarUrl: string;
+    profile: ChildProfile | null;
+    profiles: ChildProfile[];
+  }>(
+    siteUrl,
+    `/profiles/${encodeURIComponent(clientId)}/avatar`,
+    fd,
+    true
+  );
 }
 
 export async function syncSettingsToWordPress(

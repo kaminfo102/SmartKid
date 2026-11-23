@@ -128,9 +128,36 @@ class SoundEngine {
   private speakingListeners = new Set<(speaking: boolean) => void>();
   private voicesWarmupAttached = false;
   private unlockAttached = false;
+  private hasUserGesture = false;
+
+  private staticManifestPromise: Promise<{
+    sfx: Partial<Record<SoundEffectKey, string>>;
+    bgMusic: string | null;
+    voice: Record<string, string>;
+  } | null> | null = null;
+  private staticManifestLoaded = false;
+  private staticManifestAvailable = false;
+  private availableLocalUrls = new Set<string>();
 
   constructor() {
     this.attachFirstGestureUnlock();
+  }
+
+  private isGestureUnlocked(): boolean {
+    if (this.hasUserGesture) return true;
+    if (typeof navigator !== 'undefined' && 'userActivation' in navigator) {
+      const ua = (
+        navigator as Navigator & {
+          userActivation?: { hasBeenActive?: boolean; isActive?: boolean };
+        }
+      ).userActivation;
+      if (ua?.hasBeenActive || ua?.isActive) {
+        this.hasUserGesture = true;
+        return true;
+      }
+      return false;
+    }
+    return false;
   }
 
   private attachFirstGestureUnlock() {
@@ -138,16 +165,23 @@ class SoundEngine {
     this.unlockAttached = true;
 
     const unlock = () => {
-      const ctx = this.ensureContext();
-      if (ctx && this.soundEnabled) {
-        this.preloadAllSfx();
+      const ctx = this.ensureContext(true);
+      if (ctx) {
+        if (this.soundEnabled) {
+          this.preloadAllSfx();
+        }
+        if (this.musicEnabled && this.musicInterval === null && !this.bgMusicAudio) {
+          this.startBackgroundMusic();
+        }
       }
-      window.removeEventListener('pointerdown', unlock);
-      window.removeEventListener('keydown', unlock);
+      window.removeEventListener('pointerdown', unlock, true);
+      window.removeEventListener('keydown', unlock, true);
+      window.removeEventListener('touchstart', unlock, true);
     };
 
-    window.addEventListener('pointerdown', unlock, { passive: true, once: true });
-    window.addEventListener('keydown', unlock, { passive: true, once: true });
+    window.addEventListener('pointerdown', unlock, { passive: true, once: true, capture: true });
+    window.addEventListener('keydown', unlock, { passive: true, once: true, capture: true });
+    window.addEventListener('touchstart', unlock, { passive: true, once: true, capture: true });
   }
 
   private setSpeaking(speaking: boolean) {
@@ -161,8 +195,13 @@ class SoundEngine {
     };
   }
 
-  private ensureContext(): AudioContext | null {
+  private ensureContext(fromGesture = false): AudioContext | null {
     if (typeof window === 'undefined') return null;
+    if (fromGesture) {
+      this.hasUserGesture = true;
+    } else if (!this.isGestureUnlocked()) {
+      return null;
+    }
     if (!this.ctx) {
       const AudioCtx =
         window.AudioContext ||
@@ -174,6 +213,48 @@ class SoundEngine {
       void this.ctx.resume().catch(() => {});
     }
     return this.ctx;
+  }
+
+  private async ensureStaticManifest(): Promise<void> {
+    if (this.staticManifestLoaded || typeof window === 'undefined') return;
+    if (!this.staticManifestPromise) {
+      this.staticManifestPromise = fetch('/audio/manifest.json', { method: 'GET' })
+        .then(async (res) => {
+          if (!res.ok) return null;
+          const ct = (res.headers.get('content-type') || '').toLowerCase();
+          if (!ct.includes('json')) return null;
+          return (await res.json()) as {
+            sfx?: Partial<Record<SoundEffectKey, string>>;
+            bgMusic?: string | null;
+            voice?: Record<string, string>;
+          };
+        })
+        .then((data) => {
+          this.staticManifestLoaded = true;
+          if (!data) return null;
+          this.staticManifestAvailable = true;
+          const next = {
+            sfx: data.sfx ?? {},
+            bgMusic: data.bgMusic ?? null,
+            voice: data.voice ?? {},
+          };
+          Object.values(next.sfx).forEach((u) => {
+            if (typeof u === 'string' && u) this.availableLocalUrls.add(u);
+          });
+          if (typeof next.bgMusic === 'string' && next.bgMusic) {
+            this.availableLocalUrls.add(next.bgMusic);
+          }
+          Object.values(next.voice).forEach((u) => {
+            if (typeof u === 'string' && u) this.availableLocalUrls.add(u);
+          });
+          return next;
+        })
+        .catch(() => {
+          this.staticManifestLoaded = true;
+          return null;
+        });
+    }
+    await this.staticManifestPromise;
   }
 
   private getEffectiveSfxUrl(key: SoundEffectKey): string {
@@ -216,7 +297,15 @@ class SoundEngine {
     if (this.failedUrls.has(url)) return false;
     if (this.validatedAudioUrls.has(url)) return Boolean(this.validatedAudioUrls.get(url));
 
-    // For local /audio/* paths, check headers so SPA HTML fallback never passes as audio
+    // For local /audio/* paths, consult /audio/manifest.json first so absent optional files never 404
+    if (url.startsWith('/audio/')) {
+      await this.ensureStaticManifest();
+      if (this.staticManifestAvailable && !this.availableLocalUrls.has(url)) {
+        this.validatedAudioUrls.set(url, false);
+        return false;
+      }
+    }
+
     if (url.startsWith('/')) {
       try {
         const res = await fetch(url, { method: 'HEAD' });
@@ -250,6 +339,13 @@ class SoundEngine {
 
     const ctx = this.ensureContext();
     if (!ctx) return null;
+
+    if (url.startsWith('/audio/')) {
+      await this.ensureStaticManifest();
+      if (this.staticManifestAvailable && !this.availableLocalUrls.has(url)) {
+        return null;
+      }
+    }
 
     this.sfxLoading.add(key);
     try {
@@ -309,7 +405,7 @@ class SoundEngine {
       ? audioConfig.voiceClips.filter((c) => c && isSafeAudioUrl(c.url))
       : [];
 
-    if (sfxChanged && this.soundEnabled) {
+    if (sfxChanged && this.soundEnabled && this.isGestureUnlocked()) {
       this.preloadAllSfx();
     }
   }
@@ -521,7 +617,7 @@ class SoundEngine {
   }
 
   private startBackgroundMusic() {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || !this.isGestureUnlocked()) return;
     const musicUrl = this.bgMusicUrl;
     if (musicUrl && !this.failedUrls.has(musicUrl) && typeof Audio !== 'undefined') {
       void this.isPlayableAudioUrl(musicUrl).then((ok) => {

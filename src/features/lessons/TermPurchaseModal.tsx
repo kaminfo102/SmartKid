@@ -33,8 +33,8 @@ import {
   verifyWooCommercePurchase,
 } from '../../lib/wordpressApi';
 import type { OptimizedImageResult } from '../../lib/imageOptimizer';
+import { getTermCoverImage } from '../../data/lessons';
 import { KiaAvatar } from '../../components/KiaAvatar';
-import { TreasureUnlockIllustration } from '../../components/KidIllustrations';
 import { ReceiptUploaderField } from '../../components/ReceiptUploaderField';
 import { SaleCountdown } from '../../components/SaleCountdown';
 import { audioEngine } from '../../lib/audioEngine';
@@ -383,7 +383,12 @@ export const TermPurchaseModal: React.FC<TermPurchaseModalProps> = ({
         <div className="p-4 sm:p-5 space-y-4 max-h-[82vh] overflow-y-auto">
           {/* Course Summary & Sale Pricing */}
           <div className="rounded-2xl bg-white dark:bg-slate-800 border-2 border-[#EEDCC5] dark:border-slate-700 shadow-xs p-3.5 sm:p-4 flex items-start gap-3.5">
-            <TreasureUnlockIllustration className="w-14 h-14 sm:w-16 sm:h-16 shrink-0" />
+            <img
+              src={getTermCoverImage(term)}
+              alt={term.title}
+              referrerPolicy="no-referrer"
+              className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 border-[#EEDCC5] dark:border-slate-700 shadow-xs shrink-0"
+            />
             <div className="min-w-0 flex-1 space-y-1.5">
               <div className="flex items-start justify-between gap-2 flex-wrap">
                 <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400">

@@ -1,4 +1,5 @@
 import type { AppSettings, AvatarId, ChildProfile, SkillKey } from '../types/app';
+import { validateSafeImageSrc } from './wordpressApi';
 
 const STORAGE_KEY = 'koodak_nabegheh_v1';
 
@@ -40,8 +41,11 @@ export function createEmptyDailyBonus() {
 }
 
 export function normalizeChildProfile(profile: ChildProfile): ChildProfile {
+  const safeAvatarUrl = validateSafeImageSrc(profile.avatarUrl);
   return {
     ...profile,
+    name: typeof profile.name === 'string' && profile.name.trim() ? profile.name.trim() : 'کیا',
+    avatarUrl: safeAvatarUrl || undefined,
     badges: Array.isArray(profile.badges) ? profile.badges : [],
     rewardPoints: typeof profile.rewardPoints === 'number' && Number.isFinite(profile.rewardPoints)
       ? Math.max(0, Math.round(profile.rewardPoints))
@@ -57,12 +61,15 @@ export function normalizeChildProfile(profile: ChildProfile): ChildProfile {
 export function createChildProfile(
   name: string,
   avatar: AvatarId,
-  age: number = 6
+  age: number = 6,
+  avatarUrl?: string
 ): ChildProfile {
+  const safeUrl = validateSafeImageSrc(avatarUrl);
   return {
     id: `child_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-    name: name.trim() || 'قهرمان کوچک',
+    name: name.trim() || 'کیا',
     avatar,
+    avatarUrl: safeUrl || undefined,
     age,
     createdAt: Date.now(),
     totalStars: 0,
@@ -79,7 +86,7 @@ export function createChildProfile(
 }
 
 function createInitialData(): StoredAppData {
-  const defaultChild = createChildProfile('آرتین', 'owl', 6);
+  const defaultChild = createChildProfile('کیا', 'owl', 6);
   return {
     profiles: [defaultChild],
     activeProfileId: defaultChild.id,

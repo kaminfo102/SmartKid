@@ -1,0 +1,12 @@
+{
+  "sfx": {
+    "beadClick": "/audio/sfx/bead-click.mp3",
+    "uiTap": "/audio/sfx/ui-tap.mp3",
+    "success": "/audio/sfx/success.mp3",
+    "tryAgain": "/audio/sfx/try-again.mp3",
+    "levelComplete": "/audio/sfx/level-complete.mp3",
+    "birdChirp": "/audio/sfx/bird-chirp.mp3"
+  },
+  "bgMusic": null,
+  "voice": {}
+}

@@ -85,10 +85,10 @@ export const ParentGate: React.FC<ParentGateProps> = ({ onUnlock, onCancel }) =>
         </div>
 
         <h1 className="text-xl font-extrabold text-center text-slate-900 dark:text-white">
-          ورود به بخش والدین
+          ورود به بخش والدین و حساب کاربری
         </h1>
         <p className="text-sm text-center text-slate-600 dark:text-slate-400 mt-1">
-          برای جلوگیری از ورود تصادفی کودک، یکی از روش‌های زیر را انجام دهید.
+          برای جلوگیری از ورود تصادفی کودک به حساب و تنظیمات، یکی از روش‌های زیر را انجام دهید.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-3">

@@ -21,6 +21,7 @@ import type {
   WordPressUser,
 } from '../../types/app';
 import { formatNumber } from '../../lib/numbers';
+import { getTermCoverImage } from '../../data/lessons';
 import { AudioButton } from '../../components/AudioButton';
 import { BuyCoffeeButton } from '../../components/BuyCoffeeButton';
 import { SaleCountdown } from '../../components/SaleCountdown';
@@ -150,6 +151,12 @@ export const LessonMap: React.FC<LessonMapProps> = ({
                       : 'bg-white/95 hover:bg-white dark:bg-slate-800 border-amber-300 dark:border-slate-700 text-slate-800 dark:text-slate-200'
                   }`}
                 >
+                  <img
+                    src={getTermCoverImage(term)}
+                    alt=""
+                    referrerPolicy="no-referrer"
+                    className="w-6 h-6 rounded-lg object-cover border border-white/70 shrink-0"
+                  />
                   {unlocked ? (
                     <Unlock className="w-3.5 h-3.5 shrink-0" />
                   ) : isPending ? (
@@ -191,18 +198,26 @@ export const LessonMap: React.FC<LessonMapProps> = ({
         {activeTerm && (
           <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EFE0CE] dark:border-slate-800 shadow-[0_10px_26px_-8px_rgba(170,104,40,0.16)] p-4 space-y-3">
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-bold">
-                  <BookOpen className="w-4 h-4 text-[#F59E0B]" />
-                  <span>{activeTerm.title}</span>
-                  <span aria-hidden="true">·</span>
-                  <span>
-                    {formatNumber(termStages.length, digitMode)} مرحله داستانی
-                  </span>
+              <div className="flex items-center gap-3 min-w-0">
+                <img
+                  src={getTermCoverImage(activeTerm)}
+                  alt={activeTerm.title}
+                  referrerPolicy="no-referrer"
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 border-[#EFE0CE] dark:border-slate-700 shadow-xs shrink-0"
+                />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-bold">
+                    <BookOpen className="w-4 h-4 text-[#F59E0B] shrink-0" />
+                    <span className="truncate">{activeTerm.title}</span>
+                    <span aria-hidden="true">·</span>
+                    <span className="whitespace-nowrap">
+                      {formatNumber(termStages.length, digitMode)} مرحله داستانی
+                    </span>
+                  </div>
+                  <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white mt-0.5">
+                    {activeTerm.storyTitle}
+                  </h2>
                 </div>
-                <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white mt-0.5">
-                  {activeTerm.storyTitle}
-                </h2>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">

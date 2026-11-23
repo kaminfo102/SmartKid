@@ -444,7 +444,7 @@ class KN_Auth {
 		$city         = isset( $params['city'] ) ? sanitize_text_field( $params['city'] ) : '';
 		$address_1    = isset( $params['address1'] ) ? sanitize_text_field( $params['address1'] ) : '';
 		$postcode     = self::normalize_mobile( $params['postcode'] ?? '' );
-		$child_name   = isset( $params['childName'] ) ? sanitize_text_field( $params['childName'] ) : 'قهرمان کوچک';
+		$child_name   = isset( $params['childName'] ) ? sanitize_text_field( $params['childName'] ) : 'کیا';
 		$child_age    = isset( $params['childAge'] ) ? max( 4, min( 15, absint( $params['childAge'] ) ) ) : 6;
 		$child_avatar = isset( $params['childAvatar'] ) ? sanitize_key( $params['childAvatar'] ) : 'owl';
 
@@ -559,7 +559,7 @@ class KN_Auth {
 			$user_id,
 			array(
 				'id'     => 'child_' . time() . '_' . wp_rand( 100, 999 ),
-				'name'   => ! empty( $child_name ) ? $child_name : 'قهرمان کوچک',
+				'name'   => ! empty( $child_name ) ? $child_name : 'کیا',
 				'avatar' => $child_avatar,
 				'age'    => $child_age,
 			)

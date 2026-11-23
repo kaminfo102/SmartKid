@@ -1,14 +1,26 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowRight, Award, Check, Plus, Star, Users } from 'lucide-react';
+import {
+  ArrowRight,
+  Award,
+  Check,
+  Edit3,
+  Plus,
+  Star,
+  Trash2,
+  Users,
+} from 'lucide-react';
 import type {
-  AvatarId,
   ChildProfile,
   DigitDisplayMode,
   LessonDefinition,
   SkillKey,
 } from '../../types/app';
 import { formatNumber } from '../../lib/numbers';
-import { AVATAR_OPTIONS, AvatarGraphic } from '../../components/MascotDana';
+import { AvatarGraphic } from '../../components/MascotDana';
+import {
+  ChildAvatarEditorModal,
+  type ChildAvatarSavePayload,
+} from '../../components/ChildAvatarEditorModal';
 import { ChildProfileDetails } from './ChildProfileDetails';
 
 interface ProfileScreenProps {
@@ -18,7 +30,12 @@ interface ProfileScreenProps {
   lessons?: LessonDefinition[];
   initialTab?: 'details' | 'profiles';
   onSelectProfile: (id: string) => void;
-  onCreateProfile: (name: string, avatar: AvatarId, age: number) => void;
+  onCreateProfile: (payload: ChildAvatarSavePayload) => Promise<void> | void;
+  onUpdateProfile: (
+    profileId: string,
+    payload: ChildAvatarSavePayload
+  ) => Promise<void> | void;
+  onDeleteProfile: (profileId: string) => Promise<void> | void;
   onPracticeSkill?: (skill: SkillKey) => void;
   onOpenShop?: () => void;
   onBack: () => void;
@@ -32,15 +49,18 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   initialTab = 'details',
   onSelectProfile,
   onCreateProfile,
+  onUpdateProfile,
+  onDeleteProfile,
   onPracticeSkill,
   onOpenShop,
   onBack,
 }) => {
   const [tab, setTab] = useState<'details' | 'profiles'>(initialTab);
-  const [showCreator, setShowCreator] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newAvatar, setNewAvatar] = useState<AvatarId>('fox');
-  const [newAge, setNewAge] = useState(6);
+  const [editorState, setEditorState] = useState<
+    { mode: 'create' } | { mode: 'edit'; profile: ChildProfile } | null
+  >(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setTab(initialTab);
@@ -49,12 +69,19 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const activeProfile =
     profiles.find((p) => p.id === activeProfileId) ?? profiles[0];
 
-  const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newName.trim()) return;
-    onCreateProfile(newName.trim(), newAvatar, newAge);
-    setNewName('');
-    setShowCreator(false);
+  const handleSaveEditor = async (payload: ChildAvatarSavePayload) => {
+    if (!editorState) return;
+    setSaving(true);
+    try {
+      if (editorState.mode === 'create') {
+        await onCreateProfile(payload);
+      } else {
+        await onUpdateProfile(editorState.profile.id, payload);
+      }
+      setEditorState(null);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -69,13 +96,15 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <ArrowRight className="w-5 h-5" />
         </button>
         <h1 className="text-lg font-extrabold text-white drop-shadow-[0_2px_0_rgba(148,70,22,0.45)] truncate">
-          {tab === 'details' ? `پروفایل ${activeProfile.name}` : 'انتخاب یا ساخت کودک'}
+          {tab === 'details'
+            ? `پروفایل ${activeProfile.name}`
+            : 'انتخاب، ویرایش یا ساخت کودک'}
         </h1>
         <div className="w-11" />
       </header>
 
       <main className="flex-1 w-full max-w-4xl mx-auto p-4 sm:p-5 space-y-5 pb-12">
-        {/* Segmented Control: Profile Analytics/Badges vs Switch/Create */}
+        {/* Segmented Control */}
         <div
           role="tablist"
           aria-label="بخش‌های پروفایل کودک"
@@ -108,7 +137,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             }`}
           >
             <Users className="w-4 h-4" />
-            <span>تعویض / ساخت کودک</span>
+            <span>مدیریت کودکان</span>
           </button>
         </div>
 
@@ -119,160 +148,148 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             lessons={lessons}
             onPracticeSkill={onPracticeSkill}
             onOpenShop={onOpenShop}
+            onEditProfile={() =>
+              setEditorState({ mode: 'edit', profile: activeProfile })
+            }
           />
         ) : (
           <div className="max-w-2xl mx-auto space-y-5">
             <p className="text-sm font-bold text-[#6A4523] dark:text-slate-300 text-center">
-              پروفایل خودت را انتخاب کن یا یک قهرمان جدید بساز!
+              کودک فعال را انتخاب کنید، عکس و نام او را ویرایش کنید یا پروفایل جدید بسازید.
             </p>
 
             {/* Existing Profiles */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               {profiles.map((profile) => {
                 const isActive = profile.id === activeProfileId;
+                const canDelete = profiles.length > 1;
+                const isConfirmingDelete = confirmDeleteId === profile.id;
+
                 return (
-                  <button
+                  <div
                     key={profile.id}
-                    type="button"
-                    onClick={() => {
-                      onSelectProfile(profile.id);
-                      setTab('details');
-                    }}
-                    aria-label={`انتخاب پروفایل ${profile.name}`}
-                    className={`min-h-[80px] p-4 rounded-2xl border-2 border-b-4 text-right flex items-center justify-between gap-3 shadow-[0_8px_20px_-6px_rgba(170,104,40,0.14)] transition-all ${
+                    className={`rounded-2xl border-2 border-b-4 p-3.5 shadow-[0_8px_20px_-6px_rgba(170,104,40,0.14)] flex flex-col gap-3 transition-all ${
                       isActive
                         ? 'bg-sky-50 border-blue-500 border-b-blue-600 dark:bg-blue-950/50 dark:border-blue-500'
-                        : 'bg-white border-[#EEDCC5] border-b-[#DFC6A8] hover:border-blue-300 dark:bg-slate-900 dark:border-slate-800 dark:hover:bg-slate-800'
+                        : 'bg-white border-[#EEDCC5] border-b-[#DFC6A8] dark:bg-slate-900 dark:border-slate-800'
                     }`}
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <AvatarGraphic avatar={profile.avatar} className="w-12 h-12 shrink-0" />
-                      <div className="min-w-0">
-                        <div className="font-extrabold text-base text-slate-900 dark:text-white truncate">
-                          {profile.name}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSelectProfile(profile.id);
+                        setTab('details');
+                      }}
+                      aria-label={`انتخاب پروفایل ${profile.name}`}
+                      className="w-full text-right flex items-center justify-between gap-3"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-13 h-13 rounded-full overflow-hidden border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF6EB] dark:bg-slate-800 flex items-center justify-center shrink-0">
+                          <AvatarGraphic
+                            avatar={profile.avatar}
+                            imageUrl={profile.avatarUrl}
+                            alt={profile.name}
+                            className="w-full h-full"
+                          />
                         </div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-0.5 tabular-nums">
-                          <span>{formatNumber(profile.age, digitMode)} ساله</span>
-                          <span aria-hidden="true">·</span>
-                          <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400 font-bold">
-                            <Star className="w-3.5 h-3.5 fill-amber-400" />
-                            {formatNumber(profile.totalStars, digitMode)}
-                          </span>
+                        <div className="min-w-0">
+                          <div className="font-extrabold text-base text-slate-900 dark:text-white truncate">
+                            {profile.name}
+                          </div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-0.5 tabular-nums">
+                            <span>{formatNumber(profile.age, digitMode)} ساله</span>
+                            <span aria-hidden="true">·</span>
+                            <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400 font-bold">
+                              <Star className="w-3.5 h-3.5 fill-amber-400" />
+                              {formatNumber(profile.totalStars, digitMode)}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    {isActive && (
-                      <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0">
-                        <Check className="w-5 h-5" />
-                      </div>
-                    )}
-                  </button>
+                      {isActive && (
+                        <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0">
+                          <Check className="w-5 h-5" />
+                        </div>
+                      )}
+                    </button>
+
+                    {/* Edit / Delete Child Actions */}
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#F0DFCB] dark:border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => setEditorState({ mode: 'edit', profile })}
+                        className="min-h-[38px] px-3 rounded-xl bg-white dark:bg-slate-800 border border-[#EEDCC5] dark:border-slate-700 text-xs font-extrabold text-slate-800 dark:text-slate-100 inline-flex items-center gap-1.5 hover:bg-[#FFF9F2]"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-[#5472EB]" />
+                        <span>ویرایش نام و عکس</span>
+                      </button>
+
+                      {canDelete ? (
+                        isConfirmingDelete ? (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void onDeleteProfile(profile.id);
+                                setConfirmDeleteId(null);
+                              }}
+                              className="min-h-[38px] px-2.5 rounded-xl bg-rose-600 text-white text-xs font-extrabold"
+                            >
+                              تایید حذف
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="min-h-[38px] px-2.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100 text-xs font-bold"
+                            >
+                              لغو
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(profile.id)}
+                            aria-label={`حذف پروفایل ${profile.name}`}
+                            className="min-h-[38px] px-3 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-extrabold inline-flex items-center gap-1"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>حذف</span>
+                          </button>
+                        )
+                      ) : (
+                        <span className="text-[11px] font-bold text-slate-400">
+                          حداقل ۱ پروفایل لازم است
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 );
               })}
             </div>
 
-            {/* Add New Child Profile */}
-            {!showCreator ? (
-              <button
-                type="button"
-                onClick={() => setShowCreator(true)}
-                className="w-full min-h-[56px] rounded-2xl border-2 border-dashed border-[#D99B58] dark:border-blue-600 bg-white/85 dark:bg-blue-950/20 hover:bg-white text-[#8B4D17] dark:text-blue-300 font-extrabold text-base flex items-center justify-center gap-2 transition-colors shadow-[0_8px_20px_-6px_rgba(170,104,40,0.12)]"
-              >
-                <Plus className="w-5 h-5" />
-                <span>ساخت پروفایل کودک جدید</span>
-              </button>
-            ) : (
-              <form
-                onSubmit={handleCreate}
-                className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] p-5 space-y-4 shadow-[0_14px_30px_-8px_rgba(170,104,40,0.2)]"
-              >
-                <h2 className="font-extrabold text-base text-slate-900 dark:text-white">
-                  ساخت پروفایل جدید
-                </h2>
-
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    نام یا اسم مستعار کودک
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={18}
-                    required
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    placeholder="مثلاً سارا یا امیر..."
-                    className="w-full min-h-[48px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-slate-900 dark:text-white font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    سن: {formatNumber(newAge, digitMode)} سال
-                  </label>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {[4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map((ageOpt) => (
-                      <button
-                        key={ageOpt}
-                        type="button"
-                        onClick={() => setNewAge(ageOpt)}
-                        className={`min-h-[44px] min-w-[44px] rounded-2xl font-bold text-sm transition-colors ${
-                          newAge === ageOpt
-                            ? 'bg-[#5472EB] border-b-4 border-[#354EB8] text-white'
-                            : 'bg-[#FFF6EB] dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                        }`}
-                      >
-                        {formatNumber(ageOpt, digitMode)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
-                    انتخاب تصویر شخصیت
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {AVATAR_OPTIONS.map((opt) => (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => setNewAvatar(opt.id)}
-                        className={`min-h-[68px] p-2 rounded-2xl border-2 flex flex-col items-center justify-center gap-1 transition-all ${
-                          newAvatar === opt.id
-                            ? 'border-blue-600 bg-sky-50 dark:bg-blue-950/50 ring-2 ring-blue-400'
-                            : 'border-[#EFE0CE] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800'
-                        }`}
-                      >
-                        <AvatarGraphic avatar={opt.id} className="w-10 h-10" />
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                          {opt.label}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 pt-2">
-                  <button
-                    type="submit"
-                    className="flex-1 min-h-[50px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] text-white font-extrabold text-base"
-                  >
-                    ذخیره پروفایل
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowCreator(false)}
-                    className="min-h-[50px] px-4 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-sm"
-                  >
-                    انصراف
-                  </button>
-                </div>
-              </form>
-            )}
+            <button
+              type="button"
+              onClick={() => setEditorState({ mode: 'create' })}
+              className="w-full min-h-[56px] rounded-2xl border-2 border-dashed border-[#D99B58] dark:border-blue-600 bg-white/85 dark:bg-blue-950/20 hover:bg-white text-[#8B4D17] dark:text-blue-300 font-extrabold text-base flex items-center justify-center gap-2 transition-colors shadow-[0_8px_20px_-6px_rgba(170,104,40,0.12)]"
+            >
+              <Plus className="w-5 h-5" />
+              <span>ساخت پروفایل کودک جدید</span>
+            </button>
           </div>
         )}
       </main>
+
+      {editorState && (
+        <ChildAvatarEditorModal
+          mode={editorState.mode}
+          initialProfile={editorState.mode === 'edit' ? editorState.profile : null}
+          digitMode={digitMode}
+          saving={saving}
+          onClose={() => setEditorState(null)}
+          onSave={handleSaveEditor}
+        />
+      )}
     </div>
   );
 };

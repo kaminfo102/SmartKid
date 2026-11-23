@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import type { AvatarId } from '../types/app';
+import { validateSafeImageSrc } from '../lib/wordpressApi';
 
 interface MascotProps {
   mood?: 'happy' | 'cheering' | 'thinking';
@@ -94,10 +95,31 @@ export const AVATAR_OPTIONS: { id: AvatarId; label: string; bg: string }[] = [
   { id: 'star', label: 'ستاره طلایی', bg: 'bg-violet-100 dark:bg-violet-900/40' },
 ];
 
-export const AvatarGraphic: React.FC<{ avatar: AvatarId; className?: string }> = ({
-  avatar,
-  className = 'w-12 h-12',
-}) => {
+export const AvatarGraphic: React.FC<{
+  avatar: AvatarId;
+  imageUrl?: string;
+  alt?: string;
+  className?: string;
+}> = ({ avatar, imageUrl, alt = 'تصویر کودک', className = 'w-12 h-12' }) => {
+  const [imgFailed, setImgFailed] = useState(false);
+  const safeSrc = validateSafeImageSrc(imageUrl);
+
+  useEffect(() => {
+    setImgFailed(false);
+  }, [safeSrc]);
+
+  if (safeSrc && !imgFailed) {
+    return (
+      <img
+        src={safeSrc}
+        alt={alt}
+        referrerPolicy="no-referrer"
+        onError={() => setImgFailed(true)}
+        className={`${className} rounded-full object-cover bg-[#FFF6EB] dark:bg-slate-800`}
+      />
+    );
+  }
+
   switch (avatar) {
     case 'owl':
       return (

@@ -6,9 +6,88 @@ if ( ! defined( 'ABSPATH' ) ) {
 class KN_REST {
 
 	public static function init() {
+		add_action( 'init', array( __CLASS__, 'handle_cors_preflight_early' ), 1 );
 		add_action( 'rest_api_init', array( __CLASS__, 'register_routes' ) );
-		add_filter( 'rest_pre_serve_request', array( __CLASS__, 'add_cors_headers' ), 10, 4 );
+		add_filter( 'rest_allowed_cors_headers', array( __CLASS__, 'filter_allowed_cors_headers' ), 99 );
+		add_filter( 'rest_pre_serve_request', array( __CLASS__, 'add_cors_headers' ), 99, 4 );
 		add_filter( 'rest_authentication_errors', array( __CLASS__, 'bypass_third_party_jwt_errors' ), 999 );
+	}
+
+	/**
+	 * Resolve validated Access-Control-Allow-Origin for the incoming request.
+	 */
+	private static function resolve_allowed_origin() {
+		$settings       = get_option( 'kn_soroban_settings', array() );
+		$allowed_raw    = isset( $settings['allowed_origins'] ) ? trim( (string) $settings['allowed_origins'] ) : '*';
+		$request_origin = isset( $_SERVER['HTTP_ORIGIN'] ) ? trim( sanitize_text_field( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ) ) : '';
+
+		if ( empty( $request_origin ) ) {
+			return '';
+		}
+
+		if ( $allowed_raw === '*' || $allowed_raw === '' ) {
+			return esc_url_raw( $request_origin );
+		}
+
+		$normalized_req = untrailingslashit( strtolower( $request_origin ) );
+		$allowed_list   = array_filter( array_map( 'trim', explode( ',', $allowed_raw ) ) );
+		foreach ( $allowed_list as $item ) {
+			if ( untrailingslashit( strtolower( $item ) ) === $normalized_req ) {
+				return esc_url_raw( $request_origin );
+			}
+		}
+
+		return '';
+	}
+
+	private static function emit_cors_headers() {
+		$origin = self::resolve_allowed_origin();
+		if ( ! empty( $origin ) ) {
+			header( 'Access-Control-Allow-Origin: ' . $origin );
+			header( 'Vary: Origin' );
+		}
+		header( 'Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS' );
+		header( 'Access-Control-Allow-Headers: Authorization, Content-Type, X-WP-Nonce, X-KN-Auth, X-KN-App, X-Requested-With' );
+		header( 'Access-Control-Allow-Credentials: true' );
+		header( 'Access-Control-Max-Age: 86400' );
+	}
+
+	/**
+	 * Answer browser CORS OPTIONS preflight requests early before WP core/security plugins strip custom headers.
+	 */
+	public static function handle_cors_preflight_early() {
+		$method = isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : '';
+		if ( $method !== 'OPTIONS' ) {
+			return;
+		}
+
+		$uri        = isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '';
+		$rest_route = isset( $_GET['rest_route'] ) ? sanitize_text_field( wp_unslash( $_GET['rest_route'] ) ) : '';
+		if ( strpos( $uri, KN_SOROBAN_API_NS ) === false && strpos( $rest_route, KN_SOROBAN_API_NS ) === false ) {
+			return;
+		}
+
+		self::emit_cors_headers();
+		status_header( 204 );
+		exit;
+	}
+
+	/**
+	 * Ensure WordPress core's rest_send_cors_headers() also permits X-KN-App and X-KN-Auth.
+	 */
+	public static function filter_allowed_cors_headers( $allow_headers ) {
+		if ( ! is_array( $allow_headers ) ) {
+			$allow_headers = array();
+		}
+		$extra = array(
+			'Authorization',
+			'Content-Type',
+			'X-WP-Nonce',
+			'X-KN-Auth',
+			'X-KN-App',
+			'X-Requested-With',
+		);
+		return array_values( array_unique( array_merge( $allow_headers, $extra ) ) );
 	}
 
 	/**
@@ -35,26 +114,7 @@ class KN_REST {
 			return $served;
 		}
 
-		$settings       = get_option( 'kn_soroban_settings', array() );
-		$allowed_raw    = isset( $settings['allowed_origins'] ) ? trim( (string) $settings['allowed_origins'] ) : '*';
-		$request_origin = isset( $_SERVER['HTTP_ORIGIN'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ) : '';
-
-		if ( ! empty( $request_origin ) ) {
-			if ( $allowed_raw === '*' ) {
-				header( 'Access-Control-Allow-Origin: ' . esc_url_raw( $request_origin ) );
-				header( 'Vary: Origin' );
-			} else {
-				$allowed_list = array_filter( array_map( 'trim', explode( ',', $allowed_raw ) ) );
-				if ( in_array( $request_origin, $allowed_list, true ) ) {
-					header( 'Access-Control-Allow-Origin: ' . esc_url_raw( $request_origin ) );
-					header( 'Vary: Origin' );
-				}
-			}
-		}
-
-		header( 'Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS' );
-		header( 'Access-Control-Allow-Headers: Authorization, Content-Type, X-WP-Nonce, X-KN-Auth, X-KN-App, X-Requested-With' );
-		header( 'Access-Control-Allow-Credentials: true' );
+		self::emit_cors_headers();
 
 		return $served;
 	}
@@ -302,6 +362,18 @@ class KN_REST {
 			)
 		);
 
+		register_rest_route(
+			$ns,
+			'/profiles/(?P<client_id>[a-zA-Z0-9_\-]+)/avatar',
+			array(
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( __CLASS__, 'handle_upload_profile_avatar' ),
+					'permission_callback' => array( __CLASS__, 'require_auth' ),
+				),
+			)
+		);
+
 		// User settings sync
 		register_rest_route(
 			$ns,
@@ -443,7 +515,7 @@ class KN_REST {
 				$user->ID,
 				array(
 					'id'     => 'child_' . time(),
-					'name'   => $user->display_name ? $user->display_name : 'آرتین',
+					'name'   => $user->display_name ? $user->display_name : 'کیا',
 					'avatar' => 'owl',
 					'age'    => 6,
 				)
@@ -908,6 +980,78 @@ class KN_REST {
 			array(
 				'ok'       => true,
 				'profiles' => KN_DB::get_user_profiles( $user->ID ),
+			)
+		);
+	}
+
+	public static function handle_upload_profile_avatar( WP_REST_Request $request ) {
+		global $wpdb;
+		$user      = self::get_authed_user( $request );
+		$client_id = sanitize_text_field( (string) $request->get_param( 'client_id' ) );
+
+		if ( empty( $client_id ) ) {
+			return new WP_Error( 'invalid_profile', 'شناسه پروفایل کودک معتبر نیست.', array( 'status' => 400 ) );
+		}
+
+		$files = $request->get_file_params();
+		$file  = ! empty( $files['avatar'] ) ? $files['avatar'] : null;
+		if ( ! $file || empty( $file['tmp_name'] ) ) {
+			return new WP_Error( 'missing_avatar', 'فایل تصویر پروفایل دریافت نشد.', array( 'status' => 400 ) );
+		}
+
+		$t_profiles = KN_DB::table_profiles();
+		$existing   = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$t_profiles} WHERE user_id = %d AND client_profile_id = %s",
+				absint( $user->ID ),
+				$client_id
+			),
+			ARRAY_A
+		);
+
+		if ( ! $existing ) {
+			KN_DB::upsert_profile(
+				$user->ID,
+				array(
+					'id'     => $client_id,
+					'name'   => 'کیا',
+					'avatar' => 'owl',
+					'age'    => 6,
+				)
+			);
+		}
+
+		$saved = KN_Woo::save_compressed_user_image( $user, $file, 'avatar', 'kn-avatars' );
+		if ( is_wp_error( $saved ) ) {
+			return $saved;
+		}
+
+		$wpdb->update(
+			$t_profiles,
+			array( 'avatar_url' => esc_url_raw( $saved['url'] ) ),
+			array(
+				'user_id'           => absint( $user->ID ),
+				'client_profile_id' => $client_id,
+			),
+			array( '%s' ),
+			array( '%d', '%s' )
+		);
+
+		$updated_row = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$t_profiles} WHERE user_id = %d AND client_profile_id = %s",
+				absint( $user->ID ),
+				$client_id
+			),
+			ARRAY_A
+		);
+
+		return rest_ensure_response(
+			array(
+				'ok'        => true,
+				'avatarUrl' => esc_url_raw( $saved['url'] ),
+				'profile'   => $updated_row ? KN_DB::format_profile_row( $updated_row ) : null,
+				'profiles'  => KN_DB::get_user_profiles( $user->ID ),
 			)
 		);
 	}

@@ -21,6 +21,20 @@
     }
   }
 
+  function syncImagePreview(inputId, url) {
+    if (!inputId) return;
+    var imgEl = document.querySelector('[data-kn-image-preview="' + inputId + '"]');
+    if (!imgEl) return;
+    var trimmed = (url || '').trim();
+    if (trimmed) {
+      imgEl.src = trimmed;
+      imgEl.style.display = 'block';
+    } else {
+      imgEl.removeAttribute('src');
+      imgEl.style.display = 'none';
+    }
+  }
+
   document.addEventListener('click', function (e) {
     var copyBtn = e.target.closest('[data-kn-copy]');
     if (copyBtn) {
@@ -92,6 +106,51 @@
       return;
     }
 
+    var imgBtn = e.target.closest('[data-kn-image-target]');
+    if (imgBtn) {
+      e.preventDefault();
+      var imgInputId = imgBtn.getAttribute('data-kn-image-target');
+      var imgInputEl = document.getElementById(imgInputId);
+      if (!imgInputEl) return;
+
+      if (!window.wp || !window.wp.media) {
+        imgInputEl.focus();
+        return;
+      }
+
+      var imgFrame = window.wp.media({
+        title: 'انتخاب یا آپلود تصویر کاور ترم',
+        library: { type: 'image' },
+        button: { text: 'استفاده از این تصویر' },
+        multiple: false
+      });
+
+      imgFrame.on('select', function () {
+        var selection = imgFrame.state().get('selection');
+        if (!selection || !selection.first()) return;
+        var attachment = selection.first().toJSON();
+        if (attachment && attachment.url) {
+          imgInputEl.value = attachment.url;
+          syncImagePreview(imgInputId, attachment.url);
+        }
+      });
+
+      imgFrame.open();
+      return;
+    }
+
+    var imgClearBtn = e.target.closest('[data-kn-image-clear]');
+    if (imgClearBtn) {
+      e.preventDefault();
+      var clearImgId = imgClearBtn.getAttribute('data-kn-image-clear');
+      var clearImgInput = document.getElementById(clearImgId);
+      if (clearImgInput) {
+        clearImgInput.value = '';
+      }
+      syncImagePreview(clearImgId, '');
+      return;
+    }
+
     var addVoiceBtn = e.target.closest('[data-kn-add-voice-row]');
     if (addVoiceBtn) {
       e.preventDefault();
@@ -123,6 +182,10 @@
     var input = e.target.closest('input[data-kn-audio-input]');
     if (input && input.id) {
       syncAudioPreview(input.id, input.value);
+    }
+    var imgInput = e.target.closest('input[data-kn-image-input]');
+    if (imgInput && imgInput.id) {
+      syncImagePreview(imgInput.id, imgInput.value);
     }
   });
 })();

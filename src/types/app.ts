@@ -266,6 +266,7 @@ export interface ChildProfile {
   id: string;
   name: string;
   avatar: AvatarId;
+  avatarUrl?: string;
   age: number;
   createdAt: number;
   totalStars: number;
@@ -323,6 +324,7 @@ export interface TermDefinition {
   storyDescription: string;
   biome: TermBiome;
   accentColor: string;
+  imageUrl?: string;
   isFree: boolean;
   priceAmount: number;
   priceFormatted: string;
