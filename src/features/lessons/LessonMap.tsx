@@ -11,6 +11,9 @@ import {
   Unlock,
   BookOpen,
   Clock,
+  CheckCircle2,
+  AlertCircle,
+  X,
 } from 'lucide-react';
 import type {
   BacsAccount,
@@ -50,6 +53,8 @@ interface LessonMapProps {
   onOpenGames: () => void;
   onOpenSimulator: () => void;
   onBack: () => void;
+  returnNotice?: { type: 'success' | 'info' | 'error'; text: string } | null;
+  onDismissReturnNotice?: () => void;
 }
 
 export const LessonMap: React.FC<LessonMapProps> = ({
@@ -73,6 +78,8 @@ export const LessonMap: React.FC<LessonMapProps> = ({
   onOpenGames,
   onOpenSimulator,
   onBack,
+  returnNotice = null,
+  onDismissReturnNotice,
 }) => {
   const [purchasingTerm, setPurchasingTerm] = useState<TermDefinition | null>(null);
 
@@ -194,6 +201,40 @@ export const LessonMap: React.FC<LessonMapProps> = ({
       </header>
 
       <main className="relative z-10 -mt-3 flex-1 w-full max-w-4xl mx-auto px-3 sm:px-5 pb-10 space-y-5">
+        {returnNotice && (
+          <div
+            role="status"
+            className={`rounded-2xl border-2 p-3.5 sm:p-4 flex items-center justify-between gap-3 shadow-sm ${
+              returnNotice.type === 'success'
+                ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-700 text-emerald-950 dark:text-emerald-100'
+                : returnNotice.type === 'error'
+                ? 'bg-rose-50 dark:bg-rose-950/60 border-rose-300 dark:border-rose-700 text-rose-950 dark:text-rose-100'
+                : 'bg-amber-50 dark:bg-amber-950/60 border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-100'
+            }`}
+          >
+            <div className="flex items-center gap-2.5 min-w-0 text-xs sm:text-sm font-extrabold">
+              {returnNotice.type === 'success' ? (
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              ) : returnNotice.type === 'error' ? (
+                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+              ) : (
+                <Clock className="w-5 h-5 text-amber-600 shrink-0" />
+              )}
+              <span>{returnNotice.text}</span>
+            </div>
+            {onDismissReturnNotice && (
+              <button
+                type="button"
+                onClick={onDismissReturnNotice}
+                aria-label="بستن پیام"
+                className="p-1.5 rounded-xl bg-white/80 dark:bg-slate-800 text-slate-700 dark:text-slate-200 shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Term Progress Dashboard Card */}
         {activeTerm && (
           <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EFE0CE] dark:border-slate-800 shadow-[0_10px_26px_-8px_rgba(170,104,40,0.16)] p-4 space-y-3">

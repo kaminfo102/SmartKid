@@ -3,7 +3,7 @@
  * Plugin Name:       کودک نابغه — مدیریت چرتکه سوروبان و ترم‌های ووکامرس
  * Plugin URI:        https://coffeete.ir/kaminfo
  * Description:       بک‌اند اختصاصی هدلس وردپرس و ووکامرس برای اپلیکیشن آموزش چرتکه «کودک نابغه» شامل مدیریت ترم‌ها، نقشه ماجراجویی داستانی، مراحل و گام‌ها، بانک سوالات، احراز هویت کاربران، پروفایل کودکان، امتیازات و فروش ترم‌ها با ووکامرس.
- * Version:           2.6.0
+ * Version:           2.7.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            تیم کودک نابغه
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'KN_SOROBAN_VERSION', '2.6.0' );
+define( 'KN_SOROBAN_VERSION', '2.7.0' );
 define( 'KN_SOROBAN_FILE', __FILE__ );
 define( 'KN_SOROBAN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'KN_SOROBAN_URL', plugin_dir_url( __FILE__ ) );
@@ -23,6 +23,7 @@ define( 'KN_SOROBAN_API_NS', 'koodak-nabegheh/v1' );
 
 require_once KN_SOROBAN_DIR . 'includes/class-kn-db.php';
 require_once KN_SOROBAN_DIR . 'includes/class-kn-woo.php';
+require_once KN_SOROBAN_DIR . 'includes/class-kn-emails.php';
 require_once KN_SOROBAN_DIR . 'includes/class-kn-auth.php';
 require_once KN_SOROBAN_DIR . 'includes/class-kn-rest.php';
 require_once KN_SOROBAN_DIR . 'includes/class-kn-admin.php';
@@ -113,6 +114,7 @@ function kn_soroban_init() {
 	}
 
 	KN_Woo::init();
+	KN_Emails::init();
 	KN_REST::init();
 
 	if ( is_admin() ) {

@@ -23,6 +23,7 @@ import {
   Award,
   Gift,
   Lock,
+  AlertCircle,
 } from 'lucide-react';
 import type {
   BacsAccount,
@@ -36,16 +37,21 @@ import type {
 import { formatNumber } from '../../lib/numbers';
 import {
   fetchStoreCatalog,
+  getAppCheckoutReturnUrl,
   startStoreCheckout,
   submitOfflineOrder,
   validateSafeHttpUrl,
 } from '../../lib/wordpressApi';
+import { isCapacitorNative } from '../../lib/nativeBridge';
 import { getDailyBonusPreview, SHOP_VIRTUAL_MEDALS } from '../../lib/rewards';
 import type { OptimizedImageResult } from '../../lib/imageOptimizer';
 import { ReceiptUploaderField } from '../../components/ReceiptUploaderField';
 import { SaleCountdown } from '../../components/SaleCountdown';
 import { MedalIconGlyph } from '../progress/ChildProfileDetails';
 import { audioEngine } from '../../lib/audioEngine';
+
+export const PENDING_SHOP_CART_KEY = 'kn_pending_shop_cart';
+export const RESTORE_SHOP_CART_FLAG = 'kn_restore_shop_cart';
 
 interface ShopScreenProps {
   wpUrl: string;
@@ -57,8 +63,12 @@ interface ShopScreenProps {
   onRedeemShopMedal?: (medalId: string) => { ok: boolean; error?: string };
   onSpendPointsOnOrder?: (points: number) => void;
   onOpenAuth: () => void;
+  onOpenOrders?: () => void;
   onOrderCreated?: () => void;
   onBack: () => void;
+  returnNotice?: { type: 'success' | 'info' | 'error'; text: string } | null;
+  pendingCartRestoreSignal?: number;
+  onDismissReturnNotice?: () => void;
 }
 
 interface CartItem {
@@ -101,8 +111,12 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
   onRedeemShopMedal,
   onSpendPointsOnOrder,
   onOpenAuth,
+  onOpenOrders,
   onOrderCreated,
   onBack,
+  returnNotice = null,
+  pendingCartRestoreSignal = 0,
+  onDismissReturnNotice,
 }) => {
   const [storeSection, setStoreSection] = useState<'products' | 'medals'>('products');
   const [medalNotice, setMedalNotice] = useState<string | null>(null);
@@ -158,6 +172,38 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
     void loadCatalog();
   }, [loadCatalog]);
 
+  useEffect(() => {
+    if (!catalog || catalog.products.length === 0 || typeof window === 'undefined') return;
+    try {
+      const shouldRestore = window.sessionStorage.getItem(RESTORE_SHOP_CART_FLAG) === '1';
+      if (!shouldRestore && pendingCartRestoreSignal <= 0) return;
+
+      const raw = window.sessionStorage.getItem(PENDING_SHOP_CART_KEY);
+      window.sessionStorage.removeItem(RESTORE_SHOP_CART_FLAG);
+      window.sessionStorage.removeItem(PENDING_SHOP_CART_KEY);
+      if (!raw) return;
+
+      const saved = JSON.parse(raw) as Array<{ id: number; qty: number }>;
+      if (!Array.isArray(saved) || saved.length === 0) return;
+
+      const productMap = new Map(catalog.products.map((p) => [p.id, p]));
+      const restored: CartItem[] = [];
+      for (const entry of saved) {
+        const prod = productMap.get(Number(entry.id));
+        const qty = Math.max(1, Math.floor(Number(entry.qty) || 1));
+        if (prod && prod.inStock) {
+          restored.push({ product: prod, qty });
+        }
+      }
+      if (restored.length > 0) {
+        setCart(restored);
+        setCartOpen(true);
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, [catalog, pendingCartRestoreSignal]);
+
   const activeBacsAccounts = useMemo(() => {
     if (catalog?.bacsAccounts && catalog.bacsAccounts.length > 0) {
       return catalog.bacsAccounts;
@@ -211,14 +257,33 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
     setSubmitting(true);
     setErrorMsg(null);
     try {
-      const res = await startStoreCheckout(
-        wpUrl,
-        cart.map((c) => ({ productId: c.product.id, qty: c.qty }))
-      );
+      const itemsPayload = cart.map((c) => ({ productId: c.product.id, qty: c.qty }));
+      if (typeof window !== 'undefined') {
+        try {
+          window.sessionStorage.setItem(
+            PENDING_SHOP_CART_KEY,
+            JSON.stringify(itemsPayload.map((it) => ({ id: it.productId, qty: it.qty })))
+          );
+          window.sessionStorage.removeItem(RESTORE_SHOP_CART_FLAG);
+        } catch {
+          // ignore storage errors
+        }
+      }
+
+      const res = await startStoreCheckout(wpUrl, itemsPayload, {
+        returnUrl: getAppCheckoutReturnUrl(),
+        from: 'shop',
+      });
       const safe = validateSafeHttpUrl(res.checkoutUrl);
       if (!safe) {
         throw new Error('لینک درگاه پرداخت معتبر نبود.');
       }
+
+      if (!isCapacitorNative()) {
+        window.location.href = safe;
+        return;
+      }
+
       const a = document.createElement('a');
       a.href = safe;
       a.target = '_blank';
@@ -316,6 +381,53 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
       </header>
 
       <main className="flex-1 w-full max-w-6xl mx-auto p-4 sm:p-6 space-y-5 pb-14">
+        {returnNotice && (
+          <div
+            role="status"
+            className={`rounded-2xl border-2 p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm ${
+              returnNotice.type === 'success'
+                ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-700 text-emerald-950 dark:text-emerald-100'
+                : returnNotice.type === 'error'
+                ? 'bg-rose-50 dark:bg-rose-950/60 border-rose-300 dark:border-rose-700 text-rose-950 dark:text-rose-100'
+                : 'bg-amber-50 dark:bg-amber-950/60 border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-100'
+            }`}
+          >
+            <div className="flex items-center gap-2.5 min-w-0 text-xs sm:text-sm font-extrabold">
+              {returnNotice.type === 'success' ? (
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              ) : returnNotice.type === 'error' ? (
+                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+              ) : (
+                <Clock className="w-5 h-5 text-amber-600 shrink-0" />
+              )}
+              <span>{returnNotice.text}</span>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+              {onOpenOrders && (
+                <button
+                  type="button"
+                  onClick={onOpenOrders}
+                  className="min-h-[36px] px-3 rounded-xl bg-[#5472EB] text-white text-xs font-extrabold inline-flex items-center gap-1.5"
+                >
+                  <Package className="w-3.5 h-3.5" />
+                  <span>مشاهده سفارش‌ها</span>
+                </button>
+              )}
+              {onDismissReturnNotice && (
+                <button
+                  type="button"
+                  onClick={onDismissReturnNotice}
+                  aria-label="بستن پیام"
+                  className="p-1.5 rounded-xl bg-white/80 dark:bg-slate-800 text-slate-700 dark:text-slate-200"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Campaign Focal Banner */}
         <section className="rounded-3xl bg-gradient-to-l from-[#FFCC33] via-[#FFD859] to-[#FFE89E] dark:from-slate-800 dark:to-slate-900 border-4 border-white dark:border-slate-700 shadow-[0_12px_28px_-8px_rgba(180,115,45,0.2)] p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1.5 max-w-2xl">

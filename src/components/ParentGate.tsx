@@ -100,7 +100,7 @@ export const ParentGate: React.FC<ParentGateProps> = ({ onUnlock, onCancel }) =>
             inputMode="numeric"
             value={answerInput}
             onChange={(e) => {
-              setAnswerInput(e.target.value);
+              setAnswerInput(toEnglishDigits(e.target.value).replace(/\D/g, ''));
               setHint('');
             }}
             placeholder="پاسخ را بنویسید..."

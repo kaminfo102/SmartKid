@@ -38,6 +38,9 @@ class KN_Woo {
 		// Hydrate missing WC()->customer billing fields cleanly before Checkout renders.
 		add_action( 'template_redirect', array( __CLASS__, 'sync_express_customer_on_checkout' ), 15 );
 
+		// Render distraction-free RTL app checkout shell (no WP theme header/footer) for app-initiated checkouts.
+		add_filter( 'template_include', array( __CLASS__, 'maybe_use_app_checkout_template' ), 9999 );
+
 		// Express Checkout (no re-login, no physical shipping) strictly for Term purchases.
 		add_filter( 'woocommerce_product_needs_shipping', array( __CLASS__, 'filter_product_needs_shipping' ), 999, 2 );
 		add_filter( 'woocommerce_cart_needs_shipping', array( __CLASS__, 'filter_false_for_term_checkout' ), 999 );
@@ -56,11 +59,11 @@ class KN_Woo {
 		add_action( 'wp_head', array( __CLASS__, 'render_express_checkout_styles' ), 99 );
 		add_action( 'wp_footer', array( __CLASS__, 'render_checkout_block_express_script' ), 99 );
 
-		// Receipt uploader on Classic Checkout & Thank-you page for bank transfer / offline orders.
+		// Receipt uploader on Classic Checkout & Thank-you page status/return + BACS upload box.
 		add_action( 'woocommerce_review_order_before_submit', array( __CLASS__, 'render_classic_checkout_receipt_fields' ), 20 );
 		add_action( 'woocommerce_thankyou', array( __CLASS__, 'render_thankyou_receipt_box' ), 15 );
 
-		// Bind authenticated customer + account billing info + _kn_term_id + receipt meta on checkouts.
+		// Bind authenticated customer + account billing info + _kn_term_id + return URL + receipt meta on checkouts.
 		add_action( 'woocommerce_checkout_create_order', array( __CLASS__, 'prepare_order_customer_and_meta' ), 10, 2 );
 		add_action( 'woocommerce_checkout_order_created', array( __CLASS__, 'attach_term_meta_on_checkout' ), 10, 1 );
 		add_action( 'woocommerce_store_api_checkout_update_order_from_request', array( __CLASS__, 'prepare_store_api_order_meta' ), 10, 2 );
@@ -210,7 +213,7 @@ class KN_Woo {
 	/**
 	 * Compute live price, sale discount metadata, and checkout URL for a Term row.
 	 */
-	public static function get_term_commerce_meta( $term_row, $user_id = 0, $issue_sso = false ) {
+	public static function get_term_commerce_meta( $term_row, $user_id = 0, $issue_sso = false, $return_url = '', $return_from = 'map' ) {
 		$fallback_price = isset( $term_row['price_amount'] ) ? (int) $term_row['price_amount'] : 0;
 		$product_id     = isset( $term_row['woo_product_id'] ) ? absint( $term_row['woo_product_id'] ) : 0;
 		$override_url   = isset( $term_row['checkout_url_override'] ) ? trim( (string) $term_row['checkout_url_override'] ) : '';
@@ -225,6 +228,7 @@ class KN_Woo {
 						array(
 							'add-to-cart' => $product_id,
 							'kn_term'     => (int) $term_row['id'],
+							'kn_app'      => '1',
 						),
 						wc_get_checkout_url()
 					);
@@ -256,7 +260,7 @@ class KN_Woo {
 			}
 
 			if ( $allow_sso ) {
-				$sso_token = KN_Auth::issue_checkout_handoff( $user_id, (int) $term_row['id'] );
+				$sso_token = KN_Auth::issue_checkout_handoff( $user_id, (int) $term_row['id'], array(), $return_url, $return_from );
 				if ( ! empty( $sso_token ) ) {
 					$checkout_url = add_query_arg(
 						array(
@@ -335,10 +339,18 @@ class KN_Woo {
 
 		$term_id     = ! empty( $handoff['term_id'] ) ? absint( $handoff['term_id'] ) : 0;
 		$extra_items = ! empty( $handoff['items'] ) && is_array( $handoff['items'] ) ? $handoff['items'] : array();
+		$return_url  = ! empty( $handoff['return_url'] ) ? KN_Auth::sanitize_app_return_url( $handoff['return_url'] ) : '';
+		$return_from = ! empty( $handoff['return_from'] ) ? KN_Auth::sanitize_return_from( $handoff['return_from'] ) : ( $term_id > 0 ? 'map' : 'shop' );
 
 		if ( $term_id <= 0 && empty( $extra_items ) && isset( $_GET['kn_term'] ) ) {
 			$term_id = absint( $_GET['kn_term'] );
 		}
+
+		// Persist app checkout context across cookies, user meta, and WooCommerce session
+		self::set_app_checkout_cookies( $return_url, $return_from );
+		update_user_meta( $user->ID, '_kn_last_return_url', $return_url );
+		update_user_meta( $user->ID, '_kn_last_return_from', $return_from );
+		update_user_meta( $user->ID, '_kn_last_return_ts', time() );
 
 		global $wpdb;
 		$term = null;
@@ -370,6 +382,9 @@ class KN_Woo {
 
 			if ( WC()->session ) {
 				WC()->session->set( 'kn_active_term_id', $term_id );
+				WC()->session->set( 'kn_app_checkout', 1 );
+				WC()->session->set( 'kn_return_url', $return_url );
+				WC()->session->set( 'kn_return_from', $return_from );
 			}
 
 			if ( WC()->cart ) {
@@ -407,12 +422,201 @@ class KN_Woo {
 			}
 		}
 
+		$redirect_url = add_query_arg( 'kn_app', '1', $redirect_url );
 		if ( $term_id > 0 ) {
 			$redirect_url = add_query_arg( 'kn_term', $term_id, $redirect_url );
 		}
 
 		wp_safe_redirect( $redirect_url );
 		exit;
+	}
+
+	/**
+	 * Set short-lived cookies marking the browser checkout session as app-initiated.
+	 */
+	private static function set_app_checkout_cookies( $return_url, $return_from ) {
+		if ( headers_sent() ) {
+			return;
+		}
+		$exp      = time() + ( 2 * HOUR_IN_SECONDS );
+		$is_https = is_ssl() || ( ! empty( $_SERVER['HTTP_X_FORWARDED_PROTO'] ) && stripos( (string) $_SERVER['HTTP_X_FORWARDED_PROTO'], 'https' ) !== false );
+		$path     = defined( 'COOKIEPATH' ) && COOKIEPATH ? COOKIEPATH : '/';
+
+		$pairs = array(
+			'kn_app_mode'        => '1',
+			'kn_app_return_url'  => (string) $return_url,
+			'kn_app_return_from' => (string) $return_from,
+		);
+		foreach ( $pairs as $name => $val ) {
+			setcookie(
+				$name,
+				$val,
+				array(
+					'expires'  => $exp,
+					'path'     => $path,
+					'secure'   => $is_https,
+					'httponly' => true,
+					'samesite' => $is_https ? 'None' : 'Lax',
+				)
+			);
+			$_COOKIE[ $name ] = $val;
+		}
+	}
+
+	/**
+	 * Determine whether the current Checkout / Order-Pay / Order-Received page should render
+	 * the distraction-free Koodak Nabegheh Checkout Shell (without WP header/footer).
+	 */
+	public static function is_app_checkout_ui() {
+		if ( ! empty( $_GET['kn_wp_theme'] ) ) {
+			return false;
+		}
+		if ( is_admin() || wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+			return false;
+		}
+		if ( ! self::is_woo_active() ) {
+			return false;
+		}
+
+		$is_thankyou  = function_exists( 'is_wc_endpoint_url' ) && is_wc_endpoint_url( 'order-received' );
+		$is_order_pay = function_exists( 'is_wc_endpoint_url' ) && is_wc_endpoint_url( 'order-pay' );
+		$is_chk       = ( function_exists( 'is_checkout' ) && is_checkout() ) || $is_thankyou || $is_order_pay;
+		if ( ! $is_chk ) {
+			return false;
+		}
+
+		if ( isset( $_GET['kn_app'] ) || isset( $_GET['kn_term'] ) || ! empty( $_COOKIE['kn_app_mode'] ) ) {
+			return true;
+		}
+
+		if ( function_exists( 'WC' ) && WC() && WC()->session && WC()->session->get( 'kn_app_checkout' ) ) {
+			return true;
+		}
+
+		$order_id = $is_thankyou ? absint( get_query_var( 'order-received' ) ) : ( $is_order_pay ? absint( get_query_var( 'order-pay' ) ) : 0 );
+		if ( $order_id > 0 ) {
+			$order = wc_get_order( $order_id );
+			if ( $order ) {
+				if ( $order->get_meta( '_kn_app_checkout', true ) || $order->get_meta( '_kn_return_url', true ) || $order->get_meta( '_kn_term_id', true ) ) {
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Swap active theme template with our custom distraction-free checkout shell for app checkouts.
+	 */
+	public static function maybe_use_app_checkout_template( $template ) {
+		if ( self::is_app_checkout_ui() ) {
+			$shell = KN_SOROBAN_DIR . 'templates/kn-checkout-shell.php';
+			if ( file_exists( $shell ) ) {
+				return $shell;
+			}
+		}
+		return $template;
+	}
+
+	/**
+	 * Resolve validated app return URL from Order Meta, WC Session, Cookie, or User Meta.
+	 */
+	public static function resolve_app_return_url( $order_id = 0 ) {
+		if ( $order_id > 0 && self::is_woo_active() ) {
+			$order = wc_get_order( absint( $order_id ) );
+			if ( $order ) {
+				$meta_url = KN_Auth::sanitize_app_return_url( $order->get_meta( '_kn_return_url', true ) );
+				if ( ! empty( $meta_url ) ) {
+					return $meta_url;
+				}
+			}
+		}
+		if ( function_exists( 'WC' ) && WC() && WC()->session ) {
+			$sess_url = KN_Auth::sanitize_app_return_url( WC()->session->get( 'kn_return_url' ) );
+			if ( ! empty( $sess_url ) ) {
+				return $sess_url;
+			}
+		}
+		if ( ! empty( $_COOKIE['kn_app_return_url'] ) ) {
+			$cookie_url = KN_Auth::sanitize_app_return_url( wp_unslash( $_COOKIE['kn_app_return_url'] ) );
+			if ( ! empty( $cookie_url ) ) {
+				return $cookie_url;
+			}
+		}
+		$uid = get_current_user_id();
+		if ( $uid > 0 ) {
+			$ts = (int) get_user_meta( $uid, '_kn_last_return_ts', true );
+			if ( $ts > 0 && ( time() - $ts ) <= 2 * HOUR_IN_SECONDS ) {
+				$u_url = KN_Auth::sanitize_app_return_url( get_user_meta( $uid, '_kn_last_return_url', true ) );
+				if ( ! empty( $u_url ) ) {
+					return $u_url;
+				}
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Resolve originating app section ('map' | 'shop' | 'orders') from Order/Session/Cookie/UserMeta.
+	 */
+	public static function resolve_app_return_from( $order_id = 0 ) {
+		if ( $order_id > 0 && self::is_woo_active() ) {
+			$order = wc_get_order( absint( $order_id ) );
+			if ( $order ) {
+				$meta_from = $order->get_meta( '_kn_return_from', true );
+				if ( ! empty( $meta_from ) ) {
+					return KN_Auth::sanitize_return_from( $meta_from );
+				}
+				if ( (int) $order->get_meta( '_kn_term_id', true ) > 0 ) {
+					return 'map';
+				}
+			}
+		}
+		if ( function_exists( 'WC' ) && WC() && WC()->session ) {
+			$sess_from = WC()->session->get( 'kn_return_from' );
+			if ( ! empty( $sess_from ) ) {
+				return KN_Auth::sanitize_return_from( $sess_from );
+			}
+		}
+		if ( ! empty( $_COOKIE['kn_app_return_from'] ) ) {
+			return KN_Auth::sanitize_return_from( wp_unslash( $_COOKIE['kn_app_return_from'] ) );
+		}
+		$uid = get_current_user_id();
+		if ( $uid > 0 ) {
+			$u_from = get_user_meta( $uid, '_kn_last_return_from', true );
+			if ( ! empty( $u_from ) ) {
+				return KN_Auth::sanitize_return_from( $u_from );
+			}
+		}
+		return self::get_active_checkout_term_id() > 0 ? 'map' : 'shop';
+	}
+
+	/**
+	 * Resolve Term DB ID for a given order or active session.
+	 */
+	public static function resolve_order_or_active_term_id( $order_id = 0 ) {
+		if ( $order_id > 0 && self::is_woo_active() ) {
+			$order = wc_get_order( absint( $order_id ) );
+			if ( $order ) {
+				$tid = absint( $order->get_meta( '_kn_term_id', true ) );
+				if ( $tid > 0 ) {
+					return $tid;
+				}
+				$map = self::get_paid_term_product_map();
+				foreach ( $order->get_items() as $item ) {
+					$pid = method_exists( $item, 'get_product_id' ) ? absint( $item->get_product_id() ) : 0;
+					$vid = method_exists( $item, 'get_variation_id' ) ? absint( $item->get_variation_id() ) : 0;
+					if ( $pid > 0 && isset( $map[ $pid ] ) ) {
+						return $map[ $pid ];
+					}
+					if ( $vid > 0 && isset( $map[ $vid ] ) ) {
+						return $map[ $vid ];
+					}
+				}
+			}
+		}
+		return self::get_active_checkout_term_id();
 	}
 
 	/**
@@ -1072,27 +1276,135 @@ class KN_Woo {
 	}
 
 	/**
-	 * Thank-You page receipt upload box when an order is on-hold/pending (e.g. direct bank transfer).
+	 * Thank-You page status/auto-return card + BACS receipt uploader when order is on-hold/pending.
 	 */
 	public static function render_thankyou_receipt_box( $order_id ) {
 		$order = wc_get_order( absint( $order_id ) );
 		if ( ! $order ) {
 			return;
 		}
-		if ( ! in_array( $order->get_status(), array( 'on-hold', 'pending' ), true ) ) {
-			return;
+
+		$status          = (string) $order->get_status();
+		$term_id         = self::resolve_order_or_active_term_id( $order->get_id() );
+		$return_url_base = self::resolve_app_return_url( $order->get_id() );
+		$return_from     = self::resolve_app_return_from( $order->get_id() );
+
+		if ( in_array( $status, array( 'processing', 'completed' ), true ) && $term_id > 0 ) {
+			self::grant_access_from_order( $order->get_id() );
 		}
-		$current_user_id = get_current_user_id();
-		if ( $current_user_id <= 0 || (int) $order->get_customer_id() !== $current_user_id ) {
+
+		$final_return_url = '';
+		if ( ! empty( $return_url_base ) ) {
+			$ret_args = array(
+				'kn_payment_return' => '1',
+				'kn_order_id'       => $order->get_id(),
+				'kn_order_number'   => $order->get_order_number(),
+				'kn_status'         => $status,
+				'kn_from'           => $return_from,
+			);
+			if ( $term_id > 0 ) {
+				$ret_args['kn_term'] = $term_id;
+			}
+			$final_return_url = add_query_arg( $ret_args, $return_url_base );
+		}
+
+		$uploaded_ok = ! empty( $_GET['kn_receipt_saved'] );
+
+		if ( in_array( $status, array( 'processing', 'completed' ), true ) ) {
+			?>
+			<div id="kn-thankyou-return-card" style="direction:rtl;text-align:right;margin:22px 0;padding:20px;border-radius:20px;background:linear-gradient(135deg,#ECFDF5 0%,#D1FAE5 100%);border:2px solid #34D399;color:#064E3B;">
+				<h3 style="margin:0 0 8px;font-size:17px;font-weight:900;color:#065F46;">
+					پرداخت با موفقیت انجام و سفارش شما تایید شد!
+				</h3>
+				<p style="margin:0 0 14px;font-size:13px;line-height:1.8;color:#065F46;">
+					سفارش شماره <strong>#<?php echo esc_html( $order->get_order_number() ); ?></strong> تایید گردید<?php echo $term_id > 0 ? ' و دسترسی دوره آموزشی برای حساب شما فعال شد.' : ' و اطلاعات سفارش در اپلیکیشن به‌روزرسانی می‌شود.'; ?>
+				</p>
+				<?php if ( ! empty( $final_return_url ) ) : ?>
+					<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+						<a href="<?php echo esc_url( $final_return_url ); ?>" id="kn-auto-return-cta" style="display:inline-flex;align-items:center;gap:8px;background:#4BB543;color:#FFFFFF;text-decoration:none;border-radius:14px;padding:12px 20px;font-weight:900;font-size:14px;border-bottom:4px solid #2E8228;">
+							<span>بازگشت فوری به اپلیکیشن کودک نابغه</span>
+						</a>
+						<span id="kn-auto-return-countdown" style="font-size:12px;font-weight:800;color:#047857;">
+							در حال بازگشت خودکار در <span id="kn-ret-sec">3</span> ثانیه...
+						</span>
+						<button type="button" id="kn-cancel-auto-ret" style="background:transparent;border:none;color:#065F46;text-decoration:underline;font-size:12px;font-weight:700;cursor:pointer;">
+							توقف انتقال خودکار
+						</button>
+					</div>
+					<script>
+					(function(){
+						var sec = 3;
+						var cancelled = false;
+						var targetUrl = <?php echo wp_json_encode( $final_return_url ); ?>;
+						var secEl = document.getElementById('kn-ret-sec');
+						var statusEl = document.getElementById('kn-auto-return-countdown');
+						var cancelBtn = document.getElementById('kn-cancel-auto-ret');
+						if (cancelBtn) {
+							cancelBtn.addEventListener('click', function(){
+								cancelled = true;
+								if (statusEl) statusEl.textContent = 'انتقال خودکار متوقف شد.';
+								cancelBtn.style.display = 'none';
+							});
+						}
+						var iv = setInterval(function(){
+							if (cancelled) { clearInterval(iv); return; }
+							sec--;
+							if (secEl) secEl.textContent = String(Math.max(0, sec));
+							if (sec <= 0) {
+								clearInterval(iv);
+								window.location.href = targetUrl;
+							}
+						}, 1000);
+					})();
+					</script>
+				<?php endif; ?>
+			</div>
+			<?php
 			return;
 		}
 
+		if ( in_array( $status, array( 'failed', 'cancelled' ), true ) ) {
+			?>
+			<div style="direction:rtl;text-align:right;margin:22px 0;padding:18px 20px;border-radius:18px;background:#FEF2F2;border:2px solid #FCA5A5;color:#991B1B;">
+				<h3 style="margin:0 0 8px;font-size:16px;font-weight:900;">پرداخت این سفارش تکمیل نشد</h3>
+				<p style="margin:0 0 14px;font-size:13px;line-height:1.8;">
+					سفارش شماره <strong>#<?php echo esc_html( $order->get_order_number() ); ?></strong> ناموفق یا لغو شده است. می‌توانید دوباره برای پرداخت اقدام کنید یا به اپلیکیشن بازگردید.
+				</p>
+				<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+					<a href="<?php echo esc_url( $order->get_checkout_payment_url() ); ?>" style="display:inline-block;background:#5472EB;color:#FFFFFF;text-decoration:none;border-radius:12px;padding:10px 18px;font-weight:800;font-size:13px;">
+						تلاش مجدد برای پرداخت
+					</a>
+					<?php if ( ! empty( $final_return_url ) ) : ?>
+						<a href="<?php echo esc_url( $final_return_url ); ?>" style="display:inline-block;background:#FFFFFF;color:#991B1B;text-decoration:none;border:2px solid #FCA5A5;border-radius:12px;padding:9px 16px;font-weight:800;font-size:13px;">
+							بازگشت به اپلیکیشن
+						</a>
+					<?php endif; ?>
+				</div>
+			</div>
+			<?php
+			return;
+		}
+
+		if ( ! in_array( $status, array( 'on-hold', 'pending' ), true ) ) {
+			if ( ! empty( $final_return_url ) ) :
+				?>
+				<div style="margin:18px 0;">
+					<a href="<?php echo esc_url( $final_return_url ); ?>" style="display:inline-block;background:#5472EB;color:#FFFFFF;text-decoration:none;border-radius:14px;padding:11px 20px;font-weight:800;font-size:14px;">
+						بازگشت به اپلیکیشن و مشاهده سفارش
+					</a>
+				</div>
+				<?php
+			endif;
+			return;
+		}
+
+		$current_user_id  = get_current_user_id();
+		$can_upload_here  = ( $current_user_id > 0 && (int) $order->get_customer_id() === $current_user_id );
 		$existing_receipt = (string) $order->get_meta( '_kn_receipt_url', true );
 		$existing_note    = (string) $order->get_meta( '_kn_payment_note', true );
-		$uploaded_ok      = ! empty( $_GET['kn_receipt_saved'] );
 		?>
 		<div style="direction:rtl;text-align:right;margin:20px 0;padding:18px 20px;border-radius:18px;background:#FFFBEB;border:2px solid #F59E0B;">
-			<h3 style="margin:0 0 8px;font-size:16px;color:#92400E;">سفارش در حال بررسی و تایید توسط مدیر می‌باشد</h3>
+			<h3 style="margin:0 0 8px;font-size:16px;font-weight:900;color:#92400E;">سفارش ثبت شد و در انتظار بررسی مدیر می‌باشد</h3>
 			<p style="margin:0 0 12px;font-size:13px;color:#78350F;line-height:1.8;">
 				سفارش شماره <strong>#<?php echo esc_html( $order->get_order_number() ); ?></strong> با موفقیت ثبت شد. پس از بررسی و تایید مدیر، دسترسی شما فوراً فعال خواهد شد.
 			</p>
@@ -1101,29 +1413,85 @@ class KN_Woo {
 					رسید پرداخت و توضیحات شما با موفقیت برای بررسی مدیر ثبت شد!
 				</div>
 			<?php endif; ?>
-			<?php if ( ! empty( $existing_receipt ) ) : ?>
-				<div style="margin-bottom:12px;">
-					<div style="font-size:12px;font-weight:700;color:#065F46;margin-bottom:6px;">رسید ثبت‌شده فعلی:</div>
-					<a href="<?php echo esc_url( $existing_receipt ); ?>" target="_blank" rel="noopener noreferrer">
-						<img src="<?php echo esc_url( $existing_receipt ); ?>" alt="رسید بانکی" style="max-width:220px;border-radius:12px;border:2px solid #A7F3D0;" />
+
+			<?php if ( ! empty( $final_return_url ) ) : ?>
+				<div style="margin:0 0 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+					<a href="<?php echo esc_url( $final_return_url ); ?>" style="display:inline-flex;align-items:center;gap:8px;background:#5472EB;color:#FFFFFF;text-decoration:none;border-radius:14px;padding:10px 18px;font-weight:900;font-size:13px;border-bottom:3px solid #354EB8;">
+						<span>بازگشت به اپلیکیشن و به‌روزرسانی وضعیت سفارش</span>
 					</a>
 				</div>
 			<?php endif; ?>
-			<form method="post" enctype="multipart/form-data">
-				<?php wp_nonce_field( 'kn_thankyou_receipt_' . $order->get_id() ); ?>
-				<input type="hidden" name="kn_thankyou_order_id" value="<?php echo esc_attr( $order->get_id() ); ?>" />
-				<div style="margin-bottom:10px;">
-					<label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">آپلود یا تغییر تصویر رسید بانکی (اختیاری - حداکثر ۱۰۰ کیلوبایت):</label>
-					<input type="file" name="kn_thankyou_receipt_file" accept="image/*" />
-				</div>
-				<div style="margin-bottom:12px;">
-					<label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">توضیحات یا کد پیگیری واریز (اختیاری):</label>
-					<textarea name="kn_thankyou_payment_note" rows="2" style="width:100%;border-radius:10px;border:1px solid #FCD34D;padding:8px 10px;font-size:13px;"><?php echo esc_textarea( $existing_note ); ?></textarea>
-				</div>
-				<button type="submit" style="background:#EA580C;color:#fff;border:none;border-radius:12px;padding:10px 18px;font-weight:800;cursor:pointer;">
-					ثبت رسید و توضیحات
-				</button>
-			</form>
+
+			<?php if ( $can_upload_here ) : ?>
+				<?php if ( ! empty( $existing_receipt ) ) : ?>
+					<div style="margin-bottom:12px;">
+						<div style="font-size:12px;font-weight:700;color:#065F46;margin-bottom:6px;">رسید ثبت‌شده فعلی:</div>
+						<a href="<?php echo esc_url( $existing_receipt ); ?>" target="_blank" rel="noopener noreferrer">
+							<img src="<?php echo esc_url( $existing_receipt ); ?>" alt="رسید بانکی" style="max-width:220px;border-radius:12px;border:2px solid #A7F3D0;" />
+						</a>
+					</div>
+				<?php endif; ?>
+				<form method="post" enctype="multipart/form-data">
+					<?php wp_nonce_field( 'kn_thankyou_receipt_' . $order->get_id() ); ?>
+					<input type="hidden" name="kn_thankyou_order_id" value="<?php echo esc_attr( $order->get_id() ); ?>" />
+					<div style="margin-bottom:10px;">
+						<label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">آپلود یا تغییر تصویر رسید بانکی (اختیاری - بهینه‌سازی خودکار زیر ۱۰۰ کیلوبایت):</label>
+						<input type="file" id="kn-ty-receipt-file" name="kn_thankyou_receipt_file" accept="image/*" />
+						<input type="hidden" name="kn_thankyou_receipt_data_url" id="kn-ty-receipt-data-url" value="" />
+						<div id="kn-ty-receipt-status" style="font-size:11px;color:#047857;margin-top:4px;font-weight:700;"></div>
+					</div>
+					<div style="margin-bottom:12px;">
+						<label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">توضیحات یا کد پیگیری واریز (اختیاری):</label>
+						<textarea name="kn_thankyou_payment_note" rows="2" style="width:100%;border-radius:10px;border:1px solid #FCD34D;padding:8px 10px;font-size:13px;"><?php echo esc_textarea( $existing_note ); ?></textarea>
+					</div>
+					<button type="submit" style="background:#EA580C;color:#fff;border:none;border-radius:12px;padding:10px 18px;font-weight:800;cursor:pointer;">
+						ثبت رسید و توضیحات
+					</button>
+				</form>
+				<script>
+				(function(){
+					var input = document.getElementById('kn-ty-receipt-file');
+					var hidden = document.getElementById('kn-ty-receipt-data-url');
+					var status = document.getElementById('kn-ty-receipt-status');
+					if (!input || !hidden) return;
+					input.addEventListener('change', function(){
+						var file = input.files && input.files[0];
+						if (!file) { hidden.value = ''; status.textContent = ''; return; }
+						var reader = new FileReader();
+						reader.onload = function(ev){
+							var img = new Image();
+							img.onload = function(){
+								var canvas = document.createElement('canvas');
+								var dims = [1100, 860, 680, 520];
+								var quals = [0.8, 0.62, 0.45, 0.3, 0.18];
+								var best = '';
+								for (var d=0; d<dims.length && !best; d++) {
+									var scale = Math.min(1, dims[d] / Math.max(img.width, img.height));
+									canvas.width = Math.max(1, Math.round(img.width * scale));
+									canvas.height = Math.max(1, Math.round(img.height * scale));
+									var ctx = canvas.getContext('2d');
+									ctx.fillStyle = '#ffffff';
+									ctx.fillRect(0, 0, canvas.width, canvas.height);
+									ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+									for (var q=0; q<quals.length; q++) {
+										var dataUrl = canvas.toDataURL('image/jpeg', quals[q]);
+										var approxBytes = Math.ceil((dataUrl.length - 23) * 0.75);
+										if (approxBytes <= 102400) {
+											best = dataUrl;
+											status.textContent = 'رسید بهینه‌سازی و آماده ارسال شد (' + Math.round(approxBytes/1024) + ' کیلوبایت)';
+											break;
+										}
+									}
+								}
+								hidden.value = best;
+							};
+							img.src = ev.target.result;
+						};
+						reader.readAsDataURL(file);
+					});
+				})();
+				</script>
+			<?php endif; ?>
 		</div>
 		<?php
 	}
@@ -1142,11 +1510,29 @@ class KN_Woo {
 		if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ?? '' ) ), 'kn_thankyou_receipt_' . $order_id ) ) {
 			return;
 		}
-		$user = wp_get_current_user();
-		$file = ! empty( $_FILES['kn_thankyou_receipt_file']['tmp_name'] ) ? $_FILES['kn_thankyou_receipt_file'] : null;
-		$note = sanitize_textarea_field( wp_unslash( $_POST['kn_thankyou_payment_note'] ?? '' ) );
+		$user     = wp_get_current_user();
+		$data_url = ! empty( $_POST['kn_thankyou_receipt_data_url'] ) ? (string) wp_unslash( $_POST['kn_thankyou_receipt_data_url'] ) : '';
+		$file     = ! empty( $_FILES['kn_thankyou_receipt_file']['tmp_name'] ) ? $_FILES['kn_thankyou_receipt_file'] : null;
+		$note     = sanitize_textarea_field( wp_unslash( $_POST['kn_thankyou_payment_note'] ?? '' ) );
 
-		self::attach_receipt_to_order( $user, $order_id, $file, $note );
+		if ( ! empty( $data_url ) ) {
+			$order = wc_get_order( $order_id );
+			if ( $order && (int) $order->get_customer_id() === (int) $user->ID ) {
+				$saved = self::save_base64_user_image( $user, $data_url, 'receipt' );
+				if ( ! is_wp_error( $saved ) && ! empty( $saved['url'] ) ) {
+					$order->update_meta_data( '_kn_receipt_url', $saved['url'] );
+					if ( $note !== '' ) {
+						$order->update_meta_data( '_kn_payment_note', $note );
+					}
+					$order->add_order_note( 'رسید بانکی در صفحه تایید سفارش آپلود شد.' );
+					$order->save();
+				} elseif ( $note !== '' ) {
+					self::attach_receipt_to_order( $user, $order_id, null, $note );
+				}
+			}
+		} else {
+			self::attach_receipt_to_order( $user, $order_id, $file, $note );
+		}
 
 		wp_safe_redirect( add_query_arg( 'kn_receipt_saved', '1', wp_get_referer() ?: home_url( '/' ) ) );
 		exit;
@@ -1232,6 +1618,17 @@ class KN_Woo {
 			$order->update_meta_data( '_kn_term_id', $term_id );
 		}
 
+		$ret_url  = self::resolve_app_return_url();
+		$ret_from = self::resolve_app_return_from();
+		if ( ! empty( $ret_url ) ) {
+			$order->update_meta_data( '_kn_app_checkout', '1' );
+			$order->update_meta_data( '_kn_return_url', $ret_url );
+			$order->update_meta_data( '_kn_return_from', $ret_from );
+		} elseif ( ! empty( $_COOKIE['kn_app_mode'] ) || ( function_exists( 'WC' ) && WC() && WC()->session && WC()->session->get( 'kn_app_checkout' ) ) ) {
+			$order->update_meta_data( '_kn_app_checkout', '1' );
+			$order->update_meta_data( '_kn_return_from', $ret_from );
+		}
+
 		if ( ! empty( $_POST['kn_payment_note'] ) ) {
 			$note = sanitize_textarea_field( wp_unslash( $_POST['kn_payment_note'] ) );
 			if ( ! empty( $note ) ) {
@@ -1261,9 +1658,23 @@ class KN_Woo {
 		if ( ! $order || ! is_object( $order ) ) {
 			return;
 		}
+		$changed = false;
 		$term_id = self::get_active_checkout_term_id();
-		if ( $term_id > 0 ) {
+		if ( $term_id > 0 && ! $order->get_meta( '_kn_term_id', true ) ) {
 			$order->update_meta_data( '_kn_term_id', $term_id );
+			$changed = true;
+		}
+		if ( ! $order->get_meta( '_kn_return_url', true ) ) {
+			$ret_url  = self::resolve_app_return_url();
+			$ret_from = self::resolve_app_return_from();
+			if ( ! empty( $ret_url ) ) {
+				$order->update_meta_data( '_kn_app_checkout', '1' );
+				$order->update_meta_data( '_kn_return_url', $ret_url );
+				$order->update_meta_data( '_kn_return_from', $ret_from );
+				$changed = true;
+			}
+		}
+		if ( $changed ) {
 			$order->save();
 		}
 	}
@@ -2116,7 +2527,7 @@ class KN_Woo {
 	/**
 	 * Issue a single-use SSO checkout redirect URL for one or more Store products.
 	 */
-	public static function create_store_sso_checkout_url( $user_id, $items ) {
+	public static function create_store_sso_checkout_url( $user_id, $items, $return_url = '', $return_from = 'shop' ) {
 		if ( ! self::is_woo_active() ) {
 			return new WP_Error( 'woo_inactive', 'درگاه پرداخت در دسترس نیست.', array( 'status' => 400 ) );
 		}
@@ -2135,7 +2546,7 @@ class KN_Woo {
 			return new WP_Error( 'empty_cart', 'سبد خرید خالی است.', array( 'status' => 400 ) );
 		}
 
-		$token = KN_Auth::issue_checkout_handoff( $user_id, 0, $clean );
+		$token = KN_Auth::issue_checkout_handoff( $user_id, 0, $clean, $return_url, $return_from );
 		$url   = add_query_arg(
 			array(
 				'kn_checkout_sso' => $token,

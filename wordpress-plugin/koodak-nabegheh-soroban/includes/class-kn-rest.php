@@ -730,6 +730,12 @@ class KN_REST {
 		global $wpdb;
 		$user       = self::get_authed_user( $request );
 		$term_db_id = absint( $request->get_param( 'id' ) );
+		$params     = $request->get_json_params();
+		if ( ! is_array( $params ) ) {
+			$params = $request->get_params();
+		}
+		$return_url  = isset( $params['returnUrl'] ) ? KN_Auth::sanitize_app_return_url( $params['returnUrl'] ) : '';
+		$return_from = isset( $params['from'] ) ? KN_Auth::sanitize_return_from( $params['from'] ) : 'map';
 
 		$term = $wpdb->get_row(
 			$wpdb->prepare(
@@ -745,7 +751,7 @@ class KN_REST {
 
 		$entitlements     = KN_DB::get_user_entitlement_map( $user->ID );
 		$already_unlocked = ! empty( $term['is_free'] ) || isset( $entitlements[ $term_db_id ] ) || user_can( $user->ID, 'manage_options' );
-		$commerce         = KN_Woo::get_term_commerce_meta( $term, $user->ID, true );
+		$commerce         = KN_Woo::get_term_commerce_meta( $term, $user->ID, true, $return_url, $return_from );
 		$pending_map      = KN_Woo::get_pending_term_order_map( $user->ID );
 
 		return rest_ensure_response(
@@ -798,8 +804,10 @@ class KN_REST {
 		if ( ! is_array( $params ) ) {
 			$params = $request->get_params();
 		}
-		$items = isset( $params['items'] ) ? $params['items'] : array();
-		$res   = KN_Woo::create_store_sso_checkout_url( $user->ID, $items );
+		$items       = isset( $params['items'] ) ? $params['items'] : array();
+		$return_url  = isset( $params['returnUrl'] ) ? KN_Auth::sanitize_app_return_url( $params['returnUrl'] ) : '';
+		$return_from = isset( $params['from'] ) ? KN_Auth::sanitize_return_from( $params['from'] ) : 'shop';
+		$res         = KN_Woo::create_store_sso_checkout_url( $user->ID, $items, $return_url, $return_from );
 		if ( is_wp_error( $res ) ) {
 			return $res;
 		}

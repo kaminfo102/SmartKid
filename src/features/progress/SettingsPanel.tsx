@@ -69,6 +69,7 @@ interface SettingsPanelProps {
   onUpdateSettings: (patch: Partial<AppSettings>) => void;
   onClearAllData: () => void;
   onBack: () => void;
+  ordersRefreshTrigger?: number;
 }
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({
@@ -97,6 +98,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onUpdateSettings,
   onClearAllData,
   onBack,
+  ordersRefreshTrigger = 0,
 }) => {
   const [tab, setTab] = useState<ParentsHubTab>(initialTab);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -387,6 +389,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         {tab === 'account' && (
           <WordPressAuthScreen
             embedded={true}
+            refreshTrigger={ordersRefreshTrigger}
             wpUrl={wpUrl}
             wpUser={wpUser}
             wpConnected={wpConnected}

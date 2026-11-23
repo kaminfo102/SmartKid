@@ -12,6 +12,7 @@ import {
 import type { AvatarId, ChildProfile, DigitDisplayMode } from '../types/app';
 import { formatNumber } from '../lib/numbers';
 import { optimizeCroppedAvatarCanvas } from '../lib/imageOptimizer';
+import { isCapacitorNative, pickImageNative } from '../lib/nativeBridge';
 import { validateSafeImageSrc } from '../lib/wordpressApi';
 import { AVATAR_OPTIONS, AvatarGraphic } from './MascotDana';
 
@@ -148,6 +149,29 @@ export const ChildAvatarEditorModal: React.FC<ChildAvatarEditorModalProps> = ({
       setErrorMsg('امکان خواندن این تصویر وجود نداشت.');
     };
     img.src = objUrl;
+  };
+
+  const handleNativeOrInputPick = async (source: 'gallery' | 'camera') => {
+    if (isCapacitorNative()) {
+      setErrorMsg(null);
+      try {
+        const nativeFile = await pickImageNative(source, 'front');
+        if (nativeFile) {
+          handleFilePick(nativeFile);
+        }
+      } catch (err) {
+        setErrorMsg(
+          err instanceof Error ? err.message : 'دسترسی به دوربین یا گالری انجام نشد.'
+        );
+      }
+      return;
+    }
+
+    if (source === 'camera') {
+      cameraInputRef.current?.click();
+    } else {
+      galleryInputRef.current?.click();
+    }
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -384,7 +408,7 @@ export const ChildAvatarEditorModal: React.FC<ChildAvatarEditorModalProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => galleryInputRef.current?.click()}
+                  onClick={() => void handleNativeOrInputPick('gallery')}
                   className="min-h-[44px] px-3.5 rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] text-white font-extrabold text-xs inline-flex items-center gap-1.5 whitespace-nowrap"
                 >
                   <ImagePlus className="w-4 h-4" />
@@ -393,7 +417,7 @@ export const ChildAvatarEditorModal: React.FC<ChildAvatarEditorModalProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => cameraInputRef.current?.click()}
+                  onClick={() => void handleNativeOrInputPick('camera')}
                   className="min-h-[44px] px-3.5 rounded-2xl bg-[#FFF6EB] hover:bg-amber-100 dark:bg-slate-700 border-2 border-[#EEDCC5] dark:border-slate-600 text-[#783F1D] dark:text-slate-100 font-extrabold text-xs inline-flex items-center gap-1.5 whitespace-nowrap"
                 >
                   <Camera className="w-4 h-4 text-[#EA8800]" />

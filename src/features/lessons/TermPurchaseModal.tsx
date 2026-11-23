@@ -26,12 +26,14 @@ import type {
 } from '../../types/app';
 import { formatNumber } from '../../lib/numbers';
 import {
+  getAppCheckoutReturnUrl,
   startWooCommerceTermCheckout,
   submitOfflineOrder,
   uploadOrderReceipt,
   validateSafeHttpUrl,
   verifyWooCommercePurchase,
 } from '../../lib/wordpressApi';
+import { isCapacitorNative } from '../../lib/nativeBridge';
 import type { OptimizedImageResult } from '../../lib/imageOptimizer';
 import { getTermCoverImage } from '../../data/lessons';
 import { KiaAvatar } from '../../components/KiaAvatar';
@@ -125,7 +127,10 @@ export const TermPurchaseModal: React.FC<TermPurchaseModalProps> = ({
         setErrorMessage(null);
       }
       try {
-        const res = await startWooCommerceTermCheckout(wpUrl, term.dbId);
+        const res = await startWooCommerceTermCheckout(wpUrl, term.dbId, {
+          returnUrl: getAppCheckoutReturnUrl(),
+          from: 'map',
+        });
         if (!mountedRef.current) return;
 
         if (res.alreadyUnlocked) {
@@ -244,9 +249,21 @@ export const TermPurchaseModal: React.FC<TermPurchaseModalProps> = ({
     };
   }, [hasOpenedCheckout, unlockedDone, canStartCheckout, handleVerifyPurchase]);
 
-  const handleCheckoutLinkClick = () => {
+  const handleCheckoutLinkClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     setHasOpenedCheckout(true);
     setErrorMessage(null);
+    if (
+      !isCapacitorNative() &&
+      checkoutUrl &&
+      !e.metaKey &&
+      !e.ctrlKey &&
+      !e.shiftKey &&
+      e.button === 0
+    ) {
+      e.preventDefault();
+      window.location.href = checkoutUrl;
+      return;
+    }
     if (refreshTimerRef.current !== null) {
       window.clearTimeout(refreshTimerRef.current);
     }
@@ -662,8 +679,8 @@ export const TermPurchaseModal: React.FC<TermPurchaseModalProps> = ({
                   ) : checkoutUrl ? (
                     <a
                       href={checkoutUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      target={isCapacitorNative() ? '_blank' : undefined}
+                      rel={isCapacitorNative() ? 'noopener noreferrer' : undefined}
                       onClick={handleCheckoutLinkClick}
                       className="w-full min-h-[50px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-sm flex items-center justify-center gap-2 no-underline shadow-sm transition-all"
                     >

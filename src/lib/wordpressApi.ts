@@ -15,6 +15,7 @@ import type {
   WordPressConfig,
   WordPressUser,
 } from '../types/app';
+import { isCapacitorNative } from './nativeBridge';
 
 const WP_SITE_URL_STORAGE_KEY = 'koodak_nabegheh_wp_admin_url';
 const WP_ENV_SNAPSHOT_KEY = 'koodak_nabegheh_wp_env_snapshot';
@@ -192,8 +193,21 @@ export function saveWordPressUrl(rawUrl: string): string {
   return normalized;
 }
 
+export function getAppCheckoutReturnUrl(): string {
+  if (typeof window === 'undefined' || isCapacitorNative()) return '';
+  if (window.location.protocol !== 'http:' && window.location.protocol !== 'https:') {
+    return '';
+  }
+  return normalizeWordPressUrl(`${window.location.origin}${window.location.pathname}`);
+}
+
+export interface CheckoutReturnContext {
+  returnUrl?: string;
+  from?: 'map' | 'shop' | 'orders';
+}
+
 export async function detectSameOriginWordPressUrl(): Promise<string> {
-  if (typeof window === 'undefined') return '';
+  if (typeof window === 'undefined' || isCapacitorNative()) return '';
   const origin = normalizeWordPressUrl(window.location.origin);
   if (!origin) return '';
   try {
@@ -410,12 +424,19 @@ export interface WordPressCheckoutResponse {
 
 export async function startWooCommerceTermCheckout(
   siteUrl: string,
-  termDbId: number
+  termDbId: number,
+  returnContext?: CheckoutReturnContext
 ): Promise<WordPressCheckoutResponse> {
   return wpRequest<WordPressCheckoutResponse>(
     siteUrl,
     `/terms/${encodeURIComponent(String(termDbId))}/checkout`,
-    { method: 'POST' },
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        ...(returnContext?.returnUrl ? { returnUrl: returnContext.returnUrl } : {}),
+        ...(returnContext?.from ? { from: returnContext.from } : {}),
+      }),
+    },
     true
   );
 }
@@ -568,14 +589,19 @@ export async function fetchStoreCatalog(
 
 export async function startStoreCheckout(
   siteUrl: string,
-  items: Array<{ productId: number; qty: number }>
+  items: Array<{ productId: number; qty: number }>,
+  returnContext?: CheckoutReturnContext
 ): Promise<{ checkoutUrl: string }> {
   return wpRequest<{ checkoutUrl: string }>(
     siteUrl,
     '/store/checkout',
     {
       method: 'POST',
-      body: JSON.stringify({ items }),
+      body: JSON.stringify({
+        items,
+        ...(returnContext?.returnUrl ? { returnUrl: returnContext.returnUrl } : {}),
+        ...(returnContext?.from ? { from: returnContext.from } : {}),
+      }),
     },
     true
   );
@@ -665,8 +691,8 @@ export async function loginWordPress(
   const data = await wpRequest<WordPressAuthResponse>(siteUrl, '/auth/login', {
     method: 'POST',
     body: JSON.stringify({
-      identifier,
-      password,
+      identifier: normalizePersianDigits(identifier).trim(),
+      password: normalizePersianDigits(password),
       deviceLabel: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 60) : 'Web',
     }),
   });

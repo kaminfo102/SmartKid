@@ -41,9 +41,15 @@ import {
   syncProfileToWordPress,
   syncSettingsToWordPress,
   uploadChildAvatarInWordPress,
+  verifyWooCommercePurchase,
   type WordPressAuthResponse,
 } from './lib/wordpressApi';
 import { audioEngine } from './lib/audioEngine';
+import {
+  hideNativeSplash,
+  registerNativeBackHandler,
+  syncNativeStatusBar,
+} from './lib/nativeBridge';
 import { StartScreen } from './components/StartScreen';
 import { WordPressAuthScreen } from './components/WordPressAuthScreen';
 import type { ChildAvatarSavePayload } from './components/ChildAvatarEditorModal';
@@ -56,13 +62,69 @@ import { SorobanStepSimulator } from './features/abacus/SorobanStepSimulator';
 import { ResultScreen } from './features/progress/ResultScreen';
 import { ParentGate } from './components/ParentGate';
 import { SettingsPanel, type ParentsHubTab } from './features/progress/SettingsPanel';
-import { ShopScreen } from './features/shop/ShopScreen';
+import {
+  PENDING_SHOP_CART_KEY,
+  RESTORE_SHOP_CART_FLAG,
+  ShopScreen,
+} from './features/shop/ShopScreen';
 import { SupportScreen } from './features/support/SupportScreen';
 import { OfflineIndicator } from './components/PWAInstallButton';
 
+interface PaymentReturnPayload {
+  from: 'map' | 'shop' | 'orders';
+  termDbId: number;
+  orderId: number;
+  orderNumber: string;
+  status: string;
+}
+
+interface NoticeBannerState {
+  type: 'success' | 'info' | 'error';
+  text: string;
+}
+
+function consumeInitialPaymentReturn(): PaymentReturnPayload | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('kn_payment_return') !== '1') {
+      return null;
+    }
+    const rawFrom = (params.get('kn_from') || '').trim();
+    const from: 'map' | 'shop' | 'orders' =
+      rawFrom === 'shop' ? 'shop' : rawFrom === 'orders' ? 'orders' : 'map';
+    const payload: PaymentReturnPayload = {
+      from,
+      termDbId: Number(params.get('kn_term')) || 0,
+      orderId: Number(params.get('kn_order_id')) || 0,
+      orderNumber: (params.get('kn_order_number') || '').trim(),
+      status: (params.get('kn_status') || '').trim().toLowerCase(),
+    };
+    window.history.replaceState(
+      {},
+      document.title,
+      window.location.pathname + window.location.hash
+    );
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
+  const initialPaymentReturnRef = useRef<PaymentReturnPayload | null | undefined>(undefined);
+  if (initialPaymentReturnRef.current === undefined) {
+    initialPaymentReturnRef.current = consumeInitialPaymentReturn();
+  }
+
   const [data, setData] = useState<StoredAppData>(() => loadAppData());
-  const [screen, setScreen] = useState<ScreenId>('start');
+  const [screen, setScreen] = useState<ScreenId>(() => {
+    const ret = initialPaymentReturnRef.current;
+    if (!ret) return 'start';
+    if (ret.from === 'shop') return 'shop';
+    if (ret.from === 'orders') return 'auth';
+    return 'map';
+  });
   const [terms, setTerms] = useState<TermDefinition[]>(DEFAULT_TERMS);
   const [activeTermId, setActiveTermId] = useState<string>(DEFAULT_TERMS[0].id);
   const [wpQuestions, setWpQuestions] = useState<PracticeQuestion[]>([]);
@@ -83,6 +145,13 @@ export default function App() {
   const [parentUnlocked, setParentUnlocked] = useState(false);
   const [parentsTab, setParentsTab] = useState<ParentsHubTab>('children');
   const [profileTab, setProfileTab] = useState<'details' | 'profiles'>('details');
+  const [mapReturnNotice, setMapReturnNotice] = useState<NoticeBannerState | null>(null);
+  const [shopReturnNotice, setShopReturnNotice] = useState<NoticeBannerState | null>(null);
+  const [ordersRefreshTrigger, setOrdersRefreshTrigger] = useState(0);
+  const [pendingCartRestoreSignal, setPendingCartRestoreSignal] = useState(0);
+  const returnFocusTermDbIdRef = useRef<number>(
+    initialPaymentReturnRef.current?.termDbId || 0
+  );
 
   // Refs to execute network persistence strictly outside React state updaters
   const dataRef = useRef<StoredAppData>(data);
@@ -189,11 +258,20 @@ export default function App() {
 
         if (curriculum.terms.length > 0) {
           setTerms(curriculum.terms);
-          setActiveTermId((prev) =>
-            curriculum.terms.some((t) => t.id === prev)
-              ? prev
-              : curriculum.terms[0].id
-          );
+          const focusDbId = returnFocusTermDbIdRef.current;
+          if (focusDbId > 0) {
+            const matchedFocus = curriculum.terms.find((t) => t.dbId === focusDbId);
+            if (matchedFocus) {
+              setActiveTermId(matchedFocus.id);
+              returnFocusTermDbIdRef.current = 0;
+            }
+          } else {
+            setActiveTermId((prev) =>
+              curriculum.terms.some((t) => t.id === prev)
+                ? prev
+                : curriculum.terms[0].id
+            );
+          }
           const allStages = curriculum.terms.flatMap((t) => t.stages);
           if (allStages.length > 0) {
             setActiveLesson((prev) => {
@@ -287,6 +365,91 @@ export default function App() {
           );
         }
       }
+      const pendingReturn = initialPaymentReturnRef.current;
+      if (pendingReturn) {
+        initialPaymentReturnRef.current = null;
+        const orderLabel = pendingReturn.orderNumber
+          ? `#${pendingReturn.orderNumber}`
+          : pendingReturn.orderId > 0
+          ? `#${pendingReturn.orderId}`
+          : '';
+        const isPaid =
+          pendingReturn.status === 'processing' || pendingReturn.status === 'completed';
+        const isPending =
+          pendingReturn.status === 'on-hold' || pendingReturn.status === 'pending';
+        const isFailedOrCancelled =
+          pendingReturn.status === 'failed' || pendingReturn.status === 'cancelled';
+
+        if (isPaid && pendingReturn.termDbId > 0 && restored?.user) {
+          try {
+            await verifyWooCommercePurchase(wpUrl, pendingReturn.termDbId);
+          } catch {
+            // refreshFromWordPress below will still pull unlocked_term_ids
+          }
+        }
+
+        if (typeof window !== 'undefined') {
+          try {
+            if (isFailedOrCancelled) {
+              window.sessionStorage.setItem(RESTORE_SHOP_CART_FLAG, '1');
+              setPendingCartRestoreSignal((n) => n + 1);
+            } else {
+              window.sessionStorage.removeItem(RESTORE_SHOP_CART_FLAG);
+              window.sessionStorage.removeItem(PENDING_SHOP_CART_KEY);
+            }
+          } catch {
+            // ignore storage errors
+          }
+        }
+
+        if (pendingReturn.from === 'shop') {
+          if (isPaid) {
+            audioEngine.play('levelComplete');
+            setShopReturnNotice({
+              type: 'success',
+              text: `سفارش ${orderLabel} با موفقیت پرداخت و ثبت شد! از بخش «سفارش‌ها» می‌توانید وضعیت ارسال را پیگیری کنید.`,
+            });
+          } else if (isPending) {
+            audioEngine.play('success');
+            setShopReturnNotice({
+              type: 'info',
+              text: `سفارش ${orderLabel} ثبت شد و در حال بررسی و تایید توسط مدیر می‌باشد.`,
+            });
+          } else if (isFailedOrCancelled) {
+            setShopReturnNotice({
+              type: 'error',
+              text: `پرداخت سفارش ${orderLabel} تکمیل نشد. در صورت تمایل سبد خرید شما بازیابی شد.`,
+            });
+          } else {
+            setShopReturnNotice({
+              type: 'info',
+              text: `وضعیت سفارش ${orderLabel} به‌روزرسانی شد.`,
+            });
+          }
+        } else if (pendingReturn.from === 'map') {
+          if (isPaid) {
+            audioEngine.play('levelComplete');
+            setMapReturnNotice({
+              type: 'success',
+              text: `پرداخت سفارش ${orderLabel} با موفقیت تایید و دسترسی دوره آموزشی برای کودک شما فعال شد!`,
+            });
+          } else if (isPending) {
+            audioEngine.play('success');
+            setMapReturnNotice({
+              type: 'info',
+              text: `سفارش ${orderLabel} ثبت شد و در حال بررسی و تایید توسط مدیر می‌باشد.`,
+            });
+          } else if (isFailedOrCancelled) {
+            setMapReturnNotice({
+              type: 'error',
+              text: `پرداخت سفارش ${orderLabel} تکمیل نشد یا لغو گردید.`,
+            });
+          }
+        }
+
+        setOrdersRefreshTrigger((n) => n + 1);
+      }
+
       await refreshFromWordPress(wpUrl);
     })();
     return () => {
@@ -319,7 +482,31 @@ export default function App() {
     } else {
       root.classList.remove('reduce-motion');
     }
+
+    void syncNativeStatusBar(data.settings.nightMode);
   }, [data.settings]);
+
+  // Hide native Android splash screen once mounted and handle hardware back button
+  useEffect(() => {
+    void hideNativeSplash();
+  }, []);
+
+  useEffect(() => {
+    return registerNativeBackHandler(() => {
+      if (screen === 'lesson') {
+        setScreen('map');
+        return true;
+      }
+      if (screen !== 'start') {
+        if (screen === 'parents') {
+          setParentUnlocked(false);
+        }
+        setScreen('start');
+        return true;
+      }
+      return false;
+    });
+  }, [screen]);
 
   const updateSettings = useCallback(
     (patch: Partial<AppSettings>) => {
@@ -935,6 +1122,7 @@ export default function App() {
           stagesCount={lessons.length}
           questionsCount={wpQuestions.length}
           digitMode={data.settings.digitMode}
+          refreshTrigger={ordersRefreshTrigger}
           onUpdateWpUrl={(url) => setWpUrl(url)}
           onAuthSuccess={handleWordPressAuthSuccess}
           onUpdateUser={(u) => {
@@ -1013,6 +1201,8 @@ export default function App() {
             audioEngine.play('uiTap');
             setScreen('simulator');
           }}
+          returnNotice={mapReturnNotice}
+          onDismissReturnNotice={() => setMapReturnNotice(null)}
           onBack={() => setScreen('start')}
         />
       )}
@@ -1083,7 +1273,14 @@ export default function App() {
           onRedeemShopMedal={handleRedeemShopMedal}
           onSpendPointsOnOrder={handleSpendPointsOnOrder}
           onOpenAuth={() => openParentsHub('account')}
-          onOrderCreated={() => void refreshFromWordPress()}
+          onOpenOrders={() => setScreen('auth')}
+          onOrderCreated={() => {
+            setOrdersRefreshTrigger((n) => n + 1);
+            void refreshFromWordPress();
+          }}
+          returnNotice={shopReturnNotice}
+          pendingCartRestoreSignal={pendingCartRestoreSignal}
+          onDismissReturnNotice={() => setShopReturnNotice(null)}
           onBack={() => setScreen('start')}
         />
       )}
@@ -1139,6 +1336,7 @@ export default function App() {
               setScreen('shop');
             }}
             onUpdateSettings={updateSettings}
+            ordersRefreshTrigger={ordersRefreshTrigger}
             onClearAllData={() => {
               const fresh = clearAppData();
               dataRef.current = fresh;

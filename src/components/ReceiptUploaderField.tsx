@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Camera, CheckCircle2, ImagePlus, Loader2, Trash2 } from 'lucide-react';
 import { optimizeReceiptImage, type OptimizedImageResult } from '../lib/imageOptimizer';
+import { isCapacitorNative, pickImageNative } from '../lib/nativeBridge';
 import type { DigitDisplayMode } from '../types/app';
 import { formatNumber } from '../lib/numbers';
 
@@ -40,11 +41,7 @@ export const ReceiptUploaderField: React.FC<ReceiptUploaderFieldProps> = ({
     };
   }, [selectedImage?.previewUrl]);
 
-  const handleFilePicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-
+  const processPickedFile = async (file: File) => {
     setCompressing(true);
     setErrorMsg(null);
     try {
@@ -57,6 +54,36 @@ export const ReceiptUploaderField: React.FC<ReceiptUploaderFieldProps> = ({
       setErrorMsg(err instanceof Error ? err.message : 'خطا در بهینه‌سازی تصویر.');
     } finally {
       setCompressing(false);
+    }
+  };
+
+  const handleFilePicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    await processPickedFile(file);
+  };
+
+  const handlePickTrigger = async (source: 'gallery' | 'camera') => {
+    if (isCapacitorNative()) {
+      setErrorMsg(null);
+      try {
+        const nativeFile = await pickImageNative(source, 'rear');
+        if (nativeFile) {
+          await processPickedFile(nativeFile);
+        }
+      } catch (err) {
+        setErrorMsg(
+          err instanceof Error ? err.message : 'دسترسی به دوربین یا گالری انجام نشد.'
+        );
+      }
+      return;
+    }
+
+    if (source === 'camera') {
+      cameraInputRef.current?.click();
+    } else {
+      galleryInputRef.current?.click();
     }
   };
 
@@ -94,7 +121,7 @@ export const ReceiptUploaderField: React.FC<ReceiptUploaderFieldProps> = ({
             <button
               type="button"
               disabled={compressing}
-              onClick={() => galleryInputRef.current?.click()}
+              onClick={() => void handlePickTrigger('gallery')}
               className="min-h-[48px] px-3 py-2 rounded-2xl bg-[#FFF6EB] hover:bg-amber-100 dark:bg-slate-800 border-2 border-dashed border-[#D99B58] dark:border-slate-600 text-slate-800 dark:text-slate-100 font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all"
             >
               {compressing ? (
@@ -108,7 +135,7 @@ export const ReceiptUploaderField: React.FC<ReceiptUploaderFieldProps> = ({
             <button
               type="button"
               disabled={compressing}
-              onClick={() => cameraInputRef.current?.click()}
+              onClick={() => void handlePickTrigger('camera')}
               className="min-h-[48px] px-3 py-2 rounded-2xl bg-[#EFF6FF] hover:bg-sky-100 dark:bg-slate-800 border-2 border-dashed border-sky-400 dark:border-sky-700 text-sky-900 dark:text-sky-200 font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all"
             >
               {compressing ? (

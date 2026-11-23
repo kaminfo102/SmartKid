@@ -63,6 +63,7 @@ interface WordPressAuthScreenProps {
   onOpenTickets?: () => void;
   onBack: () => void;
   embedded?: boolean;
+  refreshTrigger?: number;
 }
 
 const CHILD_AGES = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
@@ -83,6 +84,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
   onOpenTickets,
   onBack,
   embedded = false,
+  refreshTrigger = 0,
 }) => {
   const [siteInput, setSiteInput] = useState(wpUrl);
 
@@ -189,7 +191,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
     } else if (accountTab === 'profile') {
       void loadAccountProfile();
     }
-  }, [wpUser, wpUrl, accountTab, loadOrders, loadAccountProfile]);
+  }, [wpUser, wpUrl, accountTab, refreshTrigger, loadOrders, loadAccountProfile]);
 
   const handleTestAndSaveUrl = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -235,7 +237,11 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
     }
     setLoading(true);
     try {
-      const res = await loginWordPress(activeUrl, identifier.trim(), password);
+      const res = await loginWordPress(
+        activeUrl,
+        normalizePersianDigits(identifier).trim(),
+        normalizePersianDigits(password)
+      );
       onUpdateWpUrl(activeUrl);
       onAuthSuccess(res);
       setStatusMsg(`خوش آمدید ${res.user.displayName}! حساب کاربری شما با موفقیت متصل شد.`);
@@ -274,6 +280,12 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
       return;
     }
 
+    const cleanPostcode = normalizePersianDigits(regPostcode.trim()).replace(/\D/g, '');
+    if (cleanPostcode.length !== 10) {
+      setErrorMsg('کد پستی باید دقیقاً ۱۰ رقم باشد.');
+      return;
+    }
+
     const finalUsernameForEmail = cleanUsername || normalizedMobile;
     const defaultEmail = `${finalUsernameForEmail.toLowerCase()}@chootkeh.ir`;
 
@@ -282,15 +294,15 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
       const res = await registerWordPress(activeUrl, {
         mobile: normalizedMobile,
         username: cleanUsername || undefined,
-        email: regEmail.trim() || defaultEmail,
-        password: regPassword,
+        email: normalizePersianDigits(regEmail).trim() || defaultEmail,
+        password: normalizePersianDigits(regPassword),
         firstName: regFirstName.trim(),
         lastName: regLastName.trim(),
         displayName: `${regFirstName.trim()} ${regLastName.trim()}`.trim() || regChildName.trim(),
         state: regState.trim(),
         city: regCity.trim(),
         address1: regAddress1.trim(),
-        postcode: normalizePersianDigits(regPostcode.trim()),
+        postcode: cleanPostcode,
         childName: regChildName.trim() || 'کیا',
         childAge: regChildAge,
         childAvatar: regAvatar,
@@ -318,6 +330,12 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
       return;
     }
 
+    const cleanPostcode = normalizePersianDigits(editPostcode.trim()).replace(/\D/g, '');
+    if (cleanPostcode.length !== 10) {
+      setErrorMsg('کد پستی باید دقیقاً ۱۰ رقم باشد.');
+      return;
+    }
+
     const fallbackEmail = wpUser.username ? `${wpUser.username}@chootkeh.ir` : undefined;
 
     setLoading(true);
@@ -327,12 +345,12 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
         lastName: editLastName.trim(),
         displayName: `${editFirstName.trim()} ${editLastName.trim()}`.trim() || wpUser.displayName,
         mobile: normalizedMobile,
-        email: editEmail.trim() || fallbackEmail,
+        email: normalizePersianDigits(editEmail).trim() || fallbackEmail,
         state: editState.trim(),
         city: editCity.trim(),
         address1: editAddress1.trim(),
-        postcode: normalizePersianDigits(editPostcode.trim()),
-        newPassword: editNewPassword.trim() || undefined,
+        postcode: cleanPostcode,
+        newPassword: normalizePersianDigits(editNewPassword).trim() || undefined,
       });
       onUpdateUser?.(res.user);
       syncEditFieldsFromUser(res.user);
@@ -732,11 +750,14 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                       </label>
                       <input
                         type="tel"
+                        inputMode="tel"
                         dir="ltr"
                         required
                         maxLength={14}
                         value={editMobile}
-                        onChange={(e) => setEditMobile(normalizePersianDigits(e.target.value))}
+                        onChange={(e) =>
+                          setEditMobile(normalizePersianDigits(e.target.value).replace(/[^\d+]/g, ''))
+                        }
                         placeholder="09123456789"
                         className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                       />
@@ -754,7 +775,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                         type="email"
                         dir="ltr"
                         value={editEmail}
-                        onChange={(e) => setEditEmail(e.target.value)}
+                        onChange={(e) => setEditEmail(normalizePersianDigits(e.target.value))}
                         placeholder={`${wpUser.username}@chootkeh.ir`}
                         className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                       />
@@ -812,17 +833,32 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                     </div>
                     <div>
                       <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-                        کد پستی
+                        کد پستی (۱۰ رقمی)
                       </label>
                       <input
                         type="text"
+                        inputMode="numeric"
                         dir="ltr"
                         required
+                        maxLength={10}
                         value={editPostcode}
-                        onChange={(e) => setEditPostcode(e.target.value)}
+                        onChange={(e) =>
+                          setEditPostcode(
+                            normalizePersianDigits(e.target.value).replace(/\D/g, '').slice(0, 10)
+                          )
+                        }
                         placeholder="1234567890"
-                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                        className={`w-full min-h-[46px] px-3.5 rounded-2xl border-2 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white ${
+                          editPostcode.trim() && editPostcode.trim().length !== 10
+                            ? 'border-rose-400 dark:border-rose-500'
+                            : 'border-[#EEDCC5] dark:border-slate-700'
+                        }`}
                       />
+                      {editPostcode.trim() && editPostcode.trim().length !== 10 && (
+                        <p className="text-[11px] font-bold text-rose-600 mt-1">
+                          کد پستی باید دقیقاً ۱۰ رقم باشد.
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -835,7 +871,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                       dir="ltr"
                       minLength={6}
                       value={editNewPassword}
-                      onChange={(e) => setEditNewPassword(e.target.value)}
+                      onChange={(e) => setEditNewPassword(normalizePersianDigits(e.target.value))}
                       placeholder="حداقل ۶ کاراکتر"
                       className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                     />
@@ -881,7 +917,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                       type="url"
                       dir="ltr"
                       value={siteInput}
-                      onChange={(e) => setSiteInput(e.target.value)}
+                      onChange={(e) => setSiteInput(normalizePersianDigits(e.target.value))}
                       placeholder="https://yoursite.com"
                       className="flex-1 min-h-[46px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                     />
@@ -903,10 +939,10 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                     </KidIconTile>
                     <div>
                       <h2 className="font-extrabold text-sm sm:text-base text-[#35207A] dark:text-white">
-                        بسته افزونه مدیریت سرور (نسخه ۲.۶.۰)
+                        بسته افزونه مدیریت سرور (نسخه ۲.۷.۰)
                       </h2>
                       <p className="text-xs text-[#59449E] dark:text-slate-300">
-                        دارای مدیریت فروشگاه، تایید فیش‌های بانکی، تیکتینگ پشتیبانی، مدیریت فایل‌های صوتی، تخفیف‌ها و جاده مراحل
+                        دارای صفحه پرداخت اختصاصی بدون هدر/فوتر وردپرس، بازگشت خودکار به اپلیکیشن، قالب ایمیل HTML فارسی، فروشگاه، تایید فیش، تیکتینگ و جاده مراحل
                       </p>
                     </div>
                   </div>
@@ -970,7 +1006,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                       dir="ltr"
                       required
                       value={identifier}
-                      onChange={(e) => setIdentifier(e.target.value)}
+                      onChange={(e) => setIdentifier(normalizePersianDigits(e.target.value))}
                       placeholder="09123456789 یا parent@example.com"
                       className="w-full min-h-[48px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                     />
@@ -984,7 +1020,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                       dir="ltr"
                       required
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      onChange={(e) => setPassword(normalizePersianDigits(e.target.value))}
                       placeholder="••••••••"
                       className="w-full min-h-[48px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                     />
@@ -1036,11 +1072,14 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                       </label>
                       <input
                         type="tel"
+                        inputMode="tel"
                         dir="ltr"
                         required
                         maxLength={14}
                         value={regMobile}
-                        onChange={(e) => setRegMobile(normalizePersianDigits(e.target.value))}
+                        onChange={(e) =>
+                          setRegMobile(normalizePersianDigits(e.target.value).replace(/[^\d+]/g, ''))
+                        }
                         placeholder="09123456789"
                         className={`w-full min-h-[46px] px-3.5 rounded-2xl border-2 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white ${
                           regMobile.trim() && !isValidIranMobile(regMobile)
@@ -1089,7 +1128,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                       required
                       minLength={6}
                       value={regPassword}
-                      onChange={(e) => setRegPassword(e.target.value)}
+                      onChange={(e) => setRegPassword(normalizePersianDigits(e.target.value))}
                       placeholder="••••••••"
                       className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                     />
@@ -1143,17 +1182,32 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                     </div>
                     <div>
                       <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-                        کد پستی *
+                        کد پستی (۱۰ رقمی) *
                       </label>
                       <input
                         type="text"
+                        inputMode="numeric"
                         dir="ltr"
                         required
+                        maxLength={10}
                         value={regPostcode}
-                        onChange={(e) => setRegPostcode(normalizePersianDigits(e.target.value))}
+                        onChange={(e) =>
+                          setRegPostcode(
+                            normalizePersianDigits(e.target.value).replace(/\D/g, '').slice(0, 10)
+                          )
+                        }
                         placeholder="1234567890"
-                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                        className={`w-full min-h-[46px] px-3.5 rounded-2xl border-2 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white ${
+                          regPostcode.trim() && regPostcode.trim().length !== 10
+                            ? 'border-rose-400 dark:border-rose-500'
+                            : 'border-[#EEDCC5] dark:border-slate-700'
+                        }`}
                       />
+                      {regPostcode.trim() && regPostcode.trim().length !== 10 && (
+                        <p className="text-[11px] font-bold text-rose-600 mt-1">
+                          کد پستی باید دقیقاً ۱۰ رقم باشد.
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -1165,7 +1219,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                       type="email"
                       dir="ltr"
                       value={regEmail}
-                      onChange={(e) => setRegEmail(e.target.value)}
+                      onChange={(e) => setRegEmail(normalizePersianDigits(e.target.value))}
                       placeholder={`${(
                         regUsername.trim() ||
                         normalizeIranMobile(regMobile) ||

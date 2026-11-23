@@ -319,16 +319,28 @@ class KN_Auth {
 	}
 
 	/**
+	 * Convert Persian/Arabic numerals to ASCII Latin digits while keeping other characters intact.
+	 */
+	public static function to_latin_digits( $raw ) {
+		$fa  = array( '۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹' );
+		$ar  = array( '٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩' );
+		$en  = array( '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' );
+		$str = str_replace( $fa, $en, (string) $raw );
+		return str_replace( $ar, $en, $str );
+	}
+
+	/**
+	 * Convert Persian/Arabic numerals to ASCII and keep digits only (for postcodes, etc.).
+	 */
+	public static function normalize_digits( $raw ) {
+		return preg_replace( '/[^0-9]/', '', self::to_latin_digits( $raw ) );
+	}
+
+	/**
 	 * Convert Persian/Arabic numerals to ASCII and strip whitespace/dashes for mobile normalization.
 	 */
 	public static function normalize_mobile( $raw ) {
-		$str    = (string) $raw;
-		$fa     = array( '۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹' );
-		$ar     = array( '٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩' );
-		$en     = array( '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' );
-		$str    = str_replace( $fa, $en, $str );
-		$str    = str_replace( $ar, $en, $str );
-		$digits = preg_replace( '/[^0-9]/', '', $str );
+		$digits = self::normalize_digits( $raw );
 		// Normalize 00989... / 989... / 9... prefix for Iranian numbers to 09...
 		if ( strlen( $digits ) === 14 && strpos( $digits, '00989' ) === 0 ) {
 			$digits = '0' . substr( $digits, 4 );
@@ -351,7 +363,7 @@ class KN_Auth {
 	 * Resolve user by email, username, or normalized mobile number for login.
 	 */
 	public static function find_login_username( $identifier ) {
-		$raw = trim( (string) $identifier );
+		$raw = trim( self::to_latin_digits( (string) $identifier ) );
 		if ( empty( $raw ) ) {
 			return '';
 		}
@@ -403,7 +415,7 @@ class KN_Auth {
 		$state      = sanitize_text_field( $fields['state'] ?? '' );
 		$city       = sanitize_text_field( $fields['city'] ?? '' );
 		$address_1  = sanitize_text_field( $fields['address_1'] ?? '' );
-		$postcode   = self::normalize_mobile( $fields['postcode'] ?? '' );
+		$postcode   = self::normalize_digits( $fields['postcode'] ?? '' );
 
 		update_user_meta( $user_id, 'first_name', $first_name );
 		update_user_meta( $user_id, 'last_name', $last_name );
@@ -434,16 +446,16 @@ class KN_Auth {
 		}
 
 		$mobile       = self::normalize_mobile( $params['mobile'] ?? '' );
-		$email_in     = isset( $params['email'] ) ? sanitize_email( $params['email'] ) : '';
-		$username_raw = isset( $params['username'] ) ? sanitize_user( $params['username'], true ) : '';
-		$password     = isset( $params['password'] ) ? (string) $params['password'] : '';
+		$email_in     = isset( $params['email'] ) ? sanitize_email( self::to_latin_digits( $params['email'] ) ) : '';
+		$username_raw = isset( $params['username'] ) ? sanitize_user( self::to_latin_digits( $params['username'] ), true ) : '';
+		$password     = isset( $params['password'] ) ? self::to_latin_digits( (string) $params['password'] ) : '';
 		$first_name   = isset( $params['firstName'] ) ? sanitize_text_field( $params['firstName'] ) : '';
 		$last_name    = isset( $params['lastName'] ) ? sanitize_text_field( $params['lastName'] ) : '';
 		$display_name = isset( $params['displayName'] ) ? sanitize_text_field( $params['displayName'] ) : '';
 		$state        = isset( $params['state'] ) ? sanitize_text_field( $params['state'] ) : '';
 		$city         = isset( $params['city'] ) ? sanitize_text_field( $params['city'] ) : '';
 		$address_1    = isset( $params['address1'] ) ? sanitize_text_field( $params['address1'] ) : '';
-		$postcode     = self::normalize_mobile( $params['postcode'] ?? '' );
+		$postcode     = self::normalize_digits( $params['postcode'] ?? '' );
 		$child_name   = isset( $params['childName'] ) ? sanitize_text_field( $params['childName'] ) : 'کیا';
 		$child_age    = isset( $params['childAge'] ) ? max( 4, min( 15, absint( $params['childAge'] ) ) ) : 6;
 		$child_avatar = isset( $params['childAvatar'] ) ? sanitize_key( $params['childAvatar'] ) : 'owl';
@@ -579,12 +591,12 @@ class KN_Auth {
 		$last_name    = isset( $params['lastName'] ) ? sanitize_text_field( $params['lastName'] ) : $user->last_name;
 		$display_name = isset( $params['displayName'] ) ? sanitize_text_field( $params['displayName'] ) : $user->display_name;
 		$mobile_in    = isset( $params['mobile'] ) ? self::normalize_mobile( $params['mobile'] ) : get_user_meta( $user_id, 'kn_mobile', true );
-		$email_in     = isset( $params['email'] ) ? trim( (string) $params['email'] ) : $user->user_email;
+		$email_in     = isset( $params['email'] ) ? trim( self::to_latin_digits( (string) $params['email'] ) ) : $user->user_email;
 		$state        = isset( $params['state'] ) ? sanitize_text_field( $params['state'] ) : get_user_meta( $user_id, 'billing_state', true );
 		$city         = isset( $params['city'] ) ? sanitize_text_field( $params['city'] ) : get_user_meta( $user_id, 'billing_city', true );
 		$address_1    = isset( $params['address1'] ) ? sanitize_text_field( $params['address1'] ) : get_user_meta( $user_id, 'billing_address_1', true );
-		$postcode     = isset( $params['postcode'] ) ? self::normalize_mobile( $params['postcode'] ) : get_user_meta( $user_id, 'billing_postcode', true );
-		$new_password = isset( $params['newPassword'] ) ? (string) $params['newPassword'] : '';
+		$postcode     = isset( $params['postcode'] ) ? self::normalize_digits( $params['postcode'] ) : get_user_meta( $user_id, 'billing_postcode', true );
+		$new_password = isset( $params['newPassword'] ) ? self::to_latin_digits( (string) $params['newPassword'] ) : '';
 
 		if ( empty( $mobile_in ) || ! self::is_valid_iran_mobile( $mobile_in ) ) {
 			return new WP_Error( 'invalid_mobile', 'شماره موبایل معتبر نیست. لطفاً شماره ۱۱ رقمی با شروع 09 وارد کنید.', array( 'status' => 400 ) );
@@ -672,10 +684,74 @@ class KN_Auth {
 	}
 
 	/**
+	 * Validate an app return URL strictly against http/https + configured allowed origins (prevents open redirects).
+	 */
+	public static function sanitize_app_return_url( $raw_url ) {
+		$trimmed = trim( (string) $raw_url );
+		if ( empty( $trimmed ) || strlen( $trimmed ) > 600 ) {
+			return '';
+		}
+		if ( preg_match( '/[\r\n\x00-\x1f]/', $trimmed ) ) {
+			return '';
+		}
+
+		$parsed = wp_parse_url( $trimmed );
+		if ( ! is_array( $parsed ) || empty( $parsed['scheme'] ) || empty( $parsed['host'] ) ) {
+			return '';
+		}
+
+		$scheme = strtolower( $parsed['scheme'] );
+		if ( ! in_array( $scheme, array( 'http', 'https' ), true ) ) {
+			return '';
+		}
+
+		$dest_origin = $scheme . '://' . strtolower( $parsed['host'] ) . ( isset( $parsed['port'] ) ? ':' . (int) $parsed['port'] : '' );
+		$dest_host   = strtolower( $parsed['host'] );
+		$home_host   = strtolower( (string) wp_parse_url( home_url( '/' ), PHP_URL_HOST ) );
+
+		$settings = get_option( 'kn_soroban_settings', array() );
+		$allowed  = trim( (string) ( $settings['allowed_origins'] ?? '*' ) );
+
+		if ( $allowed !== '' && $allowed !== '*' ) {
+			$ok      = ( $dest_host === $home_host );
+			$origins = array_filter( array_map( 'trim', explode( ',', $allowed ) ) );
+			foreach ( $origins as $orig ) {
+				$orig_norm = strtolower( rtrim( $orig, '/' ) );
+				if ( $orig_norm === $dest_origin ) {
+					$ok = true;
+					break;
+				}
+			}
+			if ( ! $ok && ! empty( $_SERVER['HTTP_ORIGIN'] ) ) {
+				$req_origin = strtolower( rtrim( sanitize_text_field( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ), '/' ) );
+				if ( $req_origin === $dest_origin ) {
+					$ok = true;
+				}
+			}
+			if ( ! $ok ) {
+				return '';
+			}
+		}
+
+		return esc_url_raw( $trimmed );
+	}
+
+	/**
+	 * Sanitize originating view identifier for post-checkout return.
+	 */
+	public static function sanitize_return_from( $raw_from ) {
+		$key = sanitize_key( (string) $raw_from );
+		if ( in_array( $key, array( 'map', 'shop', 'orders' ), true ) ) {
+			return $key;
+		}
+		return 'map';
+	}
+
+	/**
 	 * Issue a single-use, short-lived (5 min) SSO handoff token so an authenticated
 	 * headless app user lands on WooCommerce checkout already logged in.
 	 */
-	public static function issue_checkout_handoff( $user_id, $term_db_id = 0, $extra_items = array() ) {
+	public static function issue_checkout_handoff( $user_id, $term_db_id = 0, $extra_items = array(), $return_url = '', $return_from = '' ) {
 		$user_id    = absint( $user_id );
 		$term_db_id = absint( $term_db_id );
 		if ( $user_id <= 0 ) {
@@ -688,12 +764,17 @@ class KN_Auth {
 			$raw_token = wp_generate_password( 48, false, false );
 		}
 
+		$safe_return = self::sanitize_app_return_url( $return_url );
+		$safe_from   = $return_from ? self::sanitize_return_from( $return_from ) : ( $term_db_id > 0 ? 'map' : 'shop' );
+
 		$token_hash = hash( 'sha256', $raw_token );
 		$payload    = array(
-			'user_id' => $user_id,
-			'term_id' => $term_db_id,
-			'items'   => is_array( $extra_items ) ? $extra_items : array(),
-			'issued'  => time(),
+			'user_id'     => $user_id,
+			'term_id'     => $term_db_id,
+			'items'       => is_array( $extra_items ) ? $extra_items : array(),
+			'return_url'  => $safe_return,
+			'return_from' => $safe_from,
+			'issued'      => time(),
 		);
 
 		set_transient( 'kn_sso_' . $token_hash, $payload, 5 * MINUTE_IN_SECONDS );
@@ -719,9 +800,11 @@ class KN_Auth {
 		}
 
 		return array(
-			'user_id' => absint( $payload['user_id'] ),
-			'term_id' => isset( $payload['term_id'] ) ? absint( $payload['term_id'] ) : 0,
-			'items'   => isset( $payload['items'] ) && is_array( $payload['items'] ) ? $payload['items'] : array(),
+			'user_id'     => absint( $payload['user_id'] ),
+			'term_id'     => isset( $payload['term_id'] ) ? absint( $payload['term_id'] ) : 0,
+			'items'       => isset( $payload['items'] ) && is_array( $payload['items'] ) ? $payload['items'] : array(),
+			'return_url'  => isset( $payload['return_url'] ) ? self::sanitize_app_return_url( $payload['return_url'] ) : '',
+			'return_from' => isset( $payload['return_from'] ) ? self::sanitize_return_from( $payload['return_from'] ) : 'map',
 		);
 	}
 
