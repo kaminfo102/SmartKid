@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express, { type Request, type Response } from 'express';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
@@ -9,7 +10,23 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = Number(process.env.PORT) || 3000;
+const HOST = process.env.HOST?.trim() || '0.0.0.0';
 const isProduction = process.env.NODE_ENV === 'production';
+
+function getNetworkIPv4Addresses(): string[] {
+  const nets = os.networkInterfaces();
+  const addresses: string[] = [];
+  for (const entries of Object.values(nets)) {
+    if (!entries) continue;
+    for (const net of entries) {
+      const isIPv4 = net.family === 'IPv4' || (net.family as unknown) === 4;
+      if (isIPv4 && !net.internal && net.address) {
+        addresses.push(net.address);
+      }
+    }
+  }
+  return Array.from(new Set(addresses));
+}
 
 // Simple bounded in-memory cache so repeated Persian lesson & cheer phrases play instantly
 const TTS_CACHE_MAX = 120;
@@ -150,7 +167,10 @@ async function startServer() {
   if (!isProduction) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        allowedHosts: true,
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -162,8 +182,27 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server listening on http://0.0.0.0:${PORT}`);
+  const server = app.listen(PORT, HOST, () => {
+    if (HOST === '0.0.0.0' || HOST === '::') {
+      console.log(`  ➜  Local:   http://localhost:${PORT}`);
+      const networkIps = getNetworkIPv4Addresses();
+      for (const ip of networkIps) {
+        console.log(`  ➜  Network: http://${ip}:${PORT}`);
+      }
+    } else {
+      const displayHost = HOST === '127.0.0.1' ? 'localhost' : HOST;
+      console.log(`  ➜  Local:   http://${displayHost}:${PORT}`);
+    }
+  });
+
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(
+        `Port ${PORT} is already in use. Stop the existing process or set a custom PORT.`
+      );
+      process.exit(1);
+    }
+    throw err;
   });
 }
 
