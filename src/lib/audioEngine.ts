@@ -462,8 +462,8 @@ class SoundEngine {
     }
   }
 
-  public play(key: SoundEffectKey) {
-    if (!this.soundEnabled) return;
+  public play(key: SoundEffectKey, force = false) {
+    if (!this.soundEnabled && !force) return;
 
     const cachedBuffer = this.sfxBuffers.get(key);
     const ctx = this.ensureContext();

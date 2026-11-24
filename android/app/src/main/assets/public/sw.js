@@ -87,7 +87,7 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
     "revision": "d7ca32c8a4bbd5d52f440f4c15e196e1"
   }, {
     "url": "index.html",
-    "revision": "d34bf47b806e107f3536b4c47a935a4c"
+    "revision": "41fe6f3b85b39fe1ea5a16e484a156d4"
   }, {
     "url": "icon.svg",
     "revision": "bd2315e8176c2bc6fe21bc2b1a2dfd07"
@@ -98,10 +98,10 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
     "url": "assets/workbox-window.prod.es5-Bd17z0YL.js",
     "revision": null
   }, {
-    "url": "assets/web-DKFIjzg0.js",
+    "url": "assets/web-Cru2yoMZ.js",
     "revision": null
   }, {
-    "url": "assets/web-Cyfn3bmY.js",
+    "url": "assets/web-CY0b2OaP.js",
     "revision": null
   }, {
     "url": "assets/kia_269d7c8e.png",
@@ -113,10 +113,10 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
     "url": "assets/kia-happy.png",
     "revision": null
   }, {
-    "url": "assets/index-xWe8G1C-.css",
+    "url": "assets/index-NP7n0yVq.css",
     "revision": null
   }, {
-    "url": "assets/index-hWZ8PvEP.js",
+    "url": "assets/index-BazfLTCZ.js",
     "revision": null
   }, {
     "url": "assets/Vazirmatn-Thin-DdUiS1cj.woff2",
@@ -146,10 +146,13 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
     "url": "assets/Vazirmatn-Black-DA1YqYMq.woff2",
     "revision": null
   }, {
-    "url": "assets/Abacus3D-1UBWcOvT.js",
+    "url": "assets/Abacus3D-CR5yKLHL.js",
     "revision": null
   }, {
     "url": "assets/aistudio/kia_269d7c8e.png",
+    "revision": null
+  }, {
+    "url": "assets/aistudio/image_f710d8b5.png",
     "revision": null
   }, {
     "url": "assets/aistudio/image_ccb47a3f.png",

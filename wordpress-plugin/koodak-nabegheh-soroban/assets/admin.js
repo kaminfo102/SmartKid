@@ -119,7 +119,7 @@
       }
 
       var imgFrame = window.wp.media({
-        title: 'انتخاب یا آپلود تصویر کاور ترم',
+        title: 'انتخاب یا آپلود تصویر',
         library: { type: 'image' },
         button: { text: 'استفاده از این تصویر' },
         multiple: false
@@ -188,5 +188,19 @@
       syncImagePreview(imgInput.id, imgInput.value);
     }
   });
-})();
 
+  // Live instant client-side table filter without extra server calls
+  document.addEventListener('input', function (e) {
+    var filterInput = e.target.closest('input[data-kn-filter-table]');
+    if (!filterInput) return;
+    var tableId = filterInput.getAttribute('data-kn-filter-table');
+    var table = document.getElementById(tableId);
+    if (!table) return;
+    var term = (filterInput.value || '').trim().toLowerCase();
+    var rows = table.querySelectorAll('tbody > tr[data-kn-row]');
+    rows.forEach(function (tr) {
+      var text = (tr.textContent || '').toLowerCase();
+      tr.style.display = (!term || text.indexOf(term) !== -1) ? '' : 'none';
+    });
+  });
+})();

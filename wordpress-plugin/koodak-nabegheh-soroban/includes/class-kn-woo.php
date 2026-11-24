@@ -1947,7 +1947,7 @@ class KN_Woo {
 				'receiptUrl'     => (string) $order->get_meta( '_kn_receipt_url', true ),
 				'paymentNote'    => (string) $order->get_meta( '_kn_payment_note', true ),
 				'totalFormatted' => number_format( (int) round( (float) $order->get_total() ) ) . ' ' . $currency,
-				'dateCreated'    => $date_obj ? $date_obj->date_i18n( 'Y-m-d H:i' ) : '',
+				'dateCreated'    => $date_obj ? ( class_exists( 'KN_Jalali' ) ? KN_Jalali::format( $date_obj, true, true ) : $date_obj->date_i18n( 'Y-m-d H:i' ) ) : '',
 			);
 
 			foreach ( $matched_tids as $tid ) {
@@ -2145,10 +2145,11 @@ class KN_Woo {
 		return array(
 			'id'                 => (int) $order->get_id(),
 			'orderNumber'        => (string) $order->get_order_number(),
+			'customerId'         => (int) $order->get_customer_id(),
 			'status'             => $status,
 			'statusLabel'        => $status_labels[ $status ] ?? $status,
 			'pendingReview'      => in_array( $status, array( 'on-hold', 'pending' ), true ),
-			'dateCreated'        => $date_obj ? $date_obj->date_i18n( 'Y-m-d H:i' ) : '',
+			'dateCreated'        => $date_obj ? ( class_exists( 'KN_Jalali' ) ? KN_Jalali::format( $date_obj, true, true ) : $date_obj->date_i18n( 'Y-m-d H:i' ) ) : '',
 			'totalAmount'        => (int) round( (float) $order->get_total() ),
 			'totalFormatted'     => number_format( (int) round( (float) $order->get_total() ) ) . ' ' . $currency,
 			'paymentMethod'      => (string) $order->get_payment_method(),
@@ -2156,6 +2157,7 @@ class KN_Woo {
 			'items'              => $items,
 			'receiptUrl'         => (string) $order->get_meta( '_kn_receipt_url', true ),
 			'paymentNote'        => (string) $order->get_meta( '_kn_payment_note', true ),
+			'trackingCode'       => (string) $order->get_meta( '_kn_tracking_code', true ),
 			'canUploadReceipt'   => in_array( $status, array( 'on-hold', 'pending' ), true ),
 		);
 	}
@@ -2240,6 +2242,17 @@ class KN_Woo {
 	public static function create_offline_bacs_order( WP_User $user, $items, $note = '', $file_array = null ) {
 		if ( ! self::is_woo_active() ) {
 			return new WP_Error( 'woo_inactive', 'سیستم ثبت سفارش در سرور فعال نیست.', array( 'status' => 500 ) );
+		}
+		$missing_fields = KN_Auth::get_missing_purchase_fields( $user );
+		if ( ! empty( $missing_fields ) ) {
+			return new WP_Error(
+				'profile_incomplete',
+				'برای ثبت سفارش و خرید، ابتدا اطلاعات کامل کاربری و نشانی پستی خود را تکمیل کنید.',
+				array(
+					'status'        => 422,
+					'missingFields' => $missing_fields,
+				)
+			);
 		}
 		if ( empty( $items ) || ! is_array( $items ) ) {
 			return new WP_Error( 'empty_items', 'هیچ محصول یا دوره‌ای برای سفارش انتخاب نشده است.', array( 'status' => 400 ) );
@@ -2531,6 +2544,20 @@ class KN_Woo {
 		if ( ! self::is_woo_active() ) {
 			return new WP_Error( 'woo_inactive', 'درگاه پرداخت در دسترس نیست.', array( 'status' => 400 ) );
 		}
+		$user = get_user_by( 'id', absint( $user_id ) );
+		if ( $user ) {
+			$missing_fields = KN_Auth::get_missing_purchase_fields( $user );
+			if ( ! empty( $missing_fields ) ) {
+				return new WP_Error(
+					'profile_incomplete',
+					'برای ثبت سفارش و خرید، ابتدا اطلاعات کامل کاربری و نشانی پستی خود را تکمیل کنید.',
+					array(
+						'status'        => 422,
+						'missingFields' => $missing_fields,
+					)
+				);
+			}
+		}
 		$clean = array();
 		foreach ( (array) $items as $it ) {
 			$pid = isset( $it['productId'] ) ? absint( $it['productId'] ) : 0;
@@ -2587,5 +2614,393 @@ class KN_Woo {
 			$rows[]                   = $summary;
 		}
 		return $rows;
+	}
+
+	/**
+	 * Full Admin Orders Query with status, search, and Jalali-converted date range filters (HPOS-safe).
+	 */
+	public static function admin_get_orders( $filters = array() ) {
+		if ( ! self::is_woo_active() ) {
+			return array( 'orders' => array(), 'counts' => array() );
+		}
+
+		$args = array(
+			'limit'   => isset( $filters['limit'] ) ? max( 1, min( 300, absint( $filters['limit'] ) ) ) : 100,
+			'orderby' => 'date',
+			'order'   => 'DESC',
+		);
+
+		$status = sanitize_key( $filters['status'] ?? '' );
+		if ( ! empty( $status ) && $status !== 'all' ) {
+			$args['status'] = $status;
+		} else {
+			$args['status'] = array( 'pending', 'on-hold', 'processing', 'completed', 'cancelled', 'refunded', 'failed' );
+		}
+
+		if ( ! empty( $filters['customer_id'] ) ) {
+			$args['customer_id'] = absint( $filters['customer_id'] );
+		}
+
+		$from_g = ! empty( $filters['from_date'] ) ? sanitize_text_field( $filters['from_date'] ) : '';
+		$to_g   = ! empty( $filters['to_date'] ) ? sanitize_text_field( $filters['to_date'] ) : '';
+		if ( $from_g !== '' && $to_g !== '' ) {
+			$args['date_created'] = $from_g . '...' . $to_g;
+		} elseif ( $from_g !== '' ) {
+			$args['date_created'] = '>=' . $from_g;
+		} elseif ( $to_g !== '' ) {
+			$args['date_created'] = '<=' . $to_g;
+		}
+
+		if ( ! empty( $filters['payment_method'] ) ) {
+			$args['payment_method'] = sanitize_key( $filters['payment_method'] );
+		}
+
+		$orders_raw = wc_get_orders( $args );
+		$search     = isset( $filters['search'] ) ? trim( mb_strtolower( KN_Jalali::to_latin_digits( sanitize_text_field( $filters['search'] ) ) ) ) : '';
+
+		$list = array();
+		foreach ( $orders_raw as $order ) {
+			if ( ! ( $order instanceof WC_Order ) ) {
+				continue;
+			}
+			$cname  = trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() );
+			$cphone = (string) $order->get_billing_phone();
+			$cemail = (string) $order->get_billing_email();
+			$onum   = (string) $order->get_order_number();
+
+			if ( $search !== '' ) {
+				$haystack = mb_strtolower( $onum . ' ' . $order->get_id() . ' ' . $cname . ' ' . $cphone . ' ' . $cemail . ' ' . $order->get_billing_city() );
+				if ( mb_strpos( $haystack, $search ) === false ) {
+					continue;
+				}
+			}
+
+			$summary                  = self::format_order_summary( $order );
+			$summary['customerName']  = $cname ?: 'کاربر مهمان';
+			$summary['customerPhone'] = $cphone;
+			$summary['customerEmail'] = $cemail;
+			$summary['city']          = trim( $order->get_billing_state() . ' / ' . $order->get_billing_city(), ' /' );
+			$list[]                   = $summary;
+		}
+
+		$counts = array();
+		if ( function_exists( 'wc_orders_count' ) ) {
+			foreach ( array( 'pending', 'on-hold', 'processing', 'completed', 'cancelled', 'failed' ) as $st ) {
+				$counts[ $st ] = (int) wc_orders_count( $st );
+			}
+		}
+
+		return array(
+			'orders' => $list,
+			'counts' => $counts,
+		);
+	}
+
+	public static function admin_get_order_detail( $order_id ) {
+		if ( ! self::is_woo_active() ) {
+			return null;
+		}
+		$order = wc_get_order( absint( $order_id ) );
+		if ( ! ( $order instanceof WC_Order ) ) {
+			return null;
+		}
+		$summary                  = self::format_order_summary( $order );
+		$summary['customerName']  = trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() );
+		$summary['customerPhone'] = (string) $order->get_billing_phone();
+		$summary['customerEmail'] = (string) $order->get_billing_email();
+		$summary['address']       = array(
+			'state'    => (string) $order->get_billing_state(),
+			'city'     => (string) $order->get_billing_city(),
+			'address1' => (string) $order->get_billing_address_1(),
+			'postcode' => (string) $order->get_billing_postcode(),
+		);
+		$summary['customerNote'] = (string) $order->get_customer_note();
+
+		$notes = function_exists( 'wc_get_order_notes' ) ? wc_get_order_notes( array( 'order_id' => $order->get_id(), 'limit' => 25 ) ) : array();
+		$formatted_notes = array();
+		if ( is_array( $notes ) ) {
+			foreach ( $notes as $n ) {
+				$formatted_notes[] = array(
+					'id'           => (int) $n->id,
+					'content'      => wp_strip_all_tags( (string) $n->content ),
+					'customerNote' => ! empty( $n->customer_note ),
+					'dateJalali'   => class_exists( 'KN_Jalali' ) ? KN_Jalali::format( $n->date_created, true, true ) : '',
+				);
+			}
+		}
+		$summary['notes'] = $formatted_notes;
+		return $summary;
+	}
+
+	public static function admin_update_order( $order_id, $data ) {
+		if ( ! self::is_woo_active() ) {
+			return new WP_Error( 'woo_inactive', 'ووکامرس فعال نیست.' );
+		}
+		$order = wc_get_order( absint( $order_id ) );
+		if ( ! ( $order instanceof WC_Order ) ) {
+			return new WP_Error( 'not_found', 'سفارش یافت نشد.' );
+		}
+
+		$new_status = sanitize_key( $data['status'] ?? '' );
+		$valid_statuses = array( 'pending', 'on-hold', 'processing', 'completed', 'cancelled', 'refunded', 'failed' );
+		if ( in_array( $new_status, $valid_statuses, true ) && $new_status !== $order->get_status() ) {
+			$order->set_status( $new_status, 'تغییر وضعیت توسط مدیر از پنل کودک نابغه.' );
+		}
+
+		if ( isset( $data['tracking_code'] ) ) {
+			$order->update_meta_data( '_kn_tracking_code', sanitize_text_field( $data['tracking_code'] ) );
+		}
+
+		$note_txt = isset( $data['admin_note'] ) ? trim( sanitize_textarea_field( $data['admin_note'] ) ) : '';
+		if ( $note_txt !== '' ) {
+			$is_cust = ! empty( $data['note_to_customer'] ) ? 1 : 0;
+			$order->add_order_note( $note_txt, $is_cust );
+		}
+
+		$order->save();
+
+		if ( in_array( $order->get_status(), array( 'processing', 'completed' ), true ) ) {
+			self::grant_access_from_order( $order->get_id() );
+		}
+		return true;
+	}
+
+	public static function admin_delete_order( $order_id, $force = false ) {
+		if ( ! self::is_woo_active() ) {
+			return false;
+		}
+		$order = wc_get_order( absint( $order_id ) );
+		if ( ! ( $order instanceof WC_Order ) ) {
+			return false;
+		}
+		return (bool) $order->delete( (bool) $force );
+	}
+
+	/**
+	 * List WooCommerce Products with full pricing, stock, Jalali sale dates, and app storefront metadata.
+	 */
+	public static function admin_get_products( $filters = array() ) {
+		if ( ! self::is_woo_active() || ! function_exists( 'wc_get_products' ) ) {
+			return array();
+		}
+
+		$args = array(
+			'limit'   => 150,
+			'status'  => array( 'publish', 'draft', 'pending', 'private' ),
+			'orderby' => 'ID',
+			'order'   => 'DESC',
+		);
+
+		if ( ! empty( $filters['status'] ) && in_array( $filters['status'], array( 'publish', 'draft', 'pending' ), true ) ) {
+			$args['status'] = $filters['status'];
+		}
+		if ( ! empty( $filters['search'] ) ) {
+			$args['s'] = sanitize_text_field( $filters['search'] );
+		}
+		if ( ! empty( $filters['category'] ) ) {
+			$args['tax_query'] = array(
+				array(
+					'taxonomy' => 'product_cat',
+					'field'    => 'term_id',
+					'terms'    => array( absint( $filters['category'] ) ),
+				),
+			);
+		}
+
+		$store_settings = get_option( 'kn_soroban_store_settings', array() );
+		$sel_prods      = array_map( 'intval', (array) ( $store_settings['selected_products'] ?? array() ) );
+		$feat_prods     = array_map( 'intval', (array) ( $store_settings['featured_products'] ?? array() ) );
+
+		$products = wc_get_products( $args );
+		$out      = array();
+		foreach ( $products as $p ) {
+			if ( ! $p || ! is_object( $p ) ) {
+				continue;
+			}
+			$pid     = (int) $p->get_id();
+			$img_id  = $p->get_image_id();
+			$img_url = $img_id ? wp_get_attachment_image_url( $img_id, 'medium' ) : '';
+			$cats    = wp_get_post_terms( $pid, 'product_cat', array( 'fields' => 'ids' ) );
+			$cat_names = wp_get_post_terms( $pid, 'product_cat', array( 'fields' => 'names' ) );
+
+			$sale_from = method_exists( $p, 'get_date_on_sale_from' ) ? $p->get_date_on_sale_from() : null;
+			$sale_to   = method_exists( $p, 'get_date_on_sale_to' ) ? $p->get_date_on_sale_to() : null;
+
+			$out[] = array(
+				'id'               => $pid,
+				'name'             => $p->get_name(),
+				'sku'              => (string) $p->get_sku(),
+				'status'           => (string) $p->get_status(),
+				'type'             => (string) $p->get_type(),
+				'regular_price'    => (string) $p->get_regular_price(),
+				'sale_price'       => (string) $p->get_sale_price(),
+				'price'            => (string) $p->get_price(),
+				'on_sale'          => $p->is_on_sale(),
+				'sale_from_jalali' => $sale_from ? KN_Jalali::format_for_input( $sale_from ) : '',
+				'sale_to_jalali'   => $sale_to ? KN_Jalali::format_for_input( $sale_to ) : '',
+				'manage_stock'     => $p->get_manage_stock(),
+				'stock_quantity'   => $p->get_stock_quantity(),
+				'stock_status'     => (string) $p->get_stock_status(),
+				'virtual'          => $p->is_virtual(),
+				'image_url'        => $img_url ? esc_url_raw( $img_url ) : '',
+				'short_description'=> (string) $p->get_short_description(),
+				'description'      => (string) $p->get_description(),
+				'category_ids'     => is_array( $cats ) ? array_map( 'intval', $cats ) : array(),
+				'category_names'   => is_array( $cat_names ) ? $cat_names : array(),
+				'in_app_store'     => in_array( $pid, $sel_prods, true ),
+				'is_featured_app'  => in_array( $pid, $feat_prods, true ),
+				'total_sales'      => (int) $p->get_total_sales(),
+				'date_created_j'   => $p->get_date_created() ? KN_Jalali::format_date_only( $p->get_date_created(), true ) : '—',
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * Create or update a WooCommerce Simple Product with Jalali sale dates & App Storefront toggles.
+	 */
+	public static function admin_save_product( $data ) {
+		if ( ! self::is_woo_active() ) {
+			return new WP_Error( 'woo_inactive', 'ووکامرس فعال نیست.' );
+		}
+
+		$pid = absint( $data['product_id'] ?? 0 );
+		if ( $pid > 0 ) {
+			$product = wc_get_product( $pid );
+			if ( ! $product ) {
+				return new WP_Error( 'not_found', 'محصول یافت نشد.' );
+			}
+		} else {
+			$product = new WC_Product_Simple();
+		}
+
+		$name = sanitize_text_field( $data['name'] ?? '' );
+		if ( $name === '' ) {
+			return new WP_Error( 'missing_name', 'نام محصول الزامی است.' );
+		}
+
+		$regular_price = KN_Jalali::to_latin_digits( trim( (string) ( $data['regular_price'] ?? '' ) ) );
+		$sale_price    = KN_Jalali::to_latin_digits( trim( (string) ( $data['sale_price'] ?? '' ) ) );
+		$status        = sanitize_key( $data['status'] ?? 'publish' );
+		if ( ! in_array( $status, array( 'publish', 'draft', 'pending' ), true ) ) {
+			$status = 'publish';
+		}
+
+		$product->set_name( $name );
+		$product->set_status( $status );
+		$product->set_sku( sanitize_text_field( $data['sku'] ?? '' ) );
+		$product->set_regular_price( $regular_price !== '' ? (string) max( 0, (float) $regular_price ) : '' );
+		$product->set_sale_price( $sale_price !== '' ? (string) max( 0, (float) $sale_price ) : '' );
+		$product->set_short_description( wp_kses_post( $data['short_description'] ?? '' ) );
+		$product->set_description( wp_kses_post( $data['description'] ?? '' ) );
+		$product->set_virtual( ! empty( $data['is_virtual'] ) );
+
+		// Jalali Sale Schedule Dates
+		$sale_from_mysql = KN_Jalali::parse_jalali_to_mysql( $data['sale_from_jalali'] ?? '', '00:00', false );
+		$sale_to_mysql   = KN_Jalali::parse_jalali_to_mysql( $data['sale_to_jalali'] ?? '', '23:59', true );
+		$product->set_date_on_sale_from( $sale_from_mysql !== '' ? $sale_from_mysql : '' );
+		$product->set_date_on_sale_to( $sale_to_mysql !== '' ? $sale_to_mysql : '' );
+
+		// Inventory
+		$manage_stock = ! empty( $data['manage_stock'] );
+		$product->set_manage_stock( $manage_stock );
+		if ( $manage_stock ) {
+			$qty = max( 0, intval( KN_Jalali::to_latin_digits( (string) ( $data['stock_quantity'] ?? 0 ) ) ) );
+			$product->set_stock_quantity( $qty );
+			$product->set_stock_status( $qty > 0 ? 'instock' : 'outofstock' );
+		} else {
+			$stk_status = sanitize_key( $data['stock_status'] ?? 'instock' );
+			if ( ! in_array( $stk_status, array( 'instock', 'outofstock', 'onbackorder' ), true ) ) {
+				$stk_status = 'instock';
+			}
+			$product->set_stock_status( $stk_status );
+		}
+
+		// Categories
+		$cat_ids = isset( $data['category_ids'] ) && is_array( $data['category_ids'] )
+			? array_values( array_filter( array_map( 'absint', $data['category_ids'] ) ) )
+			: array();
+		if ( method_exists( $product, 'set_category_ids' ) ) {
+			$product->set_category_ids( $cat_ids );
+		}
+
+		// Featured image from Media Library URL
+		$image_url = trim( (string) ( $data['image_url'] ?? '' ) );
+		if ( $image_url !== '' ) {
+			$att_id = attachment_url_to_postid( esc_url_raw( $image_url ) );
+			if ( $att_id > 0 ) {
+				$product->set_image_id( $att_id );
+			}
+		} elseif ( isset( $data['image_url'] ) && $image_url === '' && $pid > 0 ) {
+			$product->set_image_id( '' );
+		}
+
+		$saved_id = (int) $product->save();
+
+		// Sync App Storefront visibility & featured toggles if specified
+		if ( $saved_id > 0 && ! empty( $data['sync_app_store_flags'] ) ) {
+			$store = get_option( 'kn_soroban_store_settings', array() );
+			$sel   = array_values( array_unique( array_map( 'intval', (array) ( $store['selected_products'] ?? array() ) ) ) );
+			$feat  = array_values( array_unique( array_map( 'intval', (array) ( $store['featured_products'] ?? array() ) ) ) );
+
+			if ( ! empty( $data['in_app_store'] ) ) {
+				if ( ! in_array( $saved_id, $sel, true ) ) {
+					$sel[] = $saved_id;
+				}
+			} else {
+				$sel = array_values( array_diff( $sel, array( $saved_id ) ) );
+			}
+
+			if ( ! empty( $data['is_featured_app'] ) ) {
+				if ( ! in_array( $saved_id, $feat, true ) ) {
+					$feat[] = $saved_id;
+				}
+			} else {
+				$feat = array_values( array_diff( $feat, array( $saved_id ) ) );
+			}
+
+			$store['selected_products'] = $sel;
+			$store['featured_products'] = $feat;
+			update_option( 'kn_soroban_store_settings', $store );
+		}
+
+		return $saved_id;
+	}
+
+	public static function admin_duplicate_product( $product_id ) {
+		if ( ! self::is_woo_active() ) {
+			return false;
+		}
+		$src = wc_get_product( absint( $product_id ) );
+		if ( ! $src ) {
+			return false;
+		}
+		$copy = new WC_Product_Simple();
+		$copy->set_name( $src->get_name() . ' (کپی)' );
+		$copy->set_status( 'draft' );
+		$copy->set_regular_price( $src->get_regular_price() );
+		$copy->set_sale_price( $src->get_sale_price() );
+		$copy->set_short_description( $src->get_short_description() );
+		$copy->set_description( $src->get_description() );
+		$copy->set_virtual( $src->is_virtual() );
+		$copy->set_image_id( $src->get_image_id() );
+		$copy->set_category_ids( $src->get_category_ids() );
+		$copy->set_manage_stock( $src->get_manage_stock() );
+		if ( $src->get_manage_stock() ) {
+			$copy->set_stock_quantity( $src->get_stock_quantity() );
+		}
+		$copy->set_stock_status( $src->get_stock_status() );
+		return (int) $copy->save();
+	}
+
+	public static function admin_delete_product( $product_id, $force = false ) {
+		if ( ! self::is_woo_active() ) {
+			return false;
+		}
+		$product = wc_get_product( absint( $product_id ) );
+		if ( ! $product ) {
+			return false;
+		}
+		return (bool) $product->delete( (bool) $force );
 	}
 }

@@ -1,10 +1,13 @@
 import type {
+  ActiveMarketingResponse,
   AppSettings,
   AudioSettingsConfig,
   AvatarId,
   BacsAccount,
   ChildProfile,
+  ClientPlatform,
   LessonDefinition,
+  MarketingEventType,
   PendingOrderInfo,
   PracticeQuestion,
   SkillKey,
@@ -42,23 +45,35 @@ export function setOnUnauthorizedSession(handler: (() => void) | null): void {
 }
 
 /**
- * Convert Persian/Arabic numerals to ASCII Latin digits.
+ * Strip invisible zero-width / directional Unicode marks added by mobile keyboards or clipboard paste.
  */
-export function normalizePersianDigits(raw: string): string {
-  const fa = '۰۱۲۳۴۵۶۷۸۹';
-  const ar = '٠١٢٣٤٥٦٧٨٩';
-  return raw
-    .replace(/[۰-۹]/g, (d) => String(fa.indexOf(d)))
-    .replace(/[٠-٩]/g, (d) => String(ar.indexOf(d)));
+export function stripInvisibleBidiChars(raw: string): string {
+  return raw.replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, '');
 }
 
 /**
- * Normalize an Iranian mobile number (handles spaces, dashes, +98/0098/98, Persian digits).
+ * Convert Persian/Arabic/Fullwidth numerals to ASCII Latin digits and strip invisible marks.
+ */
+export function normalizePersianDigits(raw: string): string {
+  return stripInvisibleBidiChars(String(raw ?? ''))
+    .replace(/[\u06F0-\u06F9]/g, (ch) => String(ch.charCodeAt(0) - 0x06f0))
+    .replace(/[\u0660-\u0669]/g, (ch) => String(ch.charCodeAt(0) - 0x0660))
+    .replace(/[\uFF10-\uFF19]/g, (ch) => String(ch.charCodeAt(0) - 0xff10));
+}
+
+/**
+ * Normalize an Iranian mobile number (handles spaces, dashes, +98/0098/98, 9809, Persian digits).
  */
 export function normalizeIranMobile(raw: string): string {
   const digits = normalizePersianDigits(raw).replace(/\D/g, '');
+  if (digits.length === 15 && digits.startsWith('009809')) {
+    return digits.slice(4);
+  }
   if (digits.length === 14 && digits.startsWith('00989')) {
     return '0' + digits.slice(4);
+  }
+  if (digits.length === 13 && digits.startsWith('9809')) {
+    return digits.slice(2);
   }
   if (digits.length === 12 && digits.startsWith('989')) {
     return '0' + digits.slice(2);
@@ -225,6 +240,54 @@ export async function detectSameOriginWordPressUrl(): Promise<string> {
   return '';
 }
 
+export class WordPressApiError extends Error {
+  status: number;
+  code?: string;
+  missingFields?: string[];
+  retryAfter?: number;
+
+  constructor(
+    message: string,
+    opts: {
+      status: number;
+      code?: string;
+      missingFields?: string[];
+      retryAfter?: number;
+    }
+  ) {
+    super(message);
+    this.name = 'WordPressApiError';
+    this.status = opts.status;
+    this.code = opts.code;
+    this.missingFields = opts.missingFields;
+    this.retryAfter = opts.retryAfter;
+  }
+}
+
+function buildWpApiError(data: unknown, status: number, fallbackMsg: string): WordPressApiError {
+  const rec = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>;
+  const nestedData =
+    rec.data && typeof rec.data === 'object' ? (rec.data as Record<string, unknown>) : {};
+  const msg =
+    typeof rec.message === 'string' && rec.message
+      ? rec.message
+      : status === 401
+      ? 'نشست کاربری منقضی شده است. لطفاً دوباره وارد حساب خود شوید.'
+      : fallbackMsg;
+  const rawMissing = nestedData.missingFields ?? rec.missingFields;
+  const missingFields = Array.isArray(rawMissing)
+    ? rawMissing.map((item) => String(item))
+    : undefined;
+  const rawRetry = nestedData.retryAfter ?? rec.retryAfter;
+  const retryAfter = typeof rawRetry === 'number' && Number.isFinite(rawRetry) ? rawRetry : undefined;
+  return new WordPressApiError(msg, {
+    status: typeof nestedData.status === 'number' ? nestedData.status : status,
+    code: typeof rec.code === 'string' ? rec.code : undefined,
+    missingFields,
+    retryAfter,
+  });
+}
+
 async function wpRequest<T>(
   siteUrl: string,
   endpoint: string,
@@ -268,13 +331,7 @@ async function wpRequest<T>(
       setMemoryBearerToken(null);
       unauthorizedHandler?.();
     }
-    const msg =
-      typeof data?.message === 'string' && data.message
-        ? data.message
-        : res.status === 401
-        ? 'نشست کاربری منقضی شده است. لطفاً دوباره وارد حساب خود شوید.'
-        : `خطا در ارتباط با سرور (${res.status})`;
-    throw new Error(msg);
+    throw buildWpApiError(data, res.status, `خطا در ارتباط با سرور (${res.status})`);
   }
   return data as T;
 }
@@ -310,13 +367,7 @@ async function wpFormRequest<T>(
       setMemoryBearerToken(null);
       unauthorizedHandler?.();
     }
-    const msg =
-      typeof data?.message === 'string' && data.message
-        ? data.message
-        : res.status === 401
-        ? 'نشست کاربری منقضی شده است. لطفاً دوباره وارد حساب خود شوید.'
-        : `خطا در ارسال اطلاعات (${res.status})`;
-    throw new Error(msg);
+    throw buildWpApiError(data, res.status, `خطا در ارسال اطلاعات (${res.status})`);
   }
   return data as T;
 }
@@ -333,6 +384,7 @@ export interface WordPressHealthResponse {
   questionsCount: number;
   wooActive?: boolean;
   wooCurrency?: string;
+  smsOtpEnabled?: boolean;
 }
 
 export async function checkWordPressHealth(
@@ -353,6 +405,7 @@ export interface WordPressCurriculumResponse {
     dailyChallengeCount?: number;
     wooActive?: boolean;
     wooCurrency?: string;
+    smsOtpEnabled?: boolean;
     defaultSettings?: Partial<AppSettings>;
     audioSettings?: AudioSettingsConfig;
   };
@@ -379,6 +432,7 @@ export async function fetchWordPressCurriculum(siteUrl: string): Promise<{
       dailyChallengeCount: data.config?.dailyChallengeCount,
       wooActive: data.wooActive ?? data.config?.wooActive,
       wooCurrency: data.wooCurrency ?? data.config?.wooCurrency,
+      smsOtpEnabled: data.config?.smsOtpEnabled,
       audioSettings: data.config?.audioSettings,
     },
     defaultSettings: data.config?.defaultSettings,
@@ -683,6 +737,57 @@ export interface WordPressAuthResponse {
   unlockedTermIds?: number[];
 }
 
+let memorySessionKey: string | null = null;
+
+export function getClientPlatform(): ClientPlatform {
+  return isCapacitorNative() ? 'mobile_app' : 'web';
+}
+
+export function getClientDeviceOs(): string {
+  if (typeof navigator === 'undefined') return 'other';
+  const ua = navigator.userAgent.toLowerCase();
+  if (/android/.test(ua)) return 'android';
+  if (/iphone|ipad|ipod/.test(ua)) return 'ios';
+  if (/windows/.test(ua)) return 'windows';
+  if (/macintosh|mac os/.test(ua)) return 'mac';
+  if (/linux/.test(ua)) return 'linux';
+  return 'other';
+}
+
+export function getAnalyticsSessionKey(): string {
+  if (memorySessionKey) return memorySessionKey;
+  const STORAGE_KEY = 'kn_analytics_sid';
+  try {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      const existing = window.sessionStorage.getItem(STORAGE_KEY);
+      if (existing && /^[a-z0-9_-]{8,64}$/i.test(existing)) {
+        memorySessionKey = existing;
+        return existing;
+      }
+    }
+  } catch {
+    // ignore storage restriction
+  }
+  const arr = new Uint8Array(12);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(arr);
+  } else {
+    for (let i = 0; i < arr.length; i += 1) {
+      arr[i] = Math.floor(Math.random() * 256);
+    }
+  }
+  const generated = Array.from(arr, (b) => b.toString(16).padStart(2, '0')).join('');
+  memorySessionKey = generated;
+  try {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.setItem(STORAGE_KEY, generated);
+    }
+  } catch {
+    // ignore storage restriction
+  }
+  return generated;
+}
+
 export async function loginWordPress(
   siteUrl: string,
   identifier: string,
@@ -693,9 +798,78 @@ export async function loginWordPress(
     body: JSON.stringify({
       identifier: normalizePersianDigits(identifier).trim(),
       password: normalizePersianDigits(password),
+      platform: getClientPlatform(),
       deviceLabel: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 60) : 'Web',
     }),
   });
+  setMemoryBearerToken(data.token);
+  return data;
+}
+
+export interface SendOtpResponse {
+  ok: boolean;
+  mobile: string;
+  codeLength: number;
+  expiresInSeconds: number;
+  resendAfterSeconds: number;
+  message: string;
+}
+
+export function isProfileCompleteForPurchase(user: WordPressUser | null | undefined): boolean {
+  if (!user) return false;
+  if (user.profileComplete === false) return false;
+  const hasFirstName = Boolean(user.firstName && user.firstName.trim().length > 0);
+  const hasLastName = Boolean(user.lastName && user.lastName.trim().length > 0);
+  const hasMobile = isValidIranMobile(user.mobile || '');
+  const hasState = Boolean(user.state && user.state.trim().length > 0);
+  const hasCity = Boolean(user.city && user.city.trim().length > 0);
+  const hasAddress = Boolean(user.address1 && user.address1.trim().length > 0);
+  const postcodeDigits = normalizePersianDigits(user.postcode || '').replace(/\D/g, '');
+  const hasPostcode = postcodeDigits.length === 10;
+  return (
+    hasFirstName &&
+    hasLastName &&
+    hasMobile &&
+    hasState &&
+    hasCity &&
+    hasAddress &&
+    hasPostcode
+  );
+}
+
+export async function sendOtpWordPress(
+  siteUrl: string,
+  mobile: string
+): Promise<SendOtpResponse> {
+  const normalized = normalizeIranMobile(mobile);
+  return wpRequest<SendOtpResponse>(siteUrl, '/auth/otp/send', {
+    method: 'POST',
+    body: JSON.stringify({ mobile: normalized }),
+  });
+}
+
+export async function verifyOtpWordPress(
+  siteUrl: string,
+  mobile: string,
+  code: string,
+  childName?: string
+): Promise<WordPressAuthResponse & { isNewUser?: boolean }> {
+  const normalizedMobile = normalizeIranMobile(mobile);
+  const cleanCode = normalizePersianDigits(code).replace(/\D/g, '');
+  const data = await wpRequest<WordPressAuthResponse & { isNewUser?: boolean }>(
+    siteUrl,
+    '/auth/otp/verify',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        mobile: normalizedMobile,
+        code: cleanCode,
+        platform: getClientPlatform(),
+        ...(childName && childName.trim() ? { childName: childName.trim() } : {}),
+        deviceLabel: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 60) : 'Mobile OTP',
+      }),
+    }
+  );
   setMemoryBearerToken(data.token);
   return data;
 }
@@ -723,6 +897,7 @@ export async function registerWordPress(
     method: 'POST',
     body: JSON.stringify({
       ...payload,
+      platform: getClientPlatform(),
       deviceLabel: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 60) : 'Web',
     }),
   });
@@ -744,7 +919,7 @@ export async function restoreWordPressSession(
         'X-KN-App': 'koodak-nabegheh',
         ...(memoryBearerToken ? { 'X-KN-Auth': memoryBearerToken } : {}),
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ platform: getClientPlatform() }),
     });
     if (!res.ok) return null;
     const data = (await res.json().catch(() => null)) as
@@ -763,7 +938,15 @@ export async function restoreWordPressSession(
 export async function logoutWordPress(siteUrl: string): Promise<void> {
   try {
     if (siteUrl) {
-      await wpRequest(siteUrl, '/auth/logout', { method: 'POST' }, false);
+      await wpRequest(
+        siteUrl,
+        '/auth/logout',
+        {
+          method: 'POST',
+          body: JSON.stringify({ platform: getClientPlatform() }),
+        },
+        false
+      );
     }
   } catch {
     // ignore network failure on logout
@@ -862,3 +1045,75 @@ export async function syncSettingsToWordPress(
     true
   );
 }
+
+export async function trackAppVisit(siteUrl: string, screen: string): Promise<void> {
+  if (!siteUrl) return;
+  try {
+    await wpRequest(
+      siteUrl,
+      '/analytics/visit',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          platform: getClientPlatform(),
+          deviceOs: getClientDeviceOs(),
+          screen,
+          sessionKey: getAnalyticsSessionKey(),
+        }),
+      },
+      false
+    );
+  } catch {
+    // Non-blocking telemetry
+  }
+}
+
+export async function fetchActiveMarketing(
+  siteUrl: string
+): Promise<ActiveMarketingResponse> {
+  if (!siteUrl) {
+    return { banners: [], dialogs: [] };
+  }
+  const platform = getClientPlatform();
+  const data = await wpRequest<ActiveMarketingResponse>(
+    siteUrl,
+    `/marketing/active?platform=${encodeURIComponent(platform)}`,
+    { method: 'GET' },
+    false
+  );
+  return {
+    banners: Array.isArray(data?.banners) ? data.banners : [],
+    dialogs: Array.isArray(data?.dialogs) ? data.dialogs : [],
+    serverTime: data?.serverTime,
+  };
+}
+
+export async function trackMarketingEvent(
+  siteUrl: string,
+  eventType: MarketingEventType,
+  targetId: number,
+  screen = ''
+): Promise<void> {
+  if (!siteUrl || targetId <= 0) return;
+  try {
+    await wpRequest(
+      siteUrl,
+      '/marketing/track',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          eventType,
+          targetId,
+          platform: getClientPlatform(),
+          deviceOs: getClientDeviceOs(),
+          screen,
+          sessionKey: getAnalyticsSessionKey(),
+        }),
+      },
+      false
+    );
+  } catch {
+    // Non-blocking telemetry
+  }
+}
+

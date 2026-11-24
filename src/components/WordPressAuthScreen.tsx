@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
+  AlertCircle,
   ArrowRight,
   CheckCircle2,
   CreditCard,
@@ -7,6 +8,7 @@ import {
   Edit3,
   Globe,
   Headphones,
+  KeyRound,
   Loader2,
   LogIn,
   LogOut,
@@ -14,19 +16,18 @@ import {
   RefreshCw,
   Save,
   Shield,
-  UserPlus,
+  Smartphone,
   Users,
 } from 'lucide-react';
 import type {
-  AvatarId,
   BacsAccount,
   DigitDisplayMode,
   UserOrder,
   WordPressUser,
 } from '../types/app';
-import { AVATAR_OPTIONS, AvatarGraphic } from './MascotDana';
 import { KidIconTile } from './KidIconTile';
 import { CloudSyncIllustration } from './KidIllustrations';
+import { LatinDigitInput } from './LatinDigitInput';
 import { ReceiptUploaderField } from './ReceiptUploaderField';
 import { formatNumber } from '../lib/numbers';
 import { IRAN_PROVINCES } from '../lib/iranProvinces';
@@ -35,15 +36,18 @@ import {
   checkWordPressHealth,
   fetchAccountMe,
   fetchUserOrders,
+  isProfileCompleteForPurchase,
   isValidIranMobile,
   loginWordPress,
   logoutWordPress,
   normalizeIranMobile,
   normalizePersianDigits,
-  registerWordPress,
   saveWordPressUrl,
+  sendOtpWordPress,
   updateAccountProfile,
   uploadOrderReceipt,
+  verifyOtpWordPress,
+  WordPressApiError,
   type WordPressAuthResponse,
 } from '../lib/wordpressApi';
 
@@ -66,8 +70,6 @@ interface WordPressAuthScreenProps {
   refreshTrigger?: number;
 }
 
-const CHILD_AGES = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
-
 export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
   wpUrl,
   wpUser,
@@ -88,25 +90,16 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
 }) => {
   const [siteInput, setSiteInput] = useState(wpUrl);
 
-  // Logged-out auth tabs
-  const [authTab, setAuthTab] = useState<'login' | 'register'>('login');
+  // Logged-out auth tabs: mobile+OTP quick auth (default) vs password login
+  const [authTab, setAuthTab] = useState<'otp' | 'password'>('otp');
+  const [otpMobile, setOtpMobile] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpTargetMobile, setOtpTargetMobile] = useState('');
+  const [resendCountdown, setResendCountdown] = useState(0);
+
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
-
-  // Registration fields
-  const [regUsername, setRegUsername] = useState('');
-  const [regMobile, setRegMobile] = useState('');
-  const [regPassword, setRegPassword] = useState('');
-  const [regFirstName, setRegFirstName] = useState('');
-  const [regLastName, setRegLastName] = useState('');
-  const [regState, setRegState] = useState('تهران');
-  const [regCity, setRegCity] = useState('');
-  const [regAddress1, setRegAddress1] = useState('');
-  const [regPostcode, setRegPostcode] = useState('');
-  const [regEmail, setRegEmail] = useState('');
-  const [regChildName, setRegChildName] = useState('');
-  const [regChildAge, setRegChildAge] = useState(6);
-  const [regAvatar, setRegAvatar] = useState<AvatarId>('owl');
 
   // Logged-in account tabs
   const [accountTab, setAccountTab] = useState<'orders' | 'profile' | 'admin'>('orders');
@@ -193,6 +186,14 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
     }
   }, [wpUser, wpUrl, accountTab, refreshTrigger, loadOrders, loadAccountProfile]);
 
+  useEffect(() => {
+    if (resendCountdown <= 0) return;
+    const timer = window.setTimeout(() => {
+      setResendCountdown((sec) => Math.max(0, sec - 1));
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [resendCountdown]);
+
   const handleTestAndSaveUrl = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!wpUser?.isAdmin) {
@@ -230,6 +231,18 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
     e.preventDefault();
     setErrorMsg(null);
     setStatusMsg(null);
+
+    const cleanIdentifier = normalizePersianDigits(identifier).trim();
+    const cleanPassword = normalizePersianDigits(password);
+    if (!cleanIdentifier) {
+      setErrorMsg('لطفاً شماره موبایل، نام کاربری یا ایمیل خود را وارد کنید.');
+      return;
+    }
+    if (!cleanPassword) {
+      setErrorMsg('لطفاً رمز عبور خود را وارد کنید.');
+      return;
+    }
+
     const activeUrl = wpUrl;
     if (!activeUrl) {
       setErrorMsg('سرویس ورود هنوز توسط مدیر سیستم پیکربندی نشده است.');
@@ -239,8 +252,8 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
     try {
       const res = await loginWordPress(
         activeUrl,
-        normalizePersianDigits(identifier).trim(),
-        normalizePersianDigits(password)
+        cleanIdentifier,
+        cleanPassword
       );
       onUpdateWpUrl(activeUrl);
       onAuthSuccess(res);
@@ -252,67 +265,82 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
     }
   };
 
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setErrorMsg(null);
     setStatusMsg(null);
 
-    const normalizedMobile = normalizeIranMobile(regMobile);
-    if (!isValidIranMobile(normalizedMobile)) {
-      setErrorMsg('شماره موبایل معتبر نیست. لطفاً شماره ۱۱ رقمی صحیح با شروع ۰۹ وارد کنید (مثلاً 09123456789).');
-      return;
-    }
-
-    const cleanUsername = normalizePersianDigits(regUsername.trim()).replace(/[^a-zA-Z0-9._-]/g, '');
-    if (regUsername.trim() && cleanUsername.length < 3) {
-      setErrorMsg('نام کاربری باید حداقل ۳ کاراکتر انگلیسی (حروف یا عدد) باشد یا این فیلد را خالی بگذارید تا شماره موبایل ثبت شود.');
-      return;
-    }
-
-    if (regPassword.length < 6) {
-      setErrorMsg('رمز عبور باید حداقل ۶ کاراکتر باشد.');
+    const normalized = normalizeIranMobile(otpMobile);
+    if (!isValidIranMobile(normalized)) {
+      setErrorMsg('شماره موبایل معتبر نیست. لطفاً شماره ۱۱ رقمی با شروع ۰۹ وارد کنید (مثلاً 09123456789).');
       return;
     }
 
     const activeUrl = wpUrl;
     if (!activeUrl) {
-      setErrorMsg('سرویس ثبت‌نام هنوز توسط مدیر سیستم پیکربندی نشده است.');
+      setErrorMsg('سرویس ورود پیامکی هنوز توسط مدیر سیستم پیکربندی نشده است.');
       return;
     }
-
-    const cleanPostcode = normalizePersianDigits(regPostcode.trim()).replace(/\D/g, '');
-    if (cleanPostcode.length !== 10) {
-      setErrorMsg('کد پستی باید دقیقاً ۱۰ رقم باشد.');
-      return;
-    }
-
-    const finalUsernameForEmail = cleanUsername || normalizedMobile;
-    const defaultEmail = `${finalUsernameForEmail.toLowerCase()}@chootkeh.ir`;
 
     setLoading(true);
     try {
-      const res = await registerWordPress(activeUrl, {
-        mobile: normalizedMobile,
-        username: cleanUsername || undefined,
-        email: normalizePersianDigits(regEmail).trim() || defaultEmail,
-        password: normalizePersianDigits(regPassword),
-        firstName: regFirstName.trim(),
-        lastName: regLastName.trim(),
-        displayName: `${regFirstName.trim()} ${regLastName.trim()}`.trim() || regChildName.trim(),
-        state: regState.trim(),
-        city: regCity.trim(),
-        address1: regAddress1.trim(),
-        postcode: cleanPostcode,
-        childName: regChildName.trim() || 'کیا',
-        childAge: regChildAge,
-        childAvatar: regAvatar,
-      });
+      const res = await sendOtpWordPress(activeUrl, normalized);
+      setOtpTargetMobile(res.mobile || normalized);
+      setOtpSent(true);
+      setOtpCode('');
+      setResendCountdown(res.resendAfterSeconds || 60);
+      setStatusMsg(res.message);
+    } catch (err) {
+      if (err instanceof WordPressApiError && err.retryAfter && err.retryAfter > 0) {
+        setResendCountdown(err.retryAfter);
+        setOtpTargetMobile(normalized);
+        setOtpSent(true);
+      }
+      setErrorMsg(err instanceof Error ? err.message : 'ارسال کد تایید ناموفق بود.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    setStatusMsg(null);
+
+    const targetMobile = normalizeIranMobile(otpTargetMobile || otpMobile);
+    if (!isValidIranMobile(targetMobile)) {
+      setErrorMsg('شماره موبایل معتبر نیست.');
+      return;
+    }
+
+    const cleanCode = normalizePersianDigits(otpCode).replace(/\D/g, '');
+    if (cleanCode.length !== 6) {
+      setErrorMsg('لطفاً کد تایید ۶ رقمی پیامک‌شده را کامل وارد کنید.');
+      return;
+    }
+
+    const activeUrl = wpUrl;
+    if (!activeUrl) {
+      setErrorMsg('سرویس ورود پیامکی هنوز توسط مدیر سیستم پیکربندی نشده است.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await verifyOtpWordPress(activeUrl, targetMobile, cleanCode);
       onUpdateWpUrl(activeUrl);
       syncEditFieldsFromUser(res.user);
       onAuthSuccess(res);
-      setStatusMsg('ثبت‌نام با موفقیت انجام شد و پروفایل کودک شما ساخته شد!');
+      setOtpSent(false);
+      setOtpCode('');
+      setResendCountdown(0);
+      setStatusMsg(
+        res.isNewUser
+          ? 'ثبت‌نام سریع با موفقیت انجام شد! پروفایل کودک «کیا» آماده است. هنگام سفارش می‌توانید مشخصات پستی را تکمیل کنید.'
+          : `خوش آمدید ${res.user.displayName}! حساب کاربری شما متصل شد.`
+      );
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'ثبت‌نام انجام نشد.');
+      setErrorMsg(err instanceof Error ? err.message : 'کد تایید معتبر نیست یا منقضی شده است.');
     } finally {
       setLoading(false);
     }
@@ -324,15 +352,37 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
     setErrorMsg(null);
     setStatusMsg(null);
 
+    if (!editFirstName.trim() || !editLastName.trim()) {
+      setErrorMsg('لطفاً نام و نام خانوادگی را وارد کنید.');
+      return;
+    }
+
     const normalizedMobile = normalizeIranMobile(editMobile);
     if (!isValidIranMobile(normalizedMobile)) {
       setErrorMsg('شماره موبایل معتبر نیست. لطفاً شماره ۱۱ رقمی با شروع ۰۹ وارد کنید (مثلاً 09123456789).');
       return;
     }
 
+    const cleanEmail = normalizePersianDigits(editEmail).trim();
+    if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setErrorMsg('فرمت ایمیل واردشده معتبر نیست.');
+      return;
+    }
+
+    if (!editCity.trim() || !editAddress1.trim()) {
+      setErrorMsg('لطفاً نام شهر و آدرس کامل پستی را وارد کنید.');
+      return;
+    }
+
     const cleanPostcode = normalizePersianDigits(editPostcode.trim()).replace(/\D/g, '');
     if (cleanPostcode.length !== 10) {
       setErrorMsg('کد پستی باید دقیقاً ۱۰ رقم باشد.');
+      return;
+    }
+
+    const cleanNewPassword = normalizePersianDigits(editNewPassword).trim();
+    if (cleanNewPassword && cleanNewPassword.length < 6) {
+      setErrorMsg('رمز عبور جدید باید حداقل ۶ کاراکتر باشد.');
       return;
     }
 
@@ -345,12 +395,12 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
         lastName: editLastName.trim(),
         displayName: `${editFirstName.trim()} ${editLastName.trim()}`.trim() || wpUser.displayName,
         mobile: normalizedMobile,
-        email: normalizePersianDigits(editEmail).trim() || fallbackEmail,
+        email: cleanEmail || fallbackEmail,
         state: editState.trim(),
         city: editCity.trim(),
         address1: editAddress1.trim(),
         postcode: cleanPostcode,
-        newPassword: normalizePersianDigits(editNewPassword).trim() || undefined,
+        newPassword: cleanNewPassword || undefined,
       });
       onUpdateUser?.(res.user);
       syncEditFieldsFromUser(res.user);
@@ -515,6 +565,24 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                   </button>
                 )}
               </div>
+
+              {!isProfileCompleteForPurchase(wpUser) && (
+                <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-200 dark:border-amber-800 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div className="flex items-start gap-2 text-xs font-bold text-amber-950 dark:text-amber-200 leading-relaxed">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <span>
+                      حساب شما با ثبت‌نام سریع موبایل ساخته شده است. برای سفارش یا خرید دوره، ابتدا مشخصات و نشانی ارسال را تکمیل کنید.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAccountTab('profile')}
+                    className="min-h-[38px] px-3.5 rounded-xl bg-[#F59E0B] hover:bg-[#D97706] text-white font-extrabold text-xs shrink-0 whitespace-nowrap"
+                  >
+                    تکمیل مشخصات خرید
+                  </button>
+                </div>
+              )}
             </section>
 
             {/* Tab 1: Orders History & Bank Receipt Uploader */}
@@ -708,7 +776,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                   </button>
                 </div>
 
-                <form onSubmit={handleSaveProfile} className="space-y-3">
+                <form onSubmit={handleSaveProfile} noValidate className="space-y-3">
                   <div className="rounded-2xl bg-[#FFF9F2] dark:bg-slate-800/70 border border-[#EEDCC5] dark:border-slate-700 px-3.5 py-2.5 flex items-center justify-between gap-2 text-xs">
                     <span className="font-extrabold text-slate-600 dark:text-slate-300">نام کاربری حساب (ثابت):</span>
                     <span dir="ltr" className="font-mono font-extrabold text-[#5472EB] dark:text-sky-300">
@@ -748,16 +816,14 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                       <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
                         شماره موبایل *
                       </label>
-                      <input
-                        type="tel"
+                      <LatinDigitInput
+                        type="text"
                         inputMode="tel"
+                        autoComplete="tel"
                         dir="ltr"
-                        required
-                        maxLength={14}
+                        transformMode="mobile"
                         value={editMobile}
-                        onChange={(e) =>
-                          setEditMobile(normalizePersianDigits(e.target.value).replace(/[^\d+]/g, ''))
-                        }
+                        onValueChange={setEditMobile}
                         placeholder="09123456789"
                         className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                       />
@@ -771,11 +837,14 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                       <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
                         ایمیل (اختیاری — پیش‌فرض @chootkeh.ir)
                       </label>
-                      <input
-                        type="email"
+                      <LatinDigitInput
+                        type="text"
+                        inputMode="email"
+                        autoComplete="email"
                         dir="ltr"
+                        transformMode="latin-digits"
                         value={editEmail}
-                        onChange={(e) => setEditEmail(normalizePersianDigits(e.target.value))}
+                        onValueChange={setEditEmail}
                         placeholder={`${wpUser.username}@chootkeh.ir`}
                         className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                       />
@@ -835,18 +904,14 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                       <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
                         کد پستی (۱۰ رقمی)
                       </label>
-                      <input
+                      <LatinDigitInput
                         type="text"
                         inputMode="numeric"
+                        autoComplete="postal-code"
                         dir="ltr"
-                        required
-                        maxLength={10}
+                        transformMode="postcode"
                         value={editPostcode}
-                        onChange={(e) =>
-                          setEditPostcode(
-                            normalizePersianDigits(e.target.value).replace(/\D/g, '').slice(0, 10)
-                          )
-                        }
+                        onValueChange={setEditPostcode}
                         placeholder="1234567890"
                         className={`w-full min-h-[46px] px-3.5 rounded-2xl border-2 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white ${
                           editPostcode.trim() && editPostcode.trim().length !== 10
@@ -866,12 +931,12 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                     <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
                       تغییر رمز عبور (در صورت عدم نیاز خالی بگذارید)
                     </label>
-                    <input
+                    <LatinDigitInput
                       type="password"
                       dir="ltr"
-                      minLength={6}
+                      transformMode="latin-digits"
                       value={editNewPassword}
-                      onChange={(e) => setEditNewPassword(normalizePersianDigits(e.target.value))}
+                      onValueChange={setEditNewPassword}
                       placeholder="حداقل ۶ کاراکتر"
                       className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                     />
@@ -912,12 +977,14 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                     </div>
                   </div>
 
-                  <form onSubmit={handleTestAndSaveUrl} className="flex flex-col sm:flex-row gap-2">
-                    <input
-                      type="url"
+                  <form onSubmit={handleTestAndSaveUrl} noValidate className="flex flex-col sm:flex-row gap-2">
+                    <LatinDigitInput
+                      type="text"
+                      inputMode="url"
                       dir="ltr"
+                      transformMode="latin-digits"
                       value={siteInput}
-                      onChange={(e) => setSiteInput(normalizePersianDigits(e.target.value))}
+                      onValueChange={setSiteInput}
                       placeholder="https://yoursite.com"
                       className="flex-1 min-h-[46px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                     />
@@ -939,10 +1006,10 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                     </KidIconTile>
                     <div>
                       <h2 className="font-extrabold text-sm sm:text-base text-[#35207A] dark:text-white">
-                        بسته افزونه مدیریت سرور (نسخه ۲.۷.۰)
+                        بسته افزونه مدیریت سرور (نسخه ۲.۹.۰)
                       </h2>
                       <p className="text-xs text-[#59449E] dark:text-slate-300">
-                        دارای صفحه پرداخت اختصاصی بدون هدر/فوتر وردپرس، بازگشت خودکار به اپلیکیشن، قالب ایمیل HTML فارسی، فروشگاه، تایید فیش، تیکتینگ و جاده مراحل
+                        تم مدیریتی بهینه و راست‌چین با تقویم و دیت‌پیکر شمسی، گزارشات و تحلیل بازدید وب/اپ موبایل، بنرها و دیالوگ‌های زمان‌بندی‌شده، مدیریت کامل سفارش‌ها، محصولات، کاربران، sms.ir و تیکتینگ
                       </p>
                     </div>
                   </div>
@@ -960,53 +1027,182 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
           </>
         ) : (
           <>
-            {/* Logged Out: Commercial Login & Full Registration Tabs */}
+            {/* Logged Out: Quick Mobile + SMS.ir OTP Auth (Default) & Password Login */}
             <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] overflow-hidden">
               <div className="grid grid-cols-2 bg-[#FFF6EB] dark:bg-slate-800 p-1.5 gap-1.5 border-b border-[#EEDCC5] dark:border-slate-700">
                 <button
                   type="button"
                   onClick={() => {
-                    setAuthTab('login');
+                    setAuthTab('otp');
                     setErrorMsg(null);
                   }}
-                  className={`min-h-[46px] rounded-xl font-extrabold text-sm flex items-center justify-center gap-2 transition-all ${
-                    authTab === 'login'
-                      ? 'bg-[#5472EB] text-white shadow-sm'
-                      : 'text-[#783F1D] dark:text-slate-300'
-                  }`}
-                >
-                  <LogIn className="w-4 h-4" />
-                  <span>ورود به حساب</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthTab('register');
-                    setErrorMsg(null);
-                  }}
-                  className={`min-h-[46px] rounded-xl font-extrabold text-sm flex items-center justify-center gap-2 transition-all ${
-                    authTab === 'register'
+                  className={`min-h-[46px] px-2 rounded-xl font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all ${
+                    authTab === 'otp'
                       ? 'bg-[#4BB543] text-white shadow-sm'
                       : 'text-[#783F1D] dark:text-slate-300'
                   }`}
                 >
-                  <UserPlus className="w-4 h-4" />
-                  <span>ثبت نام</span>
+                  <Smartphone className="w-4 h-4 shrink-0" />
+                  <span>ورود / ثبت‌نام با موبایل</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthTab('password');
+                    setErrorMsg(null);
+                  }}
+                  className={`min-h-[46px] px-2 rounded-xl font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all ${
+                    authTab === 'password'
+                      ? 'bg-[#5472EB] text-white shadow-sm'
+                      : 'text-[#783F1D] dark:text-slate-300'
+                  }`}
+                >
+                  <KeyRound className="w-4 h-4 shrink-0" />
+                  <span>ورود با رمز عبور</span>
                 </button>
               </div>
 
-              {authTab === 'login' ? (
-                <form onSubmit={handleLogin} className="p-4 sm:p-5 space-y-3.5">
+              {authTab === 'otp' ? (
+                <div className="p-4 sm:p-5 space-y-4">
+                  <div className="rounded-2xl bg-[#FFF9F2] dark:bg-slate-800/70 border border-[#EEDCC5] dark:border-slate-700 p-3 text-xs font-bold text-[#783F1D] dark:text-slate-300 leading-relaxed">
+                    بدون نیاز به رمز عبور و فرم طولانی! فقط شماره موبایل خود را وارد کنید تا کد تایید یک‌بارمصرف برایتان پیامک شود. تکمیل آدرس فقط هنگام خرید انجام می‌شود.
+                  </div>
+
+                  {!otpSent ? (
+                    <form onSubmit={handleSendOtp} noValidate className="space-y-3.5">
+                      <div>
+                        <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                          شماره موبایل (۱۱ رقم با شروع ۰۹)
+                        </label>
+                        <LatinDigitInput
+                          type="text"
+                          inputMode="tel"
+                          autoComplete="tel"
+                          dir="ltr"
+                          transformMode="mobile"
+                          value={otpMobile}
+                          onValueChange={setOtpMobile}
+                          placeholder="09123456789"
+                          className={`w-full min-h-[50px] px-4 rounded-2xl border-2 bg-[#FFF9F2] dark:bg-slate-800 text-base font-extrabold tracking-wider text-slate-900 dark:text-white text-center ${
+                            otpMobile.trim() && !isValidIranMobile(otpMobile)
+                              ? 'border-rose-400 dark:border-rose-500'
+                              : 'border-[#EEDCC5] dark:border-slate-700'
+                          }`}
+                        />
+                        {otpMobile.trim() && (
+                          <p
+                            className={`text-[11px] font-bold mt-1.5 ${
+                              isValidIranMobile(otpMobile)
+                                ? 'text-emerald-700 dark:text-emerald-400'
+                                : 'text-rose-600 dark:text-rose-400'
+                            }`}
+                          >
+                            {isValidIranMobile(otpMobile)
+                              ? `شماره موبایل آماده ارسال کد است (${normalizeIranMobile(otpMobile)})`
+                              : 'شماره موبایل باید ۱۱ رقم و با ۰۹ شروع شود.'}
+                          </p>
+                        )}
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="w-full min-h-[52px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-sm sm:text-base flex items-center justify-center gap-2 disabled:opacity-60 transition-all"
+                      >
+                        {loading ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <Smartphone className="w-5 h-5" />
+                        )}
+                        <span>دریافت کد تایید پیامکی</span>
+                      </button>
+                    </form>
+                  ) : (
+                    <form onSubmit={handleVerifyOtp} noValidate className="space-y-4">
+                      <div className="flex items-center justify-between gap-2 rounded-2xl bg-[#EFF6FF] dark:bg-slate-800 border border-sky-200 dark:border-slate-700 px-3.5 py-2.5 text-xs">
+                        <span className="font-bold text-slate-700 dark:text-slate-200">
+                          ارسال به شماره{' '}
+                          <strong dir="ltr" className="font-mono text-[#354EB8] dark:text-sky-300">
+                            {otpTargetMobile || normalizeIranMobile(otpMobile)}
+                          </strong>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOtpSent(false);
+                            setOtpCode('');
+                            setErrorMsg(null);
+                            setStatusMsg(null);
+                          }}
+                          className="font-extrabold text-[#5472EB] hover:underline shrink-0"
+                        >
+                          تغییر شماره
+                        </button>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">
+                          کد تایید ۶ رقمی پیامک‌شده
+                        </label>
+                        <LatinDigitInput
+                          type="text"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          dir="ltr"
+                          transformMode="digits-only"
+                          value={otpCode}
+                          onValueChange={(val) => setOtpCode(val.slice(0, 6))}
+                          placeholder="------"
+                          className="w-full min-h-[54px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-2xl font-mono font-extrabold tracking-[0.45em] text-center text-slate-900 dark:text-white"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-400">
+                        {resendCountdown > 0 ? (
+                          <span className="tabular-nums">
+                            ارسال مجدد کد تا {formatNumber(resendCountdown, digitMode)} ثانیه دیگر
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={loading}
+                            onClick={() => void handleSendOtp()}
+                            className="font-extrabold text-[#5472EB] hover:underline disabled:opacity-50"
+                          >
+                            ارسال مجدد کد تایید
+                          </button>
+                        )}
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="w-full min-h-[52px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-sm sm:text-base flex items-center justify-center gap-2 disabled:opacity-60 transition-all"
+                      >
+                        {loading ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="w-5 h-5" />
+                        )}
+                        <span>تایید کد و ورود به حساب</span>
+                      </button>
+                    </form>
+                  )}
+                </div>
+              ) : (
+                <form onSubmit={handleLogin} noValidate className="p-4 sm:p-5 space-y-3.5">
                   <div>
                     <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-                      شماره موبایل یا ایمیل
+                      شماره موبایل، نام کاربری یا ایمیل
                     </label>
-                    <input
+                    <LatinDigitInput
                       type="text"
+                      inputMode="text"
+                      autoComplete="username"
                       dir="ltr"
-                      required
+                      transformMode="latin-digits"
                       value={identifier}
-                      onChange={(e) => setIdentifier(normalizePersianDigits(e.target.value))}
+                      onValueChange={setIdentifier}
                       placeholder="09123456789 یا parent@example.com"
                       className="w-full min-h-[48px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                     />
@@ -1015,12 +1211,13 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                     <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
                       رمز عبور
                     </label>
-                    <input
+                    <LatinDigitInput
                       type="password"
+                      autoComplete="current-password"
                       dir="ltr"
-                      required
+                      transformMode="latin-digits"
                       value={password}
-                      onChange={(e) => setPassword(normalizePersianDigits(e.target.value))}
+                      onValueChange={setPassword}
                       placeholder="••••••••"
                       className="w-full min-h-[48px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
                     />
@@ -1032,287 +1229,6 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                   >
                     {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5" />}
                     <span>ورود به حساب کاربری</span>
-                  </button>
-                </form>
-              ) : (
-                <form onSubmit={handleRegister} className="p-4 sm:p-5 space-y-3.5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-                        نام *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={regFirstName}
-                        onChange={(e) => setRegFirstName(e.target.value)}
-                        placeholder="مثلاً سارا"
-                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-                        نام خانوادگی *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={regLastName}
-                        onChange={(e) => setRegLastName(e.target.value)}
-                        placeholder="مثلاً محمدی"
-                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-                        شماره موبایل (۱۱ رقم با شروع ۰۹) *
-                      </label>
-                      <input
-                        type="tel"
-                        inputMode="tel"
-                        dir="ltr"
-                        required
-                        maxLength={14}
-                        value={regMobile}
-                        onChange={(e) =>
-                          setRegMobile(normalizePersianDigits(e.target.value).replace(/[^\d+]/g, ''))
-                        }
-                        placeholder="09123456789"
-                        className={`w-full min-h-[46px] px-3.5 rounded-2xl border-2 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white ${
-                          regMobile.trim() && !isValidIranMobile(regMobile)
-                            ? 'border-rose-400 dark:border-rose-500'
-                            : 'border-[#EEDCC5] dark:border-slate-700'
-                        }`}
-                      />
-                      {regMobile.trim() && (
-                        <p
-                          className={`text-[11px] font-bold mt-1 ${
-                            isValidIranMobile(regMobile) ? 'text-emerald-700' : 'text-rose-600'
-                          }`}
-                        >
-                          {isValidIranMobile(regMobile)
-                            ? `شماره موبایل معتبر است (${normalizeIranMobile(regMobile)})`
-                            : 'لطفاً شماره موبایل معتبر ۱۱ رقمی با شروع 09 وارد کنید.'}
-                        </p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-                        نام کاربری انگلیسی (اختیاری — پیش‌فرض موبایل)
-                      </label>
-                      <input
-                        type="text"
-                        dir="ltr"
-                        value={regUsername}
-                        onChange={(e) =>
-                          setRegUsername(
-                            normalizePersianDigits(e.target.value).replace(/[^a-zA-Z0-9._-]/g, '')
-                          )
-                        }
-                        placeholder={normalizeIranMobile(regMobile) || 'مثلاً artin123'}
-                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-                      رمز عبور (حداقل ۶ کاراکتر) *
-                    </label>
-                    <input
-                      type="password"
-                      dir="ltr"
-                      required
-                      minLength={6}
-                      value={regPassword}
-                      onChange={(e) => setRegPassword(normalizePersianDigits(e.target.value))}
-                      placeholder="••••••••"
-                      className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-                        استان *
-                      </label>
-                      <select
-                        value={regState}
-                        onChange={(e) => setRegState(e.target.value)}
-                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
-                      >
-                        {IRAN_PROVINCES.map((prov) => (
-                          <option key={prov} value={prov}>
-                            {prov}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-                        شهر *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={regCity}
-                        onChange={(e) => setRegCity(e.target.value)}
-                        placeholder="مثلاً تهران"
-                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="sm:col-span-2">
-                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-                        آدرس کامل *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={regAddress1}
-                        onChange={(e) => setRegAddress1(e.target.value)}
-                        placeholder="خیابان، کوچه، پلاک، واحد"
-                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-                        کد پستی (۱۰ رقمی) *
-                      </label>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        dir="ltr"
-                        required
-                        maxLength={10}
-                        value={regPostcode}
-                        onChange={(e) =>
-                          setRegPostcode(
-                            normalizePersianDigits(e.target.value).replace(/\D/g, '').slice(0, 10)
-                          )
-                        }
-                        placeholder="1234567890"
-                        className={`w-full min-h-[46px] px-3.5 rounded-2xl border-2 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white ${
-                          regPostcode.trim() && regPostcode.trim().length !== 10
-                            ? 'border-rose-400 dark:border-rose-500'
-                            : 'border-[#EEDCC5] dark:border-slate-700'
-                        }`}
-                      />
-                      {regPostcode.trim() && regPostcode.trim().length !== 10 && (
-                        <p className="text-[11px] font-bold text-rose-600 mt-1">
-                          کد پستی باید دقیقاً ۱۰ رقم باشد.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-                      ایمیل (اختیاری)
-                    </label>
-                    <input
-                      type="email"
-                      dir="ltr"
-                      value={regEmail}
-                      onChange={(e) => setRegEmail(normalizePersianDigits(e.target.value))}
-                      placeholder={`${(
-                        regUsername.trim() ||
-                        normalizeIranMobile(regMobile) ||
-                        'username'
-                      ).toLowerCase()}@chootkeh.ir`}
-                      className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
-                    />
-                    {!regEmail.trim() && (
-                      <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mt-1">
-                        در صورت خالی ماندن، ایمیل پیش‌فرض به‌صورت{' '}
-                        <span dir="ltr" className="font-mono text-[#5472EB]">
-                          {(
-                            regUsername.trim() ||
-                            normalizeIranMobile(regMobile) ||
-                            'username'
-                          ).toLowerCase()}
-                          @chootkeh.ir
-                        </span>{' '}
-                        ثبت خواهد شد.
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="pt-2 border-t border-[#EFE0CE] dark:border-slate-800 space-y-3">
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-                        نام کودک *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={regChildName}
-                        onChange={(e) => setRegChildName(e.target.value)}
-                        placeholder="مثلاً کیا یا باران"
-                        className="w-full min-h-[46px] px-3.5 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-                        سن کودک ({formatNumber(regChildAge, digitMode)} سال — مناسب ۴ تا ۱۵ سال)
-                      </label>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {CHILD_AGES.map((a) => (
-                          <button
-                            key={a}
-                            type="button"
-                            onClick={() => setRegChildAge(a)}
-                            className={`min-h-[38px] min-w-[38px] rounded-xl font-extrabold text-xs ${
-                              regChildAge === a
-                                ? 'bg-[#5472EB] text-white'
-                                : 'bg-[#FFF6EB] dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                            }`}
-                          >
-                            {formatNumber(a, digitMode)}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">
-                        شخصیت همراه کودک
-                      </label>
-                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                        {AVATAR_OPTIONS.map((opt) => (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => setRegAvatar(opt.id)}
-                            className={`p-2 rounded-2xl border-2 flex flex-col items-center gap-1 ${
-                              regAvatar === opt.id
-                                ? 'border-[#5472EB] bg-sky-50 dark:bg-blue-950/40'
-                                : 'border-[#EFE0CE] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800'
-                            }`}
-                          >
-                            <AvatarGraphic avatar={opt.id} className="w-9 h-9" />
-                            <span className="text-[10px] font-bold text-slate-700 dark:text-slate-200">
-                              {opt.label}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full min-h-[52px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] text-white font-extrabold text-base flex items-center justify-center gap-2 disabled:opacity-60"
-                  >
-                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <UserPlus className="w-5 h-5" />}
-                    <span>ثبت نام</span>
                   </button>
                 </form>
               )}

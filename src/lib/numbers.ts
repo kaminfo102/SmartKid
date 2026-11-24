@@ -8,14 +8,11 @@ export function toPersianDigits(input: string | number): string {
 }
 
 export function toEnglishDigits(input: string): string {
-  let result = input;
-  PERSIAN_DIGITS.forEach((pd, idx) => {
-    result = result.replaceAll(pd, String(idx));
-  });
-  ARABIC_INDIC_DIGITS.forEach((ad, idx) => {
-    result = result.replaceAll(ad, String(idx));
-  });
-  return result;
+  return String(input)
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, '')
+    .replace(/[\u06F0-\u06F9]/g, (ch) => String(ch.charCodeAt(0) - 0x06f0))
+    .replace(/[\u0660-\u0669]/g, (ch) => String(ch.charCodeAt(0) - 0x0660))
+    .replace(/[\uFF10-\uFF19]/g, (ch) => String(ch.charCodeAt(0) - 0xff10));
 }
 
 export function formatNumber(value: number | string, mode: DigitDisplayMode = 'fa'): string {

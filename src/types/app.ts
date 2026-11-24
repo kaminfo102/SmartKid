@@ -7,6 +7,7 @@ export type ScreenId =
   | 'practice'
   | 'games'
   | 'simulator'
+  | 'abacus'
   | 'result'
   | 'shop'
   | 'tickets'
@@ -26,6 +27,8 @@ export interface WordPressUser {
   postcode?: string;
   roles: string[];
   isAdmin: boolean;
+  profileComplete?: boolean;
+  missingProfileFields?: string[];
 }
 
 export interface VoiceClipMapping {
@@ -55,6 +58,7 @@ export interface WordPressConfig {
   siteName?: string;
   wooActive?: boolean;
   wooCurrency?: string;
+  smsOtpEnabled?: boolean;
   audioSettings?: AudioSettingsConfig;
 }
 
@@ -373,3 +377,92 @@ export interface SessionResult {
   nextAction: 'next-lesson' | 'map' | 'games' | 'practice';
   lessonId?: string;
 }
+
+export type ClientPlatform = 'web' | 'mobile_app';
+
+export type MarketingEventType =
+  | 'banner_impression'
+  | 'banner_click'
+  | 'dialog_impression'
+  | 'dialog_click'
+  | 'dialog_close'
+  | 'dialog_autoclose';
+
+export interface PromotionalBanner {
+  id: number;
+  title: string;
+  subtitle: string;
+  badgeText: string;
+  imageUrl: string;
+  ctaText: string;
+  actionType: 'none' | 'app_screen' | 'external_url';
+  actionTarget: string;
+  placement: 'home_top' | 'home_bottom' | 'shop_top' | 'map_top';
+  bgColor: string;
+  textColor: string;
+}
+
+export interface ScheduledDialog {
+  id: number;
+  title: string;
+  body: string;
+  badgeText: string;
+  imageUrl: string;
+  ctaText: string;
+  actionType: 'dismiss' | 'app_screen' | 'external_url' | 'term_checkout';
+  actionTarget: string;
+  secondaryText: string;
+  delaySeconds: number;
+  autoCloseSeconds: number;
+  showCountdown: boolean;
+  allowUserClose: boolean;
+  closeOnBackdrop: boolean;
+  frequencyMode: 'once_ever' | 'once_per_session' | 'once_per_day' | 'every_n_hours' | 'always';
+  frequencyHours: number;
+  maxImpressionsUser: number;
+  dialogSize: 'sm' | 'md' | 'lg' | 'fullscreen';
+  position: 'center' | 'bottom_sheet';
+  themeStyle: 'brand' | 'celebration' | 'urgent' | 'dark' | 'glass';
+  overlayBlur: boolean;
+  animation: 'scale' | 'slide_up' | 'fade';
+  targetScreens: string[];
+  priority: number;
+  serverNowTs?: number;
+}
+
+export interface ActiveMarketingResponse {
+  banners: PromotionalBanner[];
+  dialogs: ScheduledDialog[];
+  serverTime?: string;
+}
+
+export interface RodState {
+  upperActive: boolean;
+  lowerCount: number;
+}
+
+export type SorobanThemeId = 'photo_match' | 'classic_ebony' | 'warm_walnut';
+
+export type CameraPreset = 'front' | 'angled' | 'fit';
+
+export type ColorMode = 'dark' | 'light';
+
+export interface SorobanTheme {
+  id: SorobanThemeId;
+  name: string;
+  frameColor: string;
+  frameEdgeColor: string;
+  frameGrainColor: string;
+  beamColor: string;
+  rodColor: string;
+  brassColor: string;
+  beadColor: string;
+  markerBeadColor: string;
+  beadRoughness: number;
+  beadMetalness: number;
+  studioBgDark: string;
+  studioBgLight: string;
+  plateText: string;
+}
+
+

@@ -27,16 +27,19 @@ import type {
 import { formatNumber } from '../../lib/numbers';
 import {
   getAppCheckoutReturnUrl,
+  isProfileCompleteForPurchase,
   startWooCommerceTermCheckout,
   submitOfflineOrder,
   uploadOrderReceipt,
   validateSafeHttpUrl,
   verifyWooCommercePurchase,
+  WordPressApiError,
 } from '../../lib/wordpressApi';
 import { isCapacitorNative } from '../../lib/nativeBridge';
 import type { OptimizedImageResult } from '../../lib/imageOptimizer';
 import { getTermCoverImage } from '../../data/lessons';
 import { KiaAvatar } from '../../components/KiaAvatar';
+import { CompleteProfileForm } from '../../components/CompleteProfileModal';
 import { ReceiptUploaderField } from '../../components/ReceiptUploaderField';
 import { SaleCountdown } from '../../components/SaleCountdown';
 import { audioEngine } from '../../lib/audioEngine';
@@ -49,6 +52,7 @@ interface TermPurchaseModalProps {
   digitMode: DigitDisplayMode;
   onClose: () => void;
   onOpenAuth: () => void;
+  onUpdateUser?: (user: WordPressUser) => void;
   onUnlocked: (termDbId?: number) => void;
   onOrderPending?: () => void;
 }
@@ -61,10 +65,14 @@ export const TermPurchaseModal: React.FC<TermPurchaseModalProps> = ({
   digitMode,
   onClose,
   onOpenAuth,
+  onUpdateUser,
   onUnlocked,
   onOrderPending,
 }) => {
-  const canStartCheckout = Boolean(wpUrl && wpUser && term.dbId);
+  const [serverBlockedProfile, setServerBlockedProfile] = useState(false);
+  const needsProfileCompletion =
+    Boolean(wpUser && !isProfileCompleteForPurchase(wpUser)) || serverBlockedProfile;
+  const canStartCheckout = Boolean(wpUrl && wpUser && term.dbId && !needsProfileCompletion);
 
   const [paymentTab, setPaymentTab] = useState<'online' | 'bacs'>('online');
   const [checkoutUrl, setCheckoutUrl] = useState<string>('');
@@ -159,6 +167,11 @@ export const TermPurchaseModal: React.FC<TermPurchaseModalProps> = ({
         }
       } catch (err) {
         if (!mountedRef.current || silent) return;
+        if (err instanceof WordPressApiError && err.code === 'profile_incomplete') {
+          setServerBlockedProfile(true);
+          setErrorMessage(null);
+          return;
+        }
         setErrorMessage(
           err instanceof Error ? err.message : 'خطا در آماده‌سازی اطلاعات پرداخت.'
         );
@@ -300,6 +313,11 @@ export const TermPurchaseModal: React.FC<TermPurchaseModalProps> = ({
       onOrderPending?.();
     } catch (err) {
       if (!mountedRef.current) return;
+      if (err instanceof WordPressApiError && err.code === 'profile_incomplete') {
+        setServerBlockedProfile(true);
+        setErrorMessage(null);
+        return;
+      }
       setErrorMessage(err instanceof Error ? err.message : 'ثبت سفارش کارت به کارت ناموفق بود.');
     } finally {
       if (mountedRef.current) {
@@ -499,9 +517,22 @@ export const TermPurchaseModal: React.FC<TermPurchaseModalProps> = ({
                 className="w-full min-h-[50px] rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-sm transition-all"
               >
                 <UserCheck className="w-5 h-5" />
-                <span>ورود / ثبت نام</span>
+                <span>ورود / ثبت نام سریع</span>
               </button>
             </div>
+          ) : needsProfileCompletion ? (
+            <CompleteProfileForm
+              wpUrl={wpUrl}
+              wpUser={wpUser}
+              introText="شما با ثبت‌نام سریع وارد شده‌اید. برای خرید این دوره و صدور فاکتور، ابتدا مشخصات کامل و نشانی پستی خود را تکمیل کنید."
+              submitLabel="ثبت مشخصات و ادامه خرید دوره"
+              onCompleted={(updatedUser) => {
+                setServerBlockedProfile(false);
+                setErrorMessage(null);
+                setStatusMessage('مشخصات شما ثبت شد! اکنون می‌توانید پرداخت را انجام دهید.');
+                onUpdateUser?.(updatedUser);
+              }}
+            />
           ) : pendingOrder ? (
             /* Pending Admin Review State (Bank Transfer / Awaiting Approval) */
             <div className="space-y-3.5">

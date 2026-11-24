@@ -84,6 +84,42 @@ class KN_Admin {
 
 		add_submenu_page(
 			'kn-soroban',
+			'گزارشات و تحلیل عملکرد',
+			'گزارشات و تحلیل',
+			'manage_options',
+			'kn-soroban-analytics',
+			array( 'KN_Admin_Analytics', 'render_page' )
+		);
+
+		add_submenu_page(
+			'kn-soroban',
+			'بنرهای تبلیغاتی و دیالوگ‌های هوشمند',
+			'بنرها و دیالوگ‌ها',
+			'manage_options',
+			'kn-soroban-marketing',
+			array( 'KN_Admin_Marketing', 'render_page' )
+		);
+
+		add_submenu_page(
+			'kn-soroban',
+			'مدیریت کامل سفارشات ووکامرس',
+			'مدیریت سفارشات',
+			'manage_options',
+			'kn-soroban-orders',
+			array( 'KN_Admin_Commerce', 'render_orders_page' )
+		);
+
+		add_submenu_page(
+			'kn-soroban',
+			'مدیریت کامل محصولات ووکامرس',
+			'مدیریت محصولات',
+			'manage_options',
+			'kn-soroban-products',
+			array( 'KN_Admin_Commerce', 'render_products_page' )
+		);
+
+		add_submenu_page(
+			'kn-soroban',
 			'ترم‌ها و اتصال ووکامرس',
 			'ترم‌ها و ووکامرس',
 			'manage_options',
@@ -111,8 +147,8 @@ class KN_Admin {
 
 		add_submenu_page(
 			'kn-soroban',
-			'کاربران، دسترسی ترم‌ها و امتیازات',
-			'کاربران و دسترسی ترم‌ها',
+			'کاربران، گزارشات فردی و دسترسی ترم‌ها',
+			'کاربران و گزارشات فردی',
 			'manage_options',
 			'kn-soroban-users',
 			array( __CLASS__, 'render_users_page' )
@@ -120,8 +156,8 @@ class KN_Admin {
 
 		add_submenu_page(
 			'kn-soroban',
-			'فروشگاه اپلیکیشن و تایید واریزی‌ها',
-			'فروشگاه اپلیکیشن',
+			'تنظیمات فروشگاه اپلیکیشن و فیش‌ها',
+			'تنظیمات فروشگاه اپ',
 			'manage_options',
 			'kn-soroban-shop',
 			array( __CLASS__, 'render_shop_page' )
@@ -161,7 +197,8 @@ class KN_Admin {
 		}
 		wp_enqueue_media();
 		wp_enqueue_style( 'kn-soroban-admin', KN_SOROBAN_URL . 'assets/admin.css', array(), KN_SOROBAN_VERSION );
-		wp_enqueue_script( 'kn-soroban-admin', KN_SOROBAN_URL . 'assets/admin.js', array( 'jquery' ), KN_SOROBAN_VERSION, true );
+		wp_enqueue_script( 'kn-soroban-jalali-picker', KN_SOROBAN_URL . 'assets/jalali-picker.js', array(), KN_SOROBAN_VERSION, true );
+		wp_enqueue_script( 'kn-soroban-admin', KN_SOROBAN_URL . 'assets/admin.js', array( 'jquery', 'kn-soroban-jalali-picker' ), KN_SOROBAN_VERSION, true );
 	}
 
 	private static function sanitize_audio_url_input( $raw ) {
@@ -221,6 +258,10 @@ class KN_Admin {
 		return '';
 	}
 
+	public static function render_image_picker_field_public( $name, $value, $input_id, $label = 'انتخاب تصویر', $placeholder = 'آدرس تصویر را وارد یا از کتابخانه رسانه انتخاب کنید...' ) {
+		self::render_image_picker_field( $name, $value, $input_id, $label, $placeholder );
+	}
+
 	private static function render_image_picker_field( $name, $value, $input_id, $label = 'تصویر کاور ترم (اختیاری - JPG / PNG / WebP)', $placeholder = 'آدرس تصویر را وارد یا از کتابخانه رسانه انتخاب کنید...' ) {
 		$val = (string) $value;
 		?>
@@ -243,7 +284,7 @@ class KN_Admin {
 				alt=""
 				data-kn-image-preview="<?php echo esc_attr( $input_id ); ?>"
 				<?php echo $val !== '' ? 'src="' . esc_url( $val ) . '"' : ''; ?>
-				style="margin-top:8px;max-width:160px;max-height:110px;border-radius:12px;border:2px solid #eedcc5;object-fit:cover;<?php echo $val !== '' ? 'display:block;' : 'display:none;'; ?>"
+				style="margin-top:8px;max-width:160px;max-height:110px;border-radius:12px;border:1px solid #cbd5e1;object-fit:cover;<?php echo $val !== '' ? 'display:block;' : 'display:none;'; ?>"
 			/>
 		</div>
 		<?php
@@ -508,6 +549,10 @@ class KN_Admin {
 				}
 				$wpdb->update( KN_DB::table_profiles(), $update, array( 'id' => $profile_db_id ) );
 			}
+			$ret_uid = absint( $_POST['return_user_id'] ?? 0 );
+			if ( $ret_uid > 0 ) {
+				self::redirect_with_notice( 'kn-soroban-users', 'امتیاز و مشخصات کودک ذخیره شد.', false, array( 'user_id' => $ret_uid ) );
+			}
 			self::redirect_with_notice( 'kn-soroban-users', 'امتیاز و مشخصات کودک ذخیره شد.' );
 		}
 
@@ -516,20 +561,34 @@ class KN_Admin {
 			$target_uid = absint( $_POST['target_user_id'] ?? 0 );
 			$term_db_id = absint( $_POST['term_id'] ?? 0 );
 			$mode       = sanitize_key( wp_unslash( $_POST['entitlement_mode'] ?? 'grant' ) );
+			$ret_uid    = absint( $_POST['return_user_id'] ?? 0 );
+			$extra      = $ret_uid > 0 ? array( 'user_id' => $ret_uid ) : array();
 
 			if ( $target_uid > 0 && $term_db_id > 0 ) {
 				if ( $mode === 'revoke' ) {
 					KN_DB::revoke_term_entitlement( $target_uid, $term_db_id );
-					self::redirect_with_notice( 'kn-soroban-users', 'دسترسی کاربر به ترم لغو شد.' );
+					self::redirect_with_notice( 'kn-soroban-users', 'دسترسی کاربر به ترم لغو شد.', false, $extra );
 				} else {
 					KN_DB::grant_term_entitlement( $target_uid, $term_db_id, 'admin', 0 );
-					self::redirect_with_notice( 'kn-soroban-users', 'ترم برای کاربر با موفقیت فعال شد!' );
+					self::redirect_with_notice( 'kn-soroban-users', 'ترم برای کاربر با موفقیت فعال شد!', false, $extra );
 				}
 			}
 		}
 
 		// 9. Save Headless Settings
 		if ( $action === 'save_settings' && check_admin_referer( 'kn_save_settings' ) ) {
+			$existing_settings = get_option( 'kn_soroban_settings', array() );
+			$clear_api_key     = ! empty( $_POST['smsir_clear_api_key'] );
+			$posted_api_key    = trim( sanitize_text_field( wp_unslash( $_POST['smsir_api_key'] ?? '' ) ) );
+			$final_api_key     = $clear_api_key
+				? ''
+				: ( '' !== $posted_api_key ? $posted_api_key : (string) ( $existing_settings['smsir_api_key'] ?? '' ) );
+
+			$param_name = sanitize_text_field( trim( wp_unslash( $_POST['smsir_param_name'] ?? 'Code' ) ) );
+			if ( '' === $param_name ) {
+				$param_name = 'Code';
+			}
+
 			$settings = array(
 				'app_title'              => sanitize_text_field( wp_unslash( $_POST['app_title'] ?? 'کودک نابغه' ) ),
 				'allowed_origins'        => sanitize_text_field( wp_unslash( $_POST['allowed_origins'] ?? '*' ) ),
@@ -542,9 +601,13 @@ class KN_Admin {
 				'default_night_mode'     => ! empty( $_POST['default_night_mode'] ) ? 1 : 0,
 				'default_abacus_scale'   => ( isset( $_POST['default_abacus_scale'] ) && $_POST['default_abacus_scale'] === 'large' ) ? 'large' : 'normal',
 				'default_prefer_2d'      => ! empty( $_POST['default_prefer_2d'] ) ? 1 : 0,
+				'smsir_enabled'          => ! empty( $_POST['smsir_enabled'] ) ? 1 : 0,
+				'smsir_api_key'          => $final_api_key,
+				'smsir_template_id'      => absint( $_POST['smsir_template_id'] ?? 0 ),
+				'smsir_param_name'       => $param_name,
 			);
 			update_option( 'kn_soroban_settings', $settings );
-			self::redirect_with_notice( 'kn-soroban-settings', 'تنظیمات هدلس با موفقیت ذخیره شد.' );
+			self::redirect_with_notice( 'kn-soroban-settings', 'تنظیمات هدلس و پیامک با موفقیت ذخیره شد.' );
 		}
 
 		// 10. Reseed Defaults if empty
@@ -580,16 +643,20 @@ class KN_Admin {
 
 		// 12. One-click Approve Pending Bank Transfer Order
 		if ( $action === 'approve_bacs_order' && check_admin_referer( 'kn_approve_bacs_order' ) ) {
-			$order_id = absint( $_POST['order_id'] ?? 0 );
+			$order_id    = absint( $_POST['order_id'] ?? 0 );
+			$return_page = sanitize_key( wp_unslash( $_POST['return_page'] ?? 'kn-soroban-shop' ) );
+			if ( ! in_array( $return_page, array( 'kn-soroban-shop', 'kn-soroban-orders' ), true ) ) {
+				$return_page = 'kn-soroban-shop';
+			}
 			if ( $order_id > 0 && KN_Woo::is_woo_active() ) {
 				$order = wc_get_order( $order_id );
 				if ( $order ) {
 					$order->update_status( 'completed', 'فیش بانکی توسط مدیر از پنل کودک نابغه تایید شد.' );
 					KN_Woo::grant_access_from_order( $order_id );
-					self::redirect_with_notice( 'kn-soroban-shop', 'سفارش #' . $order->get_order_number() . ' تایید و دسترسی مربوطه فعال شد!' );
+					self::redirect_with_notice( $return_page, 'سفارش #' . $order->get_order_number() . ' تایید و دسترسی مربوطه فعال شد!' );
 				}
 			}
-			self::redirect_with_notice( 'kn-soroban-shop', 'سفارش یافت نشد.', true );
+			self::redirect_with_notice( $return_page, 'سفارش یافت نشد.', true );
 		}
 
 		// 13. Admin Reply to Support Ticket
@@ -649,19 +716,247 @@ class KN_Admin {
 			);
 			self::redirect_with_notice( 'kn-soroban-audio', 'تنظیمات فایل‌های صوتی، موسیقی پس‌زمینه و کتابخانه گویندگی ذخیره شد.' );
 		}
+
+		// 15. Promotional Banners CRUD
+		if ( $action === 'save_banner' && check_admin_referer( 'kn_save_banner' ) ) {
+			$banner_id = absint( $_POST['banner_id'] ?? 0 );
+			$saved_id  = KN_Marketing::save_banner( wp_unslash( $_POST ), $banner_id );
+			if ( ! $saved_id ) {
+				self::redirect_with_notice( 'kn-soroban-marketing', 'عنوان بنر الزامی است.', true, array( 'tab' => 'banners' ) );
+			}
+			self::redirect_with_notice( 'kn-soroban-marketing', 'بنر تبلیغاتی با موفقیت ذخیره شد.', false, array( 'tab' => 'banners' ) );
+		}
+
+		if ( $action === 'toggle_banner' && check_admin_referer( 'kn_toggle_banner' ) ) {
+			$banner_id = absint( $_POST['banner_id'] ?? 0 );
+			$b         = KN_Marketing::get_banner( $banner_id );
+			if ( $b ) {
+				$new_state = ! empty( $b['is_active'] ) ? 0 : 1;
+				$wpdb->update( KN_DB::table_banners(), array( 'is_active' => $new_state ), array( 'id' => $banner_id ), array( '%d' ), array( '%d' ) );
+			}
+			self::redirect_with_notice( 'kn-soroban-marketing', 'وضعیت بنر به‌روزرسانی شد.', false, array( 'tab' => 'banners' ) );
+		}
+
+		if ( $action === 'delete_banner' && check_admin_referer( 'kn_delete_banner' ) ) {
+			$banner_id = absint( $_POST['banner_id'] ?? 0 );
+			KN_Marketing::delete_banner( $banner_id );
+			self::redirect_with_notice( 'kn-soroban-marketing', 'بنر تبلیغاتی حذف شد.', false, array( 'tab' => 'banners' ) );
+		}
+
+		// 16. Advanced Scheduled Dialogs CRUD
+		if ( $action === 'save_dialog' && check_admin_referer( 'kn_save_dialog' ) ) {
+			$dialog_id = absint( $_POST['dialog_id'] ?? 0 );
+			$saved_id  = KN_Marketing::save_dialog( wp_unslash( $_POST ), $dialog_id );
+			if ( ! $saved_id ) {
+				self::redirect_with_notice( 'kn-soroban-marketing', 'عنوان دیالوگ الزامی است.', true, array( 'tab' => 'dialogs' ) );
+			}
+			self::redirect_with_notice( 'kn-soroban-marketing', 'دیالوگ زمان‌بندی‌شده ذخیره شد.', false, array( 'tab' => 'dialogs' ) );
+		}
+
+		if ( $action === 'toggle_dialog' && check_admin_referer( 'kn_toggle_dialog' ) ) {
+			$dialog_id = absint( $_POST['dialog_id'] ?? 0 );
+			$d         = KN_Marketing::get_dialog( $dialog_id );
+			if ( $d ) {
+				$new_state = ! empty( $d['is_active'] ) ? 0 : 1;
+				$wpdb->update( KN_DB::table_dialogs(), array( 'is_active' => $new_state ), array( 'id' => $dialog_id ), array( '%d' ), array( '%d' ) );
+			}
+			self::redirect_with_notice( 'kn-soroban-marketing', 'وضعیت دیالوگ به‌روزرسانی شد.', false, array( 'tab' => 'dialogs' ) );
+		}
+
+		if ( $action === 'delete_dialog' && check_admin_referer( 'kn_delete_dialog' ) ) {
+			$dialog_id = absint( $_POST['dialog_id'] ?? 0 );
+			KN_Marketing::delete_dialog( $dialog_id );
+			self::redirect_with_notice( 'kn-soroban-marketing', 'دیالوگ حذف شد.', false, array( 'tab' => 'dialogs' ) );
+		}
+
+		// 17. WooCommerce Full Orders Management & CSV Export
+		if ( $action === 'admin_update_order' && check_admin_referer( 'kn_admin_update_order' ) ) {
+			$order_id = absint( $_POST['order_id'] ?? 0 );
+			$res      = KN_Woo::admin_update_order( $order_id, wp_unslash( $_POST ) );
+			if ( is_wp_error( $res ) ) {
+				self::redirect_with_notice( 'kn-soroban-orders', $res->get_error_message(), true, array( 'order_id' => $order_id ) );
+			}
+			self::redirect_with_notice( 'kn-soroban-orders', 'سفارش با موفقیت به‌روزرسانی شد.', false, array( 'order_id' => $order_id ) );
+		}
+
+		if ( $action === 'admin_delete_order' && check_admin_referer( 'kn_admin_delete_order' ) ) {
+			$order_id = absint( $_POST['order_id'] ?? 0 );
+			KN_Woo::admin_delete_order( $order_id, false );
+			self::redirect_with_notice( 'kn-soroban-orders', 'سفارش به زباله‌دان منتقل شد.' );
+		}
+
+		if ( $action === 'export_orders_csv' && check_admin_referer( 'kn_export_orders' ) ) {
+			$from_g = ! empty( $_POST['from_jdate'] ) ? KN_Jalali::parse_jalali_to_date( sanitize_text_field( wp_unslash( $_POST['from_jdate'] ) ) ) : '';
+			$to_g   = ! empty( $_POST['to_jdate'] ) ? KN_Jalali::parse_jalali_to_date( sanitize_text_field( wp_unslash( $_POST['to_jdate'] ) ) ) : '';
+			$res    = KN_Woo::admin_get_orders(
+				array(
+					'status'    => sanitize_key( wp_unslash( $_POST['status'] ?? 'all' ) ),
+					'search'    => sanitize_text_field( wp_unslash( $_POST['search'] ?? '' ) ),
+					'from_date' => $from_g,
+					'to_date'   => $to_g,
+					'limit'     => 300,
+				)
+			);
+
+			$csv_safe = function ( $v ) {
+				$s = (string) $v;
+				if ( preg_match( '/^[=+\-@\t\r]/', $s ) ) {
+					return "'" . $s;
+				}
+				return $s;
+			};
+
+			header( 'Content-Type: text/csv; charset=utf-8' );
+			header( 'Content-Disposition: attachment; filename="kn-orders-' . wp_date( 'Y-m-d' ) . '.csv"' );
+			echo "\xEF\xBB\xBF";
+			$out = fopen( 'php://output', 'w' );
+			fputcsv( $out, array( 'شماره سفارش', 'خریدار', 'موبایل', 'شهر', 'اقلام', 'مبلغ', 'وضعیت', 'روش پرداخت', 'کد رهگیری', 'تاریخ شمسی' ) );
+			foreach ( $res['orders'] as $ord ) {
+				$items_txt = array();
+				foreach ( $ord['items'] as $it ) {
+					$items_txt[] = $it['name'] . ' × ' . $it['qty'];
+				}
+				fputcsv(
+					$out,
+					array(
+						$csv_safe( '#' . $ord['orderNumber'] ),
+						$csv_safe( $ord['customerName'] ),
+						$csv_safe( $ord['customerPhone'] ),
+						$csv_safe( $ord['city'] ?? '' ),
+						$csv_safe( implode( ' | ', $items_txt ) ),
+						$csv_safe( $ord['totalAmount'] ),
+						$csv_safe( $ord['statusLabel'] ),
+						$csv_safe( $ord['paymentMethodTitle'] ?: $ord['paymentMethod'] ),
+						$csv_safe( $ord['trackingCode'] ?? '' ),
+						$csv_safe( $ord['dateCreated'] ),
+					)
+				);
+			}
+			fclose( $out );
+			exit;
+		}
+
+		// 18. WooCommerce Products CRUD
+		if ( $action === 'admin_save_product' && check_admin_referer( 'kn_admin_save_product' ) ) {
+			$saved = KN_Woo::admin_save_product( wp_unslash( $_POST ) );
+			if ( is_wp_error( $saved ) ) {
+				self::redirect_with_notice( 'kn-soroban-products', $saved->get_error_message(), true );
+			}
+			self::redirect_with_notice( 'kn-soroban-products', 'محصول با موفقیت در ووکامرس ذخیره شد!' );
+		}
+
+		if ( $action === 'admin_duplicate_product' && check_admin_referer( 'kn_admin_duplicate_product' ) ) {
+			$pid = absint( $_POST['product_id'] ?? 0 );
+			KN_Woo::admin_duplicate_product( $pid );
+			self::redirect_with_notice( 'kn-soroban-products', 'نسخه کپی (پیش‌نویس) از محصول ایجاد شد.' );
+		}
+
+		if ( $action === 'admin_delete_product' && check_admin_referer( 'kn_admin_delete_product' ) ) {
+			$pid = absint( $_POST['product_id'] ?? 0 );
+			KN_Woo::admin_delete_product( $pid, false );
+			self::redirect_with_notice( 'kn-soroban-products', 'محصول به زباله‌دان منتقل شد.' );
+		}
+
+		// 19. Users CRM Account Update & Session Token Revocation
+		if ( $action === 'admin_update_user' && check_admin_referer( 'kn_admin_update_user' ) ) {
+			$uid = absint( $_POST['target_user_id'] ?? 0 );
+			$res = KN_Auth::admin_update_user_account( $uid, wp_unslash( $_POST ) );
+			if ( is_wp_error( $res ) ) {
+				self::redirect_with_notice( 'kn-soroban-users', $res->get_error_message(), true, array( 'user_id' => $uid ) );
+			}
+			self::redirect_with_notice( 'kn-soroban-users', 'اطلاعات کاربر با موفقیت ذخیره شد.', false, array( 'user_id' => $uid ) );
+		}
+
+		if ( $action === 'admin_revoke_token' && check_admin_referer( 'kn_admin_revoke_token' ) ) {
+			$uid = absint( $_POST['target_user_id'] ?? 0 );
+			$tid = absint( $_POST['token_id'] ?? 0 );
+			KN_Auth::revoke_token_by_id( $uid, $tid );
+			self::redirect_with_notice( 'kn-soroban-users', 'نشست انتخاب‌شده لغو شد.', false, array( 'user_id' => $uid ) );
+		}
+
+		if ( $action === 'admin_revoke_all_tokens' && check_admin_referer( 'kn_admin_revoke_all_tokens' ) ) {
+			$uid = absint( $_POST['target_user_id'] ?? 0 );
+			KN_Auth::revoke_all_user_tokens( $uid );
+			self::redirect_with_notice( 'kn-soroban-users', 'همه نشست‌های فعال کاربر با موفقیت لغو شدند.', false, array( 'user_id' => $uid ) );
+		}
 	}
 
-	private static function redirect_with_notice( $page_slug, $message, $is_error = false ) {
-		$url = add_query_arg(
-			array(
-				'page'      => $page_slug,
-				'kn_notice' => rawurlencode( $message ),
-				'kn_err'    => $is_error ? '1' : '0',
-			),
-			admin_url( 'admin.php' )
+	private static function redirect_with_notice( $page_slug, $message, $is_error = false, $extra_args = array() ) {
+		$args = array(
+			'page'      => $page_slug,
+			'kn_notice' => rawurlencode( $message ),
+			'kn_err'    => $is_error ? '1' : '0',
 		);
+		if ( is_array( $extra_args ) && ! empty( $extra_args ) ) {
+			foreach ( $extra_args as $ek => $ev ) {
+				$args[ sanitize_key( $ek ) ] = $ev;
+			}
+		}
+		$url = add_query_arg( $args, admin_url( 'admin.php' ) );
 		wp_safe_redirect( $url );
 		exit;
+	}
+
+	public static function render_shell_open( $active_page, $title, $subtitle ) {
+		$groups = array(
+			'داشبورد و تحلیل' => array(
+				'kn-soroban'           => array( 'label' => 'داشبورد کلی', 'icon' => 'dashicons-dashboard' ),
+				'kn-soroban-analytics' => array( 'label' => 'گزارشات و تحلیل', 'icon' => 'dashicons-chart-bar' ),
+				'kn-soroban-marketing' => array( 'label' => 'بنرها و دیالوگ‌ها', 'icon' => 'dashicons-megaphone' ),
+			),
+			'فروشگاه و ووکامرس' => array(
+				'kn-soroban-orders'   => array( 'label' => 'مدیریت سفارشات', 'icon' => 'dashicons-cart' ),
+				'kn-soroban-products' => array( 'label' => 'مدیریت محصولات', 'icon' => 'dashicons-products' ),
+				'kn-soroban-shop'     => array( 'label' => 'تنظیمات فروشگاه اپ', 'icon' => 'dashicons-store' ),
+			),
+			'آموزش و محتوا' => array(
+				'kn-soroban-terms'     => array( 'label' => 'ترم‌ها و ووکامرس', 'icon' => 'dashicons-welcome-learn-more' ),
+				'kn-soroban-stages'    => array( 'label' => 'جاده و مراحل', 'icon' => 'dashicons-location-alt' ),
+				'kn-soroban-questions' => array( 'label' => 'بانک سوالات', 'icon' => 'dashicons-editor-help' ),
+				'kn-soroban-audio'     => array( 'label' => 'مدیریت صدا و گویندگی', 'icon' => 'dashicons-format-audio' ),
+			),
+			'کاربران و سیستم' => array(
+				'kn-soroban-users'    => array( 'label' => 'کاربران و گزارشات فردی', 'icon' => 'dashicons-groups' ),
+				'kn-soroban-tickets'  => array( 'label' => 'تیکت‌ها و پشتیبانی', 'icon' => 'dashicons-sos' ),
+				'kn-soroban-settings' => array( 'label' => 'تنظیمات هدلس و پیامک', 'icon' => 'dashicons-admin-generic' ),
+			),
+		);
+		?>
+		<div class="kn-shell">
+			<aside class="kn-sidebar" aria-label="منوی مدیریت کودک نابغه">
+				<div class="kn-brand-box">
+					<div class="kn-brand-mark">ک</div>
+					<div>
+						<div class="kn-brand-title">کودک نابغه</div>
+						<div class="kn-brand-sub">نسخه <?php echo esc_html( KN_Jalali::to_persian_digits( KN_SOROBAN_VERSION ) ); ?> · <?php echo esc_html( KN_Jalali::format_date_only( time(), true ) ); ?></div>
+					</div>
+				</div>
+				<?php foreach ( $groups as $g_title => $items ) : ?>
+					<div class="kn-nav-group"><?php echo esc_html( $g_title ); ?></div>
+					<nav class="kn-nav-list">
+						<?php foreach ( $items as $slug => $meta ) : ?>
+							<a class="kn-nav-link <?php echo $active_page === $slug ? 'is-active' : ''; ?>" href="<?php echo esc_url( admin_url( 'admin.php?page=' . $slug ) ); ?>">
+								<span style="display:inline-flex;align-items:center;gap:7px;">
+									<span class="dashicons <?php echo esc_attr( $meta['icon'] ); ?>"></span>
+									<?php echo esc_html( $meta['label'] ); ?>
+								</span>
+							</a>
+						<?php endforeach; ?>
+					</nav>
+				<?php endforeach; ?>
+			</aside>
+			<div class="kn-main">
+				<div class="kn-wrap">
+					<?php self::render_header( $title, $subtitle ); ?>
+		<?php
+	}
+
+	public static function render_shell_close() {
+		?>
+				</div>
+			</div>
+		</div>
+		<?php
 	}
 
 	private static function render_header( $title, $subtitle ) {
@@ -674,10 +969,10 @@ class KN_Admin {
 				<p><?php echo esc_html( $subtitle ); ?></p>
 			</div>
 			<div class="kn-api-box">
-				<span style="font-size:12px;font-weight:800;color:#5c3a1f;">آدرس اتصال اپلیکیشن (Site URL):</span>
+				<span style="font-size:11.5px;font-weight:700;color:#475569;">آدرس اتصال:</span>
 				<code><?php echo esc_html( $site_url ); ?></code>
-				<button type="button" class="kn-btn kn-btn-amber" data-kn-copy="<?php echo esc_attr( $site_url ); ?>">کپی آدرس سایت</button>
-				<button type="button" class="kn-btn kn-btn-ghost" data-kn-copy="<?php echo esc_attr( $api_base ); ?>">کپی API</button>
+				<button type="button" class="kn-btn kn-btn-amber kn-btn-sm" data-kn-copy="<?php echo esc_attr( $site_url ); ?>">کپی آدرس</button>
+				<button type="button" class="kn-btn kn-btn-ghost kn-btn-sm" data-kn-copy="<?php echo esc_attr( $api_base ); ?>">کپی API</button>
 			</div>
 		</div>
 		<?php
@@ -713,79 +1008,102 @@ class KN_Admin {
 		$ent_count       = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t_entitlements}" );
 		$woo_active      = KN_Woo::is_woo_active();
 
+		$from_7d = gmdate( 'Y-m-d', current_time( 'timestamp' ) - ( 6 * DAY_IN_SECONDS ) );
+		$to_7d   = current_time( 'Y-m-d' );
+		$rep_7d  = KN_Marketing::get_analytics_report( $from_7d, $to_7d );
+		$visits  = $rep_7d['visits'];
+		$comm    = $rep_7d['commerce'];
+
 		$top_learners = $wpdb->get_results(
 			"SELECT p.*, u.user_email, u.user_login FROM {$t_profiles} p LEFT JOIN {$wpdb->users} u ON p.user_id = u.ID ORDER BY p.total_stars DESC, p.total_correct DESC LIMIT 10",
 			ARRAY_A
 		);
+
+		self::render_shell_open(
+			'kn-soroban',
+			'داشبورد مدیریت «کودک نابغه»',
+			'نمای یکپارچه وضعیت آموزش، بازدید وب‌اپ و اپلیکیشن موبایل، فروش ووکامرس و جدول قهرمانان'
+		);
 		?>
-		<div class="kn-wrap">
-			<?php self::render_header( 'داشبورد مدیریت «کودک نابغه»', 'کنترل کامل ترم‌های آموزشی، نقشه‌های داستانی، ووکامرس، بانک سوالات و پیشرفت کودکان' ); ?>
 
-			<div class="kn-kpi-grid">
-				<div class="kn-kpi-card">
-					<div class="kn-kpi-badge kn-bg-violet">📚</div>
-					<div>
-						<div class="kn-kpi-num"><?php echo esc_html( number_format_i18n( $terms_count ) ); ?></div>
-						<div class="kn-kpi-label">ترم‌های داستانی</div>
-					</div>
-				</div>
-				<div class="kn-kpi-card">
-					<div class="kn-kpi-badge kn-bg-blue">🗺️</div>
-					<div>
-						<div class="kn-kpi-num"><?php echo esc_html( number_format_i18n( $stages_count ) ); ?></div>
-						<div class="kn-kpi-label">مراحل کل (<?php echo esc_html( number_format_i18n( $steps_count ) ); ?> گام)</div>
-					</div>
-				</div>
-				<div class="kn-kpi-card">
-					<div class="kn-kpi-badge kn-bg-green">❓</div>
-					<div>
-						<div class="kn-kpi-num"><?php echo esc_html( number_format_i18n( $questions_count ) ); ?></div>
-						<div class="kn-kpi-label">سوالات بانک تمرین</div>
-					</div>
-				</div>
-				<div class="kn-kpi-card">
-					<div class="kn-kpi-badge kn-bg-pink">👧</div>
-					<div>
-						<div class="kn-kpi-num"><?php echo esc_html( number_format_i18n( $profiles_count ) ); ?></div>
-						<div class="kn-kpi-label">کودکان (<?php echo esc_html( number_format_i18n( $total_stars ) ); ?> ⭐)</div>
-					</div>
-				</div>
-				<div class="kn-kpi-card">
-					<div class="kn-kpi-badge kn-bg-amber">🛒</div>
-					<div>
-						<div class="kn-kpi-num"><?php echo $woo_active ? 'متصل' : 'غیرفعال'; ?></div>
-						<div class="kn-kpi-label">ووکامرس (<?php echo esc_html( number_format_i18n( $ent_count ) ); ?> دسترسی ترم)</div>
-					</div>
+		<div class="kn-kpi-grid">
+			<div class="kn-kpi-card">
+				<div class="kn-kpi-badge kn-bg-blue">🌐</div>
+				<div>
+					<div class="kn-kpi-num"><?php echo esc_html( KN_Jalali::to_persian_digits( number_format( $visits['web_total'] ) ) ); ?></div>
+					<div class="kn-kpi-label">بازدید وب‌اپ (۷ روز اخیر)</div>
 				</div>
 			</div>
-
-			<div class="kn-card">
-				<div class="kn-card-header">
-					<h2>دسترسی سریع مدیریت</h2>
-					<div style="display:flex;gap:8px;flex-wrap:wrap;">
-						<a class="kn-btn kn-btn-primary" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-terms' ) ); ?>">ترم‌ها و اتصال ووکامرس</a>
-						<a class="kn-btn kn-btn-green" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-stages' ) ); ?>">مدیریت جاده‌ها و مراحل</a>
-						<a class="kn-btn kn-btn-amber" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-questions' ) ); ?>">بانک سوالات</a>
-						<a class="kn-btn kn-btn-ghost" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-audio' ) ); ?>">مدیریت صدا و گویندگی</a>
-						<a class="kn-btn kn-btn-ghost" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-users' ) ); ?>">کاربران و دسترسی ترم‌ها</a>
-					</div>
+			<div class="kn-kpi-card">
+				<div class="kn-kpi-badge kn-bg-green">📱</div>
+				<div>
+					<div class="kn-kpi-num"><?php echo esc_html( KN_Jalali::to_persian_digits( number_format( $visits['mobile_total'] ) ) ); ?></div>
+					<div class="kn-kpi-label">بازدید اپ موبایل (۷ روز اخیر)</div>
 				</div>
-				<p style="margin:0;font-size:13px;color:#5c3a1f;">
-					<?php if ( $woo_active ) : ?>
-						✅ <strong>ووکامرس فعال است:</strong> می‌توانید در صفحه «ترم‌ها و ووکامرس» هر ترم پولی را به محصول ووکامرس متصل کنید تا پس از پرداخت موفق، به‌طور خودکار برای کاربر باز شود.
-					<?php else : ?>
-						⚠️ <strong>توجه:</strong> افزونه <strong>WooCommerce</strong> هنوز روی این سایت نصب یا فعال نشده است. تا زمان فعال‌سازی ووکامرس، می‌توانید دسترسی ترم‌ها را به‌صورت دستی از بخش «کاربران و دسترسی ترم‌ها» فعال کنید.
-					<?php endif; ?>
-				</p>
 			</div>
-
-			<div class="kn-card">
-				<div class="kn-card-header">
-					<h2>برترین قهرمانان چرتکه (جدول امتیازات)</h2>
+			<div class="kn-kpi-card">
+				<div class="kn-kpi-badge kn-bg-amber">💰</div>
+				<div>
+					<div class="kn-kpi-num"><?php echo esc_html( KN_Jalali::to_persian_digits( number_format( $comm['total_revenue'] ) ) ); ?></div>
+					<div class="kn-kpi-label">فروش ووکامرس (۷ روز · <?php echo esc_html( KN_Jalali::to_persian_digits( $comm['completed_orders'] ) ); ?> سفارش)</div>
 				</div>
-				<?php if ( empty( $top_learners ) ) : ?>
-					<p>هنوز کودکی ثبت نشده است. از بخش «کاربران و دسترسی ترم‌ها» یا اپلیکیشن ثبت‌نام کنید.</p>
-				<?php else : ?>
+			</div>
+			<div class="kn-kpi-card">
+				<div class="kn-kpi-badge kn-bg-violet">📚</div>
+				<div>
+					<div class="kn-kpi-num"><?php echo esc_html( KN_Jalali::to_persian_digits( $terms_count ) ); ?> / <?php echo esc_html( KN_Jalali::to_persian_digits( $stages_count ) ); ?></div>
+					<div class="kn-kpi-label">ترم‌ها / مراحل (<?php echo esc_html( KN_Jalali::to_persian_digits( $questions_count ) ); ?> سؤال)</div>
+				</div>
+			</div>
+			<div class="kn-kpi-card">
+				<div class="kn-kpi-badge kn-bg-pink">👧</div>
+				<div>
+					<div class="kn-kpi-num"><?php echo esc_html( KN_Jalali::to_persian_digits( number_format( $profiles_count ) ) ); ?></div>
+					<div class="kn-kpi-label">کودکان (<?php echo esc_html( KN_Jalali::to_persian_digits( number_format( $total_stars ) ) ); ?> ⭐)</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="kn-card">
+			<div class="kn-card-header">
+				<h2>روند بازدید ۷ روز اخیر (وب‌اپ در برابر اپلیکیشن موبایل)</h2>
+				<div style="display:flex;gap:12px;align-items:center;">
+					<div class="kn-chart-legend">
+						<span><i class="kn-legend-dot" style="background:#2563eb;"></i>وب‌اپ</span>
+						<span><i class="kn-legend-dot" style="background:#059669;"></i>موبایل APK</span>
+					</div>
+					<a class="kn-btn kn-btn-primary kn-btn-sm" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-analytics' ) ); ?>">گزارش جامع تحلیلی</a>
+				</div>
+			</div>
+			<?php KN_Admin_Analytics::render_dual_bar_svg_chart( $rep_7d['dailySeries'] ); ?>
+		</div>
+
+		<div class="kn-card">
+			<div class="kn-card-header">
+				<h2>دسترسی سریع بخش‌های مدیریتی</h2>
+				<span class="kn-pill <?php echo $woo_active ? 'kn-pill-green' : 'kn-pill-amber'; ?>">
+					<?php echo $woo_active ? 'ووکامرس متصل (' . KN_Jalali::to_persian_digits( $ent_count ) . ' دسترسی فعال)' : 'ووکامرس غیرفعال'; ?>
+				</span>
+			</div>
+			<div style="display:flex;gap:8px;flex-wrap:wrap;">
+				<a class="kn-btn kn-btn-primary" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-analytics' ) ); ?>">گزارشات و تحلیل</a>
+				<a class="kn-btn kn-btn-green" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-marketing' ) ); ?>">بنرها و دیالوگ‌های هوشمند</a>
+				<a class="kn-btn kn-btn-amber" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-orders' ) ); ?>">مدیریت سفارشات</a>
+				<a class="kn-btn kn-btn-ghost" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-products' ) ); ?>">مدیریت محصولات</a>
+				<a class="kn-btn kn-btn-ghost" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-users' ) ); ?>">کاربران و گزارشات فردی</a>
+				<a class="kn-btn kn-btn-ghost" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-terms' ) ); ?>">ترم‌ها و ووکامرس</a>
+				<a class="kn-btn kn-btn-ghost" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-stages' ) ); ?>">جاده و مراحل</a>
+			</div>
+		</div>
+
+		<div class="kn-card">
+			<div class="kn-card-header">
+				<h2>برترین قهرمانان چرتکه (جدول امتیازات)</h2>
+			</div>
+			<?php if ( empty( $top_learners ) ) : ?>
+				<p>هنوز کودکی ثبت نشده است. از بخش «کاربران و گزارشات فردی» یا اپلیکیشن ثبت‌نام کنید.</p>
+			<?php else : ?>
+				<div class="kn-table-wrap">
 					<table class="kn-table">
 						<thead>
 							<tr>
@@ -806,19 +1124,24 @@ class KN_Admin {
 								?>
 								<tr>
 									<td><strong><?php echo esc_html( $row['name'] ); ?></strong></td>
-									<td><?php echo esc_html( $row['user_email'] ?: $row['user_login'] ); ?></td>
-									<td><?php echo esc_html( $row['age'] ); ?> سال</td>
-									<td><span class="kn-pill kn-pill-amber">⭐ <?php echo esc_html( $row['total_stars'] ); ?></span></td>
-									<td><span class="kn-pill kn-pill-green"><?php echo esc_html( $acc ); ?>٪</span></td>
-									<td><?php echo esc_html( $row['practice_minutes'] ); ?> دقیقه</td>
+									<td>
+										<a href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-users&user_id=' . $row['user_id'] ) ); ?>" style="text-decoration:none;color:var(--kn-primary);font-weight:700;">
+											<?php echo esc_html( $row['user_email'] ?: $row['user_login'] ); ?>
+										</a>
+									</td>
+									<td><?php echo esc_html( KN_Jalali::to_persian_digits( $row['age'] ) ); ?> سال</td>
+									<td><span class="kn-pill kn-pill-amber">⭐ <?php echo esc_html( KN_Jalali::to_persian_digits( $row['total_stars'] ) ); ?></span></td>
+									<td><span class="kn-pill kn-pill-green"><?php echo esc_html( KN_Jalali::to_persian_digits( $acc ) ); ?>٪</span></td>
+									<td><?php echo esc_html( KN_Jalali::to_persian_digits( $row['practice_minutes'] ) ); ?> دقیقه</td>
 								</tr>
 							<?php endforeach; ?>
 						</tbody>
 					</table>
-				<?php endif; ?>
-			</div>
+				</div>
+			<?php endif; ?>
 		</div>
 		<?php
+		self::render_shell_close();
 	}
 
 	/**
@@ -828,9 +1151,12 @@ class KN_Admin {
 		$terms        = KN_DB::get_terms_curriculum( false, 0 );
 		$woo_active   = KN_Woo::is_woo_active();
 		$woo_products = $woo_active ? KN_Woo::get_admin_products_list() : array();
+		self::render_shell_open(
+			'kn-soroban-terms',
+			'مدیریت ترم‌های داستانی و فروش با ووکامرس',
+			'هر ترم یک نقشه ماجراجویی و داستان اختصاصی دارد. ترم اول رایگان است و ترم‌های بعدی را می‌توانید به محصولات ووکامرس متصل کنید.'
+		);
 		?>
-		<div class="kn-wrap">
-			<?php self::render_header( 'مدیریت ترم‌های داستانی و فروش با ووکامرس', 'هر ترم یک نقشه ماجراجویی و داستان اختصاصی دارد. ترم اول رایگان است و ترم‌های بعدی را می‌توانید به محصولات ووکامرس متصل کنید.' ); ?>
 
 			<div class="kn-card">
 				<div class="kn-card-header">
@@ -1042,8 +1368,8 @@ class KN_Admin {
 					</div>
 				</div>
 			<?php endforeach; ?>
-		</div>
 		<?php
+		self::render_shell_close();
 	}
 
 	/**
@@ -1053,9 +1379,12 @@ class KN_Admin {
 		$terms       = KN_DB::get_terms_list( false );
 		$filter_term = absint( $_GET['filter_term'] ?? 0 );
 		$stages      = KN_DB::get_curriculum( false, $filter_term );
+		self::render_shell_open(
+			'kn-soroban-stages',
+			'مدیریت جاده یادگیری و مراحل',
+			'برای هر ترم، مراحل جاده، مکان داستانی نقشه (انبار، آسیاب، کلبه درختی، صندوقچه گنج و...) و گام‌های آموزشی را بسازید.'
+		);
 		?>
-		<div class="kn-wrap">
-			<?php self::render_header( 'مدیریت جاده یادگیری و مراحل', 'برای هر ترم، مراحل جاده، مکان داستانی نقشه (انبار، آسیاب، کلبه درختی، صندوقچه گنج و...) و گام‌های آموزشی را بسازید.' ); ?>
 
 			<!-- Filter by Term -->
 			<div class="kn-card" style="padding:14px 20px;">
@@ -1443,8 +1772,8 @@ class KN_Admin {
 					</div>
 				</div>
 			<?php endforeach; ?>
-		</div>
 		<?php
+		self::render_shell_close();
 	}
 
 	/**
@@ -1454,9 +1783,12 @@ class KN_Admin {
 		$terms        = KN_DB::get_terms_list( false );
 		$filter_skill = sanitize_text_field( wp_unslash( $_GET['filter_skill'] ?? '' ) );
 		$questions    = KN_DB::get_questions( $filter_skill, 0, false, 0 );
+		self::render_shell_open(
+			'kn-soroban-questions',
+			'بانک سوالات و تمرین‌های داینامیک',
+			'سوالات دلخواه خود را برای هر ترم، مهارت و سطح سختی بسازید.'
+		);
 		?>
-		<div class="kn-wrap">
-			<?php self::render_header( 'بانک سوالات و تمرین‌های داینامیک', 'سوالات دلخواه خود را برای هر ترم، مهارت و سطح سختی بسازید.' ); ?>
 
 			<div class="kn-card">
 				<div class="kn-card-header">
@@ -1720,230 +2052,15 @@ class KN_Admin {
 					</table>
 				<?php endif; ?>
 			</div>
-		</div>
 		<?php
+		self::render_shell_close();
 	}
 
 	/**
-	 * Page 5: Users, Child Profiles, Scores & Paid Term Access Manager
+	 * Page 5: Users CRM, Per-User Activity Reports & Child Profiles Manager
 	 */
 	public static function render_users_page() {
-		global $wpdb;
-		$t_profiles = KN_DB::table_profiles();
-		$rows       = $wpdb->get_results(
-			"SELECT p.*, u.user_email, u.user_login, u.display_name FROM {$t_profiles} p LEFT JOIN {$wpdb->users} u ON p.user_id = u.ID ORDER BY p.id DESC",
-			ARRAY_A
-		);
-		$paid_terms = array_filter(
-			KN_DB::get_terms_list( false ),
-			function ( $t ) {
-				return empty( $t['is_free'] );
-			}
-		);
-		$wp_users   = get_users( array( 'number' => 100, 'orderby' => 'ID', 'order' => 'DESC' ) );
-		?>
-		<div class="kn-wrap">
-			<?php self::render_header( 'مدیریت کاربران، دسترسی ترم‌ها و امتیازات', 'ایجاد کاربر جدید، اعطای دستی دسترسی به ترم‌های پولی، مشاهده پیشرفت کودکان و ویرایش ستاره‌ها.' ); ?>
-
-			<div class="kn-card">
-				<div class="kn-card-header">
-					<h2>ایجاد کاربر جدید + پروفایل کودک</h2>
-					<button type="button" class="kn-btn kn-btn-green" data-kn-toggle="kn-new-user-box">+ ساخت کاربر جدید</button>
-				</div>
-				<div id="kn-new-user-box" class="kn-collapsible">
-					<form method="post">
-						<?php wp_nonce_field( 'kn_admin_create_user' ); ?>
-						<input type="hidden" name="kn_action" value="admin_create_user" />
-						<div class="kn-grid-3">
-							<div class="kn-field">
-								<label>شماره موبایل والد / کاربر (الزامی)</label>
-								<input type="text" name="mobile" required dir="ltr" placeholder="09123456789" />
-							</div>
-							<div class="kn-field">
-								<label>ایمیل (اختیاری)</label>
-								<input type="email" name="email" dir="ltr" placeholder="parent@example.com" />
-							</div>
-							<div class="kn-field">
-								<label>رمز عبور (حداقل ۶ کاراکتر)</label>
-								<input type="password" name="password" required minlength="6" dir="ltr" />
-							</div>
-						</div>
-						<div class="kn-grid-3">
-							<div class="kn-field">
-								<label>نام والد</label>
-								<input type="text" name="first_name" placeholder="مثلاً علی" />
-							</div>
-							<div class="kn-field">
-								<label>نام خانوادگی والد</label>
-								<input type="text" name="last_name" placeholder="مثلاً رضایی" />
-							</div>
-							<div class="kn-field">
-								<label>استان و شهر</label>
-								<div style="display:flex;gap:6px;">
-									<input type="text" name="state" placeholder="استان (مثلاً تهران)" />
-									<input type="text" name="city" placeholder="شهر (مثلاً تهران)" />
-								</div>
-							</div>
-						</div>
-						<div class="kn-grid-3">
-							<div class="kn-field">
-								<label>آدرس پستی کامل</label>
-								<input type="text" name="address1" placeholder="خیابان، کوچه، پلاک..." />
-							</div>
-							<div class="kn-field">
-								<label>کد پستی</label>
-								<input type="text" name="postcode" dir="ltr" placeholder="1234567890" />
-							</div>
-							<div class="kn-field">
-								<label>نام، سن (۴ تا ۱۵) و شخصیت کودک</label>
-								<div style="display:flex;gap:6px;">
-									<input type="text" name="child_name" required placeholder="نام کودک" />
-									<input type="number" name="child_age" value="6" min="4" max="15" style="width:70px;" />
-									<select name="child_avatar">
-										<?php foreach ( self::$avatars as $k => $lbl ) : ?>
-											<option value="<?php echo esc_attr( $k ); ?>"><?php echo esc_html( $lbl ); ?></option>
-										<?php endforeach; ?>
-									</select>
-								</div>
-							</div>
-						</div>
-						<button type="submit" class="kn-btn kn-btn-primary">ایجاد حساب و پروفایل</button>
-					</form>
-				</div>
-			</div>
-
-			<?php if ( ! empty( $paid_terms ) ) : ?>
-				<div class="kn-card">
-					<div class="kn-card-header">
-						<h2>کنترل دسترسی کاربران به ترم‌های پولی (تکمیل‌کننده ووکامرس)</h2>
-					</div>
-					<table class="kn-table">
-						<thead>
-							<tr>
-								<th>کاربر / ایمیل</th>
-								<th>وضعیت ترم‌های پولی</th>
-							</tr>
-						</thead>
-						<tbody>
-							<?php foreach ( $wp_users as $u ) : ?>
-								<?php $ent_map = KN_DB::get_user_entitlement_map( $u->ID ); ?>
-								<tr>
-									<td>
-										<strong><?php echo esc_html( $u->display_name ?: $u->user_login ); ?></strong>
-										<div style="font-size:11px;color:#7c5b43;"><?php echo esc_html( $u->user_email ); ?></div>
-									</td>
-									<td>
-										<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-											<?php foreach ( $paid_terms as $pt ) : ?>
-												<?php
-												$tid      = (int) $pt['id'];
-												$unlocked = isset( $ent_map[ $tid ] );
-												?>
-												<form method="post" style="display:inline-flex;align-items:center;gap:4px;background:#fffaf3;padding:4px 8px;border-radius:10px;border:1px solid #eedcc5;">
-													<?php wp_nonce_field( 'kn_admin_toggle_entitlement' ); ?>
-													<input type="hidden" name="kn_action" value="admin_toggle_entitlement" />
-													<input type="hidden" name="target_user_id" value="<?php echo esc_attr( $u->ID ); ?>" />
-													<input type="hidden" name="term_id" value="<?php echo esc_attr( $tid ); ?>" />
-													<input type="hidden" name="entitlement_mode" value="<?php echo $unlocked ? 'revoke' : 'grant'; ?>" />
-													<span style="font-size:12px;font-weight:700;"><?php echo esc_html( $pt['title'] ); ?>:</span>
-													<?php if ( $unlocked ) : ?>
-														<span class="kn-pill kn-pill-green">فعال</span>
-														<button type="submit" class="kn-btn kn-btn-danger" style="padding:3px 8px;font-size:11px;">لغو</button>
-													<?php else : ?>
-														<span class="kn-pill kn-pill-slate">قفل</span>
-														<button type="submit" class="kn-btn kn-btn-green" style="padding:3px 8px;font-size:11px;">فعال‌سازی</button>
-													<?php endif; ?>
-												</form>
-											<?php endforeach; ?>
-										</div>
-									</td>
-								</tr>
-							<?php endforeach; ?>
-						</tbody>
-					</table>
-				</div>
-			<?php endif; ?>
-
-			<div class="kn-card">
-				<div class="kn-card-header">
-					<h2>پروفایل کودکان و مدیریت امتیازات (<?php echo esc_html( count( $rows ) ); ?>)</h2>
-				</div>
-				<?php if ( empty( $rows ) ) : ?>
-					<p>هنوز پروفایلی در وردپرس ذخیره نشده است.</p>
-				<?php else : ?>
-					<table class="kn-table">
-						<thead>
-							<tr>
-								<th>کودک / تصویر</th>
-								<th>کاربر وردپرس</th>
-								<th>سن</th>
-								<th>ستاره‌ها</th>
-								<th>امتیاز جایزه / فروشگاه</th>
-								<th>دقیقه تمرین</th>
-								<th>سطح سختی</th>
-								<th>ویرایش امتیاز</th>
-							</tr>
-						</thead>
-						<tbody>
-							<?php foreach ( $rows as $r ) : ?>
-								<?php
-								$db_bonus   = ! empty( $r['daily_bonus_json'] ) ? json_decode( $r['daily_bonus_json'], true ) : array();
-								$streak_cnt = is_array( $db_bonus ) && isset( $db_bonus['streak'] ) ? intval( $db_bonus['streak'] ) : 0;
-								?>
-								<tr>
-									<form method="post">
-										<?php wp_nonce_field( 'kn_admin_update_profile' ); ?>
-										<input type="hidden" name="kn_action" value="admin_update_profile" />
-										<input type="hidden" name="profile_db_id" value="<?php echo esc_attr( $r['id'] ); ?>" />
-										<td>
-											<div style="display:flex;align-items:center;gap:8px;">
-												<?php if ( ! empty( $r['avatar_url'] ) ) : ?>
-													<img src="<?php echo esc_url( $r['avatar_url'] ); ?>" alt="" style="width:36px;height:36px;border-radius:999px;object-fit:cover;border:2px solid #eedcc5;flex-shrink:0;" />
-												<?php endif; ?>
-												<div>
-													<input type="text" name="name" value="<?php echo esc_attr( $r['name'] ); ?>" style="width:115px;padding:4px 8px;border:1px solid #eedcc5;border-radius:8px;" />
-													<?php if ( $streak_cnt > 0 ) : ?>
-														<div style="font-size:11px;color:#b45309;margin-top:3px;">🔥 رشته روزانه: <?php echo esc_html( $streak_cnt ); ?> روز</div>
-													<?php endif; ?>
-												</div>
-											</div>
-										</td>
-										<td>
-											<strong><?php echo esc_html( $r['user_login'] ); ?></strong>
-											<div style="font-size:11px;color:#7c5b43;"><?php echo esc_html( $r['user_email'] ); ?></div>
-										</td>
-										<td>
-											<input type="number" name="age" value="<?php echo esc_attr( $r['age'] ); ?>" min="3" max="15" style="width:60px;padding:4px 6px;border:1px solid #eedcc5;border-radius:8px;" />
-										</td>
-										<td>
-											<input type="number" name="total_stars" value="<?php echo esc_attr( $r['total_stars'] ); ?>" min="0" style="width:70px;padding:4px 6px;border:1px solid #eedcc5;border-radius:8px;" />
-										</td>
-										<td>
-											<input type="number" name="reward_points" value="<?php echo esc_attr( $r['reward_points'] ?? 0 ); ?>" min="0" style="width:78px;padding:4px 6px;border:1px solid #eedcc5;border-radius:8px;" />
-										</td>
-										<td>
-											<input type="number" name="practice_minutes" value="<?php echo esc_attr( $r['practice_minutes'] ); ?>" min="0" style="width:65px;padding:4px 6px;border:1px solid #eedcc5;border-radius:8px;" />
-										</td>
-										<td>
-											<input type="number" name="difficulty_level" value="<?php echo esc_attr( $r['difficulty_level'] ); ?>" min="1" max="5" style="width:58px;padding:4px 6px;border:1px solid #eedcc5;border-radius:8px;" />
-										</td>
-										<td>
-											<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-												<button type="submit" class="kn-btn kn-btn-primary" style="padding:6px 10px;font-size:12px;">ذخیره</button>
-												<label style="font-size:11px;color:#b91c1c;">
-													<input type="checkbox" name="reset_progress" value="1" /> ریست پیشرفت
-												</label>
-											</div>
-										</td>
-									</form>
-								</tr>
-							<?php endforeach; ?>
-						</tbody>
-					</table>
-				<?php endif; ?>
-			</div>
-		</div>
-		<?php
+		KN_Admin_Users::render_page();
 	}
 
 	/**
@@ -1951,9 +2068,12 @@ class KN_Admin {
 	 */
 	public static function render_settings_page() {
 		$s = get_option( 'kn_soroban_settings', array() );
+		self::render_shell_open(
+			'kn-soroban-settings',
+			'تنظیمات هدلس وردپرس و اپلیکیشن',
+			'پیکربندی امنیت CORS، توکن احراز هویت، پیامک تایید sms.ir، تعداد سوالات چالش روزانه و تنظیمات پیش‌فرض کودک.'
+		);
 		?>
-		<div class="kn-wrap">
-			<?php self::render_header( 'تنظیمات هدلس وردپرس و اپلیکیشن', 'پیکربندی امنیت CORS، توکن احراز هویت، تعداد سوالات چالش روزانه و تنظیمات پیش‌فرض کودک.' ); ?>
 
 			<div class="kn-card">
 				<div class="kn-card-header">
@@ -2014,7 +2134,59 @@ class KN_Admin {
 						</div>
 					</div>
 
-					<button type="submit" class="kn-btn kn-btn-green">ذخیره تنظیمات هدلس</button>
+					<hr style="border:none;border-top:2px solid #f5eadb;margin:16px 0;" />
+					<h3 style="margin-top:0;font-size:14px;">تنظیمات پیامک تایید و ورود با موبایل (sms.ir — سرویس ارسال سریع Verify)</h3>
+					<p style="font-size:12px;color:#5c3a1f;margin-top:0;line-height:1.8;">
+						برای فعال‌سازی ورود و ثبت‌نام سریع فقط با شماره موبایل و کد یک‌بارمصرف، کلید API پنل <strong>sms.ir</strong> و شناسه قالب تایید (Template ID دارای پارامتر <code>#Code#</code>) را وارد کنید. کلید API هرگز در اپلیکیشن نمایش داده نمی‌شود و فقط روی سرور نگهداری می‌گردد.
+					</p>
+
+					<?php $has_sms_key = ! empty( $s['smsir_api_key'] ); ?>
+					<div class="kn-grid-2">
+						<div class="kn-field">
+							<label>
+								کلید API پنل sms.ir (x-api-key)
+								<?php if ( $has_sms_key ) : ?>
+									<span class="kn-pill kn-pill-green" style="margin-right:6px;">ذخیره شده (امن)</span>
+								<?php else : ?>
+									<span class="kn-pill kn-pill-amber" style="margin-right:6px;">تنظیم نشده</span>
+								<?php endif; ?>
+							</label>
+							<input
+								type="password"
+								name="smsir_api_key"
+								dir="ltr"
+								autocomplete="new-password"
+								value=""
+								placeholder="<?php echo $has_sms_key ? 'برای حفظ کلید فعلی خالی بگذارید یا کلید جدید وارد کنید' : 'کلید API دریافتی از پنل sms.ir را وارد کنید'; ?>"
+							/>
+							<?php if ( $has_sms_key ) : ?>
+								<label style="display:inline-block;margin-top:6px;font-size:11px;color:#b91c1c;">
+									<input type="checkbox" name="smsir_clear_api_key" value="1" /> حذف کلید API ذخیره شده فعلی
+								</label>
+							<?php endif; ?>
+						</div>
+
+						<div class="kn-field">
+							<label style="display:block;margin-bottom:8px;">وضعیت ورود پیامکی (OTP)</label>
+							<label style="display:block;padding:10px 12px;background:#fff8ed;border:1px solid #eedcc5;border-radius:10px;">
+								<input type="checkbox" name="smsir_enabled" value="1" <?php checked( ! empty( $s['smsir_enabled'] ) ); ?> />
+								فعال‌سازی ورود و ثبت‌نام با پیامک کد یک‌بارمصرف sms.ir
+							</label>
+						</div>
+					</div>
+
+					<div class="kn-grid-2">
+						<div class="kn-field">
+							<label>شناسه قالب ارسال سریع (Template ID در sms.ir)</label>
+							<input type="number" name="smsir_template_id" dir="ltr" value="<?php echo esc_attr( ! empty( $s['smsir_template_id'] ) ? $s['smsir_template_id'] : '' ); ?>" placeholder="مثلاً 123456" min="1" />
+						</div>
+						<div class="kn-field">
+							<label>نام متغیر کد در قالب sms.ir (پیش‌فرض: Code)</label>
+							<input type="text" name="smsir_param_name" dir="ltr" value="<?php echo esc_attr( ! empty( $s['smsir_param_name'] ) ? $s['smsir_param_name'] : 'Code' ); ?>" placeholder="Code" />
+						</div>
+					</div>
+
+					<button type="submit" class="kn-btn kn-btn-green">ذخیره تنظیمات هدلس و پیامک</button>
 				</form>
 			</div>
 
@@ -2029,8 +2201,8 @@ class KN_Admin {
 					<button type="submit" class="kn-btn kn-btn-amber">بررسی و ایجاد داده‌های اولیه</button>
 				</form>
 			</div>
-		</div>
 		<?php
+		self::render_shell_close();
 	}
 
 	/**
@@ -2056,9 +2228,12 @@ class KN_Admin {
 		$sel_cats       = array_map( 'intval', (array) ( $store['selected_categories'] ?? array() ) );
 		$sel_prods      = array_map( 'intval', (array) ( $store['selected_products'] ?? array() ) );
 		$feat_prods     = array_map( 'intval', (array) ( $store['featured_products'] ?? array() ) );
+		self::render_shell_open(
+			'kn-soroban-shop',
+			'فروشگاه اپلیکیشن و تایید فیش‌های واریزی',
+			'انتخاب دسته‌ها و محصولات نمایش داده‌شده در فروشگاه اپلیکیشن کودک نابغه + بررسی و تایید یک‌کلیکی فیش‌های بانکی.'
+		);
 		?>
-		<div class="kn-wrap">
-			<?php self::render_header( 'فروشگاه اپلیکیشن و تایید فیش‌های واریزی', 'انتخاب دسته‌ها و محصولات نمایش داده‌شده در فروشگاه اپلیکیشن کودک نابغه + بررسی و تایید یک‌کلیکی فیش‌های بانکی.' ); ?>
 
 			<div class="kn-card">
 				<div class="kn-card-header">
@@ -2191,8 +2366,8 @@ class KN_Admin {
 					<button type="submit" class="kn-btn kn-btn-primary" style="margin-top:10px;">ذخیره تنظیمات فروشگاه اپلیکیشن</button>
 				</form>
 			</div>
-		</div>
 		<?php
+		self::render_shell_close();
 	}
 
 	/**
@@ -2203,9 +2378,12 @@ class KN_Admin {
 		$tickets       = KN_DB::get_all_tickets_admin( $status_filter );
 		$view_id       = absint( $_GET['view_ticket'] ?? 0 );
 		$active_ticket = $view_id > 0 ? KN_DB::get_ticket_detail( $view_id, 0, true ) : null;
+		self::render_shell_open(
+			'kn-soroban-tickets',
+			'تیکت‌ها و پشتیبانی کاربران',
+			'مشاهده پیام‌ها و پیوست‌های ارسالی کاربران از اپلیکیشن و ارسال پاسخ مستقیم با تاریخ شمسی.'
+		);
 		?>
-		<div class="kn-wrap">
-			<?php self::render_header( 'تیکت‌ها و پشتیبانی کاربران', 'مشاهده پیام‌ها و پیوست‌های ارسالی کاربران از اپلیکیشن و ارسال پاسخ مستقیم.' ); ?>
 
 			<div class="kn-card" style="padding:14px 20px;">
 				<form method="get" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
@@ -2296,7 +2474,7 @@ class KN_Admin {
 											<?php echo esc_html( $sum['statusLabel'] ); ?>
 										</span>
 									</td>
-									<td><?php echo esc_html( $tk['updated_at'] ); ?></td>
+									<td><?php echo esc_html( KN_Jalali::format( $tk['updated_at'], true, true ) ); ?></td>
 									<td>
 										<a class="kn-btn kn-btn-primary" style="padding:5px 10px;font-size:12px;" href="<?php echo esc_url( admin_url( 'admin.php?page=kn-soroban-tickets&view_ticket=' . $tk['id'] ) ); ?>">باز کردن و پاسخ</a>
 									</td>
@@ -2306,8 +2484,8 @@ class KN_Admin {
 					</table>
 				<?php endif; ?>
 			</div>
-		</div>
 		<?php
+		self::render_shell_close();
 	}
 
 	/**
@@ -2352,9 +2530,12 @@ class KN_Admin {
 			array( 'key' => 'welcome', 'phrase' => 'سلام قهرمان! آماده سفر روی چرتکه هستی؟' ),
 			array( 'key' => 'level_complete', 'phrase' => 'هورا! این مرحله را با موفقیت کامل کردی!' ),
 		);
+		self::render_shell_open(
+			'kn-soroban-audio',
+			'مدیریت صدا، افکت‌های صوتی و گویندگی',
+			'سیستم صوتی هیبرید: اگر فایل صوتی را اینجا آپلود کنید، با اولویت اول از وردپرس پخش می‌شود؛ و در غیر این صورت فایل ثابت اپلیکیشن یا سنتز هوشمند اجرا می‌گردد.'
+		);
 		?>
-		<div class="kn-wrap">
-			<?php self::render_header( 'مدیریت صدا، افکت‌های صوتی و گویندگی', 'سیستم صوتی هیبرید: اگر فایل صوتی را اینجا آپلود کنید، با اولویت اول از وردپرس پخش می‌شود؛ و در غیر این صورت فایل ثابت اپلیکیشن یا سنتز هوشمند اجرا می‌گردد.' ); ?>
 
 			<form method="post">
 				<?php wp_nonce_field( 'kn_save_audio_settings' ); ?>
@@ -2481,8 +2662,8 @@ class KN_Admin {
 
 				<button type="submit" class="kn-btn kn-btn-primary" style="font-size:14px;padding:12px 24px;">ذخیره کامل تنظیمات صدا و گویندگی</button>
 			</form>
-		</div>
 		<?php
+		self::render_shell_close();
 	}
 }
 

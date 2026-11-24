@@ -20,12 +20,15 @@ import type {
   ChildProfile,
   DigitDisplayMode,
   LessonDefinition,
+  PromotionalBanner,
+  ScreenId,
   TermDefinition,
   WordPressUser,
 } from '../../types/app';
 import { formatNumber } from '../../lib/numbers';
 import { getTermCoverImage } from '../../data/lessons';
 import { AudioButton } from '../../components/AudioButton';
+import { BannerSlot } from '../../components/BannerSlot';
 import { BuyCoffeeButton } from '../../components/BuyCoffeeButton';
 import { SaleCountdown } from '../../components/SaleCountdown';
 import { AdventureMap } from './AdventureMap';
@@ -48,11 +51,14 @@ interface LessonMapProps {
   onRefreshCurriculum?: () => void;
   onTermUnlocked?: (termDbId?: number) => void;
   onOpenAuth: () => void;
+  onUpdateUser?: (user: WordPressUser) => void;
   onSelectLesson: (lesson: LessonDefinition) => void;
   onOpenPractice: () => void;
   onOpenGames: () => void;
   onOpenSimulator: () => void;
   onBack: () => void;
+  banners?: PromotionalBanner[];
+  onNavigateScreen?: (screen: ScreenId) => void;
   returnNotice?: { type: 'success' | 'info' | 'error'; text: string } | null;
   onDismissReturnNotice?: () => void;
 }
@@ -73,11 +79,14 @@ export const LessonMap: React.FC<LessonMapProps> = ({
   onRefreshCurriculum,
   onTermUnlocked,
   onOpenAuth,
+  onUpdateUser,
   onSelectLesson,
   onOpenPractice,
   onOpenGames,
   onOpenSimulator,
   onBack,
+  banners = [],
+  onNavigateScreen,
   returnNotice = null,
   onDismissReturnNotice,
 }) => {
@@ -236,6 +245,16 @@ export const LessonMap: React.FC<LessonMapProps> = ({
         )}
 
         {/* Term Progress Dashboard Card */}
+        {banners.length > 0 && onNavigateScreen && (
+          <BannerSlot
+            banners={banners}
+            placement="map_top"
+            screen="map"
+            wpUrl={wpUrl}
+            onNavigateScreen={onNavigateScreen}
+          />
+        )}
+
         {activeTerm && (
           <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EFE0CE] dark:border-slate-800 shadow-[0_10px_26px_-8px_rgba(170,104,40,0.16)] p-4 space-y-3">
             <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -478,6 +497,7 @@ export const LessonMap: React.FC<LessonMapProps> = ({
           digitMode={digitMode}
           onClose={() => setPurchasingTerm(null)}
           onOpenAuth={onOpenAuth}
+          onUpdateUser={onUpdateUser}
           onUnlocked={(termDbId) => {
             onTermUnlocked?.(termDbId);
           }}

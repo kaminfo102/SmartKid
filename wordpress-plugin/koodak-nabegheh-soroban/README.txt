@@ -4,23 +4,29 @@ Tags: headless, soroban, abacus, education, woocommerce, rest-api, ticketing
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.7.0
+Stable tag: 2.9.0
 
 پلاگین اختصاصی هدلس وردپرس + ووکامرس برای پلتفرم تجاری آموزش چرتکه کودکان «کودک نابغه».
 
-== امکانات نسخه 2.7.0 ==
-1. صفحه اختصاصی و بدون حواس‌پرتی پرداخت ووکامرس (Checkout / Order-Pay / Order-Received): حذف هدر، فوتر، منوها و سایدبارهای قالب وردپرس با طراحی مدرن، راست‌چین و هم‌رنگ اپلیکیشن کودک نابغه.
-2. بازگشت خودکار و هوشمند به اپلیکیشن پس از پرداخت یا ثبت سفارش (Auto Return Flow): انتقال خودکار یا دکمه بازگشت فوری به همان بخش مبدا (نقشه دوره‌ها، فروشگاه یا تاریخچه سفارش‌ها) همراه با فعال‌سازی فوری ترم و به‌روزرسانی خودکار وضعیت سفارش‌ها.
-3. قالب‌های اختصاصی HTML ایمیل‌های ووکامرس و وردپرس: طراحی گرم و حرفه‌ای راست‌چین با نشان وضعیت فارسی سفارش، لینک تصویر رسید بانکی و دکمه ورود به اپلیکیشن.
-4. تبدیل خودکار ارقام فارسی و عربی به لاتین و اصلاح ذخیره کد پستی ۱۰ رقمی در تمام فرم‌ها و تسویه‌حساب.
-5. فروشگاه کامل درون‌برنامه‌ای، پرداخت کارت به کارت با فشرده‌سازی خودکار فیش بانکی زیر ۱۰۰ کیلوبایت، تیکتینگ پشتیبانی و ورود خودکار SSO Handoff.
+== امکانات نسخه 2.9.0 ==
+1. رابط کاربری مدیریتی یکپارچه، سبک و بهینه (Persian RTL Admin Theme) با حذف کوئری‌های تکراری (N+1) و تاریخ‌نگار اصیل شمسی + دیت‌پیکر جلالی در تمام بخش‌ها.
+2. بخش گزارشات و تحلیل پیشرفته: آمار بازدید و نشست‌های تفکیکی وب‌اپلیکیشن در برابر اپلیکیشن موبایل (APK)، نمودار روند روزانه، تفکیک سیستم‌عامل، گزارش فروش و نرخ کلیک (CTR) بنرها و دیالوگ‌ها.
+3. مدیریت بنرهای تبلیغاتی با انتخاب جایگاه نمایش، تصویر رسانه، پلتفرم هدف، زمان‌بندی شمسی و شمارشگر بازدید و کلیک.
+4. سیستم دیالوگ‌ها و پاپ‌آپ‌های هوشمند زمان‌بندی‌شده: کنترل تاریخ/ساعت شروع و پایان، بازه ساعتی روزانه، روزهای هفته، تاخیر، بسته شدن خودکار با شمارشگر، تناوب نمایش، اندازه، موقعیت، تم ظاهری و هدف‌گذاری صفحه/مخاطب.
+5. مدیریت کامل سفارشات ووکامرس (سازگار با HPOS، تغییر وضعیت، کد رهگیری، تایید سریع کارت‌به‌کارت و خروجی CSV اکسل فارسی) و مدیریت کامل محصولات ووکامرس (قیمت، تخفیف زمان‌دار شمسی، موجودی و دسته‌بندی).
+6. باشگاه کامل کاربران (CRM) همراه با پروفایل‌های کودک، سفارشات، اعطا/لغو دسترسی ترم، گزارش ورود/خروج وب و موبایل و مدیریت نشست‌های فعال.
 
 == مسیرهای REST API ==
 - GET  /wp-json/koodak-nabegheh/v1/health
 - GET  /wp-json/koodak-nabegheh/v1/curriculum
+- POST /wp-json/koodak-nabegheh/v1/analytics/visit
+- GET  /wp-json/koodak-nabegheh/v1/marketing/active
+- POST /wp-json/koodak-nabegheh/v1/marketing/track
 - POST /wp-json/koodak-nabegheh/v1/terms/{id}/checkout
 - POST /wp-json/koodak-nabegheh/v1/terms/{id}/verify-purchase
 - GET  /wp-json/koodak-nabegheh/v1/questions
+- POST /wp-json/koodak-nabegheh/v1/auth/otp/send
+- POST /wp-json/koodak-nabegheh/v1/auth/otp/verify
 - POST /wp-json/koodak-nabegheh/v1/auth/register
 - POST /wp-json/koodak-nabegheh/v1/auth/login
 - POST /wp-json/koodak-nabegheh/v1/auth/logout
@@ -36,4 +42,5 @@ Stable tag: 2.7.0
 - POST /wp-json/koodak-nabegheh/v1/tickets/{id}/reply
 - GET/POST /wp-json/koodak-nabegheh/v1/profiles
 - PUT/DELETE /wp-json/koodak-nabegheh/v1/profiles/{client_id}
+- POST /wp-json/koodak-nabegheh/v1/profiles/{client_id}/avatar
 - GET/PUT /wp-json/koodak-nabegheh/v1/settings

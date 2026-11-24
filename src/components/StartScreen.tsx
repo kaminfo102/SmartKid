@@ -18,6 +18,8 @@ import type {
   ChildProfile,
   DigitDisplayMode,
   LessonDefinition,
+  PromotionalBanner,
+  ScreenId,
   TermDefinition,
   WordPressUser,
 } from '../types/app';
@@ -28,6 +30,7 @@ import { KidIconTile } from './KidIconTile';
 import { AbacusAdventureIllustration } from './KidIllustrations';
 import { AudioButton } from './AudioButton';
 import { DailyBonusCard } from './DailyBonusCard';
+import { BannerSlot } from './BannerSlot';
 import { audioEngine } from '../lib/audioEngine';
 
 interface StartScreenProps {
@@ -40,10 +43,14 @@ interface StartScreenProps {
   hasProgress: boolean;
   wpUser?: WordPressUser | null;
   wpConnected?: boolean;
+  banners?: PromotionalBanner[];
+  wpUrl?: string;
+  onNavigateScreen?: (screen: ScreenId) => void;
   onContinueMap: () => void;
   onOpenPractice: () => void;
   onOpenGames: () => void;
   onOpenSimulator: () => void;
+  onOpenFreeAbacus: () => void;
   onOpenShop: () => void;
   onOpenTickets?: () => void;
   onOpenProfiles: () => void;
@@ -62,10 +69,14 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   reducedMotion,
   hasProgress,
   wpUser,
+  banners = [],
+  wpUrl = '',
+  onNavigateScreen,
   onContinueMap,
   onOpenPractice,
   onOpenGames,
   onOpenSimulator,
+  onOpenFreeAbacus,
   onOpenShop,
   onOpenProfiles,
   onOpenProfileDetails,
@@ -285,7 +296,17 @@ export const StartScreen: React.FC<StartScreenProps> = ({
           </button>
         </motion.section>
 
-        {/* Big 2x2 Kid-Friendly Activity Tiles */}
+        {banners.length > 0 && onNavigateScreen && (
+          <BannerSlot
+            banners={banners}
+            placement="home_top"
+            screen="start"
+            wpUrl={wpUrl}
+            onNavigateScreen={onNavigateScreen}
+          />
+        )}
+
+        {/* Big 2x2 Kid-Friendly Activity Tiles + Dedicated Soroban Tile */}
         <section aria-label="فعالیت‌های یادگیری و بازی" className="grid grid-cols-2 gap-3">
           {activities.map((item) => (
             <button
@@ -308,6 +329,53 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               </div>
             </button>
           ))}
+
+          <button
+            type="button"
+            onClick={onOpenFreeAbacus}
+            aria-label="باز کردن چرتکه تمام‌صفحه سه بعدی"
+            className="col-span-2 rounded-3xl bg-gradient-to-l from-[#1C2522] to-[#2B3934] border-2 border-[#D9B54C]/60 border-b-4 border-b-[#101614] hover:border-[#F0CE6B] p-4 flex items-center justify-between gap-3 text-right shadow-[0_10px_22px_-8px_rgba(20,28,25,0.45)] active:translate-y-0.5 transition-all"
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-16 h-14 rounded-2xl bg-[#111514] border border-[#D9B54C]/60 flex items-center justify-center shrink-0 shadow-inner">
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 64 40"
+                  className="w-12 h-8"
+                >
+                  <rect x="3" y="4" width="58" height="32" rx="3" fill="#181A1F" stroke="#D9B54C" strokeWidth="2.4" />
+                  <line x1="5" y1="15" x2="59" y2="15" stroke="#47505A" strokeWidth="2.4" />
+                  <line x1="15" y1="6" x2="15" y2="34" stroke="#30363E" strokeWidth="1.5" />
+                  <line x1="26" y1="6" x2="26" y2="34" stroke="#30363E" strokeWidth="1.5" />
+                  <line x1="38" y1="6" x2="38" y2="34" stroke="#30363E" strokeWidth="1.5" />
+                  <line x1="49" y1="6" x2="49" y2="34" stroke="#30363E" strokeWidth="1.5" />
+                  <ellipse cx="15" cy="10" rx="4" ry="2.4" fill="#F4F6F9" />
+                  <ellipse cx="26" cy="10" rx="4" ry="2.4" fill="#F4F6F9" />
+                  <ellipse cx="38" cy="10" rx="4" ry="2.4" fill="#F4F6F9" />
+                  <ellipse cx="49" cy="10" rx="4" ry="2.4" fill="#F4F6F9" />
+                  <ellipse cx="15" cy="22" rx="4" ry="2.4" fill="#F4F6F9" />
+                  <ellipse cx="26" cy="22" rx="4" ry="2.4" fill="#EE5267" />
+                  <ellipse cx="38" cy="22" rx="4" ry="2.4" fill="#F4F6F9" />
+                  <ellipse cx="49" cy="22" rx="4" ry="2.4" fill="#EE5267" />
+                  <ellipse cx="15" cy="29" rx="4" ry="2.4" fill="#F4F6F9" />
+                  <ellipse cx="26" cy="29" rx="4" ry="2.4" fill="#F4F6F9" />
+                  <ellipse cx="38" cy="29" rx="4" ry="2.4" fill="#F4F6F9" />
+                  <ellipse cx="49" cy="29" rx="4" ry="2.4" fill="#F4F6F9" />
+                </svg>
+              </div>
+              <div className="min-w-0 space-y-0.5">
+                <div className="font-extrabold text-base sm:text-lg text-amber-300">
+                  چرتکه
+                </div>
+                <div className="text-xs font-bold text-slate-200/85 truncate">
+                  چرتکه حرفه‌ای تمام‌صفحه با حرکت افقی و لمس مهره‌ها
+                </div>
+              </div>
+            </div>
+            <span className="px-3 py-1.5 rounded-xl bg-[#D9B54C] text-[#1A160B] font-extrabold text-xs shrink-0">
+              باز کردن
+            </span>
+          </button>
         </section>
 
         {/* Compact Daily Gift Bar */}
@@ -357,6 +425,16 @@ export const StartScreen: React.FC<StartScreenProps> = ({
             </div>
           </button>
         </section>
+
+        {banners.length > 0 && onNavigateScreen && (
+          <BannerSlot
+            banners={banners}
+            placement="home_bottom"
+            screen="start"
+            wpUrl={wpUrl}
+            onNavigateScreen={onNavigateScreen}
+          />
+        )}
       </main>
     </div>
   );

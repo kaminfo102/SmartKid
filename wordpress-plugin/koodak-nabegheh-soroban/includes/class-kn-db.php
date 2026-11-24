@@ -50,6 +50,31 @@ class KN_DB {
 		return $wpdb->prefix . 'kn_ticket_messages';
 	}
 
+	public static function table_otp_codes() {
+		global $wpdb;
+		return $wpdb->prefix . 'kn_otp_codes';
+	}
+
+	public static function table_analytics_events() {
+		global $wpdb;
+		return $wpdb->prefix . 'kn_analytics_events';
+	}
+
+	public static function table_user_logs() {
+		global $wpdb;
+		return $wpdb->prefix . 'kn_user_logs';
+	}
+
+	public static function table_banners() {
+		global $wpdb;
+		return $wpdb->prefix . 'kn_banners';
+	}
+
+	public static function table_dialogs() {
+		global $wpdb;
+		return $wpdb->prefix . 'kn_dialogs';
+	}
+
 	/**
 	 * Create or upgrade custom database tables via dbDelta.
 	 */
@@ -66,8 +91,13 @@ class KN_DB {
 		$t_profiles        = self::table_profiles();
 		$t_tokens          = self::table_tokens();
 		$t_entitlements    = self::table_entitlements();
-		$t_tickets         = self::table_tickets();
-		$t_ticket_messages = self::table_ticket_messages();
+		$t_tickets          = self::table_tickets();
+		$t_ticket_messages  = self::table_ticket_messages();
+		$t_otp_codes        = self::table_otp_codes();
+		$t_analytics        = self::table_analytics_events();
+		$t_user_logs        = self::table_user_logs();
+		$t_banners          = self::table_banners();
+		$t_dialogs          = self::table_dialogs();
 
 		$sql_terms = "CREATE TABLE {$t_terms} (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -237,6 +267,126 @@ class KN_DB {
 			KEY ticket_id (ticket_id)
 		) {$charset_collate};";
 
+		$sql_otp_codes = "CREATE TABLE {$t_otp_codes} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			mobile varchar(20) NOT NULL,
+			code_hash char(64) NOT NULL,
+			attempts tinyint(3) unsigned NOT NULL DEFAULT 0,
+			max_attempts tinyint(3) unsigned NOT NULL DEFAULT 5,
+			consumed tinyint(1) NOT NULL DEFAULT 0,
+			ip_hash char(64) NOT NULL DEFAULT '',
+			expires_at datetime NOT NULL,
+			created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id),
+			KEY mobile_consumed (mobile, consumed),
+			KEY ip_created (ip_hash, created_at)
+		) {$charset_collate};";
+
+		$sql_analytics = "CREATE TABLE {$t_analytics} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			event_type varchar(40) NOT NULL,
+			target_id bigint(20) unsigned NOT NULL DEFAULT 0,
+			platform varchar(20) NOT NULL DEFAULT 'web',
+			device_os varchar(30) NOT NULL DEFAULT '',
+			screen varchar(40) NOT NULL DEFAULT '',
+			user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+			session_key varchar(64) NOT NULL DEFAULT '',
+			event_date date NOT NULL,
+			created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id),
+			KEY event_type_date (event_type, event_date),
+			KEY platform_date (platform, event_date),
+			KEY target_event (target_id, event_type),
+			KEY session_event (session_key, event_type, target_id)
+		) {$charset_collate};";
+
+		$sql_user_logs = "CREATE TABLE {$t_user_logs} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			user_id bigint(20) unsigned NOT NULL,
+			event_type varchar(40) NOT NULL,
+			platform varchar(20) NOT NULL DEFAULT 'web',
+			device_label varchar(140) NOT NULL DEFAULT '',
+			ip_address varchar(64) NOT NULL DEFAULT '',
+			user_agent varchar(255) NOT NULL DEFAULT '',
+			created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id),
+			KEY user_created (user_id, created_at),
+			KEY event_created (event_type, created_at)
+		) {$charset_collate};";
+
+		$sql_banners = "CREATE TABLE {$t_banners} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			title varchar(255) NOT NULL,
+			subtitle varchar(500) NOT NULL DEFAULT '',
+			badge_text varchar(80) NOT NULL DEFAULT '',
+			image_url varchar(600) NOT NULL DEFAULT '',
+			cta_text varchar(80) NOT NULL DEFAULT '',
+			action_type varchar(30) NOT NULL DEFAULT 'none',
+			action_target varchar(500) NOT NULL DEFAULT '',
+			placement varchar(40) NOT NULL DEFAULT 'home_top',
+			bg_color varchar(20) NOT NULL DEFAULT '#EFF6FF',
+			text_color varchar(20) NOT NULL DEFAULT '#0F172A',
+			target_platform varchar(20) NOT NULL DEFAULT 'all',
+			start_at datetime DEFAULT NULL,
+			end_at datetime DEFAULT NULL,
+			sort_order int(11) NOT NULL DEFAULT 1,
+			is_active tinyint(1) NOT NULL DEFAULT 1,
+			impressions_web bigint(20) unsigned NOT NULL DEFAULT 0,
+			impressions_mobile bigint(20) unsigned NOT NULL DEFAULT 0,
+			clicks_web bigint(20) unsigned NOT NULL DEFAULT 0,
+			clicks_mobile bigint(20) unsigned NOT NULL DEFAULT 0,
+			created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id),
+			KEY placement_active (placement, is_active),
+			KEY sort_order (sort_order)
+		) {$charset_collate};";
+
+		$sql_dialogs = "CREATE TABLE {$t_dialogs} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			title varchar(255) NOT NULL,
+			body text NOT NULL,
+			badge_text varchar(80) NOT NULL DEFAULT '',
+			image_url varchar(600) NOT NULL DEFAULT '',
+			cta_text varchar(80) NOT NULL DEFAULT 'متوجه شدم',
+			action_type varchar(30) NOT NULL DEFAULT 'dismiss',
+			action_target varchar(500) NOT NULL DEFAULT '',
+			secondary_text varchar(80) NOT NULL DEFAULT '',
+			start_at datetime DEFAULT NULL,
+			end_at datetime DEFAULT NULL,
+			daily_start_time varchar(8) NOT NULL DEFAULT '',
+			daily_end_time varchar(8) NOT NULL DEFAULT '',
+			weekdays_mask varchar(30) NOT NULL DEFAULT '0,1,2,3,4,5,6',
+			delay_seconds int(11) NOT NULL DEFAULT 0,
+			auto_close_seconds int(11) NOT NULL DEFAULT 0,
+			show_countdown tinyint(1) NOT NULL DEFAULT 1,
+			allow_user_close tinyint(1) NOT NULL DEFAULT 1,
+			close_on_backdrop tinyint(1) NOT NULL DEFAULT 1,
+			frequency_mode varchar(30) NOT NULL DEFAULT 'once_per_day',
+			frequency_hours int(11) NOT NULL DEFAULT 24,
+			max_impressions_user int(11) NOT NULL DEFAULT 0,
+			dialog_size varchar(20) NOT NULL DEFAULT 'md',
+			position varchar(20) NOT NULL DEFAULT 'center',
+			theme_style varchar(20) NOT NULL DEFAULT 'brand',
+			overlay_blur tinyint(1) NOT NULL DEFAULT 1,
+			animation varchar(20) NOT NULL DEFAULT 'scale',
+			target_platform varchar(20) NOT NULL DEFAULT 'all',
+			target_audience varchar(30) NOT NULL DEFAULT 'all',
+			target_screens varchar(120) NOT NULL DEFAULT 'all',
+			priority int(11) NOT NULL DEFAULT 10,
+			is_active tinyint(1) NOT NULL DEFAULT 1,
+			impressions_web bigint(20) unsigned NOT NULL DEFAULT 0,
+			impressions_mobile bigint(20) unsigned NOT NULL DEFAULT 0,
+			clicks_web bigint(20) unsigned NOT NULL DEFAULT 0,
+			clicks_mobile bigint(20) unsigned NOT NULL DEFAULT 0,
+			closes_count bigint(20) unsigned NOT NULL DEFAULT 0,
+			autoclose_count bigint(20) unsigned NOT NULL DEFAULT 0,
+			created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id),
+			KEY active_priority (is_active, priority)
+		) {$charset_collate};";
+
 		dbDelta( $sql_terms );
 		dbDelta( $sql_stages );
 		dbDelta( $sql_steps );
@@ -246,6 +396,11 @@ class KN_DB {
 		dbDelta( $sql_entitlements );
 		dbDelta( $sql_tickets );
 		dbDelta( $sql_ticket_messages );
+		dbDelta( $sql_otp_codes );
+		dbDelta( $sql_analytics );
+		dbDelta( $sql_user_logs );
+		dbDelta( $sql_banners );
+		dbDelta( $sql_dialogs );
 	}
 
 	/**
@@ -527,15 +682,22 @@ class KN_DB {
 		$where_stages = $only_active ? 'WHERE is_active = 1' : '';
 		$stages       = $wpdb->get_results( "SELECT * FROM {$t_stages} {$where_stages} ORDER BY stage_number ASC, id ASC", ARRAY_A );
 
+		// Batch-fetch all steps in a single query to avoid N+1 database roundtrips.
+		$all_steps_raw = $wpdb->get_results( "SELECT * FROM {$t_steps} ORDER BY stage_id ASC, step_order ASC, id ASC", ARRAY_A );
+		$steps_by_stage = array();
+		if ( is_array( $all_steps_raw ) ) {
+			foreach ( $all_steps_raw as $sp ) {
+				$sid = (int) $sp['stage_id'];
+				if ( ! isset( $steps_by_stage[ $sid ] ) ) {
+					$steps_by_stage[ $sid ] = array();
+				}
+				$steps_by_stage[ $sid ][] = $sp;
+			}
+		}
+
 		$stages_by_term = array();
 		foreach ( $stages as $st ) {
-			$steps_raw = $wpdb->get_results(
-				$wpdb->prepare(
-					"SELECT * FROM {$t_steps} WHERE stage_id = %d ORDER BY step_order ASC, id ASC",
-					$st['id']
-				),
-				ARRAY_A
-			);
+			$steps_raw = $steps_by_stage[ (int) $st['id'] ] ?? array();
 
 			$steps = array();
 			foreach ( $steps_raw as $sp ) {
@@ -758,6 +920,8 @@ class KN_DB {
 			'closed'   => 'بسته شده',
 		);
 		$status = isset( $row['status'] ) ? $row['status'] : 'open';
+		$c_at   = class_exists( 'KN_Jalali' ) ? KN_Jalali::format( $row['created_at'], true, true ) : $row['created_at'];
+		$u_at   = class_exists( 'KN_Jalali' ) ? KN_Jalali::format( $row['updated_at'], true, true ) : $row['updated_at'];
 		return array(
 			'id'           => (int) $row['id'],
 			'userId'       => (int) $row['user_id'],
@@ -767,8 +931,8 @@ class KN_DB {
 			'statusLabel'  => $status_labels[ $status ] ?? $status,
 			'priority'     => $row['priority'],
 			'messageCount' => isset( $row['message_count'] ) ? (int) $row['message_count'] : 0,
-			'createdAt'    => $row['created_at'],
-			'updatedAt'    => $row['updated_at'],
+			'createdAt'    => $c_at,
+			'updatedAt'    => $u_at,
 		);
 	}
 
@@ -803,6 +967,7 @@ class KN_DB {
 		$formatted_msgs = array();
 		if ( is_array( $msgs ) ) {
 			foreach ( $msgs as $m ) {
+				$m_time           = class_exists( 'KN_Jalali' ) ? KN_Jalali::format( $m['created_at'], true, true ) : $m['created_at'];
 				$formatted_msgs[] = array(
 					'id'            => (int) $m['id'],
 					'ticketId'      => (int) $m['ticket_id'],
@@ -811,15 +976,77 @@ class KN_DB {
 					'isAdmin'       => (bool) $m['is_admin'],
 					'message'       => $m['message'],
 					'attachmentUrl' => $m['attachment_url'],
-					'createdAt'     => $m['created_at'],
+					'createdAt'     => $m_time,
 				);
 			}
 		}
 
-		$summary             = self::format_ticket_summary( $row );
-		$summary['messages'] = $formatted_msgs;
+		$summary                 = self::format_ticket_summary( $row );
+		$summary['messages']     = $formatted_msgs;
 		$summary['messageCount'] = count( $formatted_msgs );
 		return $summary;
+	}
+
+	/**
+	 * Log user authentication & visit events for User CRM Reports.
+	 */
+	public static function log_user_event( $user_id, $event_type, $platform = 'web', $device_label = '' ) {
+		global $wpdb;
+		$user_id = absint( $user_id );
+		if ( $user_id <= 0 ) {
+			return false;
+		}
+		$allowed_events = array( 'login_password', 'login_otp', 'register', 'logout', 'session_restore', 'app_visit' );
+		$safe_event     = in_array( $event_type, $allowed_events, true ) ? $event_type : 'app_visit';
+		$safe_platform  = ( $platform === 'mobile_app' ) ? 'mobile_app' : 'web';
+
+		$ip = '';
+		if ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
+			$parts = explode( ',', sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) );
+			$ip    = trim( (string) $parts[0] );
+		} elseif ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
+			$ip = sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) );
+		}
+		$ua = ! empty( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
+
+		return false !== $wpdb->insert(
+			self::table_user_logs(),
+			array(
+				'user_id'      => $user_id,
+				'event_type'   => $safe_event,
+				'platform'     => $safe_platform,
+				'device_label' => sanitize_text_field( substr( (string) $device_label, 0, 140 ) ),
+				'ip_address'   => sanitize_text_field( substr( $ip, 0, 64 ) ),
+				'user_agent'   => substr( $ua, 0, 250 ),
+				'created_at'   => current_time( 'mysql' ),
+			),
+			array( '%d', '%s', '%s', '%s', '%s', '%s', '%s' )
+		);
+	}
+
+	public static function get_user_logs( $user_id = 0, $limit = 100 ) {
+		global $wpdb;
+		$t_logs = self::table_user_logs();
+		$limit  = max( 1, min( 500, absint( $limit ) ) );
+		if ( $user_id > 0 ) {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT * FROM {$t_logs} WHERE user_id = %d ORDER BY id DESC LIMIT %d",
+					absint( $user_id ),
+					$limit
+				),
+				ARRAY_A
+			);
+		} else {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT l.*, u.user_login, u.display_name FROM {$t_logs} l LEFT JOIN {$wpdb->users} u ON l.user_id = u.ID ORDER BY l.id DESC LIMIT %d",
+					$limit
+				),
+				ARRAY_A
+			);
+		}
+		return is_array( $rows ) ? $rows : array();
 	}
 
 	public static function add_ticket_reply( $ticket_id, $sender_id, $is_admin, $message, $attachment_url = '', $new_status = '' ) {

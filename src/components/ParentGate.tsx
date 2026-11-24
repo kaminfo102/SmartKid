@@ -3,6 +3,7 @@ import { Lock, ArrowRight } from 'lucide-react';
 import { toEnglishDigits, toPersianDigits } from '../lib/numbers';
 import { KidIconTile } from './KidIconTile';
 import { AbacusAdventureIllustration } from './KidIllustrations';
+import { LatinDigitInput } from './LatinDigitInput';
 
 interface ParentGateProps {
   onUnlock: () => void;
@@ -33,7 +34,12 @@ export const ParentGate: React.FC<ParentGateProps> = ({ onUnlock, onCancel }) =>
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const numeric = Number(toEnglishDigits(answerInput.trim()));
+    const cleaned = toEnglishDigits(answerInput.trim()).replace(/\D/g, '');
+    if (!cleaned) {
+      setHint('لطفاً پاسخ را وارد کنید یا دکمه پایین را ۲ ثانیه نگه دارید.');
+      return;
+    }
+    const numeric = Number(cleaned);
     if (numeric === challenge.answer) {
       onUnlock();
     } else {
@@ -91,16 +97,18 @@ export const ParentGate: React.FC<ParentGateProps> = ({ onUnlock, onCancel }) =>
           برای جلوگیری از ورود تصادفی کودک به حساب و تنظیمات، یکی از روش‌های زیر را انجام دهید.
         </p>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-3">
+        <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-3">
           <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 text-center">
             حاصل {toPersianDigits(challenge.a)} × {toPersianDigits(challenge.b)} چند می‌شود؟
           </label>
-          <input
+          <LatinDigitInput
             type="text"
             inputMode="numeric"
+            dir="ltr"
+            transformMode="digits-only"
             value={answerInput}
-            onChange={(e) => {
-              setAnswerInput(toEnglishDigits(e.target.value).replace(/\D/g, ''));
+            onValueChange={(val) => {
+              setAnswerInput(val);
               setHint('');
             }}
             placeholder="پاسخ را بنویسید..."

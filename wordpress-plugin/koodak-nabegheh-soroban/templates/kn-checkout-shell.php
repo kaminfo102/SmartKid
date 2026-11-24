@@ -657,9 +657,13 @@ if ( function_exists( 'wp_body_open' ) ) {
 
 	<script id="kn-checkout-digit-normalizer">
 	(function() {
-		var faMap = { '۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9','٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9' };
+		var isComposing = false;
 		function toLatinDigits(str) {
-			return String(str || '').replace(/[۰-۹٠-٩]/g, function(ch) { return faMap[ch] || ch; });
+			return String(str || '')
+				.replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, '')
+				.replace(/[\u06F0-\u06F9]/g, function(ch) { return String(ch.charCodeAt(0) - 0x06F0); })
+				.replace(/[\u0660-\u0669]/g, function(ch) { return String(ch.charCodeAt(0) - 0x0660); })
+				.replace(/[\uFF10-\uFF19]/g, function(ch) { return String(ch.charCodeAt(0) - 0xFF10); });
 		}
 		function shouldNormalizeInput(el) {
 			if (!el || el.tagName !== 'INPUT') return false;
@@ -669,8 +673,7 @@ if ( function_exists( 'wp_body_open' ) ) {
 			var id = (el.id || '').toLowerCase();
 			return /phone|mobile|postcode|zip|code|card|otp|email/.test(name + ' ' + id);
 		}
-		document.addEventListener('input', function(ev) {
-			var target = ev.target;
+		function syncElementValue(target) {
 			if (!shouldNormalizeInput(target)) return;
 			var converted = toLatinDigits(target.value);
 			if (converted !== target.value) {
@@ -680,6 +683,27 @@ if ( function_exists( 'wp_body_open' ) ) {
 				if (typeof start === 'number' && typeof end === 'number') {
 					try { target.setSelectionRange(start, end); } catch (e) {}
 				}
+			}
+		}
+		document.addEventListener('compositionstart', function() { isComposing = true; }, true);
+		document.addEventListener('compositionend', function(ev) {
+			isComposing = false;
+			syncElementValue(ev.target);
+		}, true);
+		document.addEventListener('input', function(ev) {
+			if (isComposing || ev.isComposing) return;
+			syncElementValue(ev.target);
+		}, true);
+		document.addEventListener('change', function(ev) {
+			isComposing = false;
+			syncElementValue(ev.target);
+		}, true);
+		document.addEventListener('submit', function(ev) {
+			var form = ev.target;
+			if (!form || !form.querySelectorAll) return;
+			var inputs = form.querySelectorAll('input');
+			for (var i = 0; i < inputs.length; i++) {
+				syncElementValue(inputs[i]);
 			}
 		}, true);
 	})();

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
+  ActiveMarketingResponse,
   AppSettings,
   BacsAccount,
   ChildProfile,
@@ -31,6 +32,7 @@ import {
   dataUrlToImageFile,
   deleteProfileInWordPress,
   detectSameOriginWordPressUrl,
+  fetchActiveMarketing,
   fetchWordPressCurriculum,
   fetchWordPressQuestions,
   getSavedWordPressUrl,
@@ -40,6 +42,7 @@ import {
   setOnUnauthorizedSession,
   syncProfileToWordPress,
   syncSettingsToWordPress,
+  trackAppVisit,
   uploadChildAvatarInWordPress,
   verifyWooCommercePurchase,
   type WordPressAuthResponse,
@@ -59,6 +62,7 @@ import { LessonScreen } from './features/lessons/LessonScreen';
 import { PracticeScreen } from './features/lessons/PracticeScreen';
 import { GameScreen } from './features/games/GameScreen';
 import { SorobanStepSimulator } from './features/abacus/SorobanStepSimulator';
+import { FreeAbacusScreen } from './features/abacus/FreeAbacusScreen';
 import { ResultScreen } from './features/progress/ResultScreen';
 import { ParentGate } from './components/ParentGate';
 import { SettingsPanel, type ParentsHubTab } from './features/progress/SettingsPanel';
@@ -69,6 +73,7 @@ import {
 } from './features/shop/ShopScreen';
 import { SupportScreen } from './features/support/SupportScreen';
 import { OfflineIndicator } from './components/PWAInstallButton';
+import { ScheduledDialogHost } from './components/ScheduledDialogHost';
 
 interface PaymentReturnPayload {
   from: 'map' | 'shop' | 'orders';
@@ -149,6 +154,10 @@ export default function App() {
   const [shopReturnNotice, setShopReturnNotice] = useState<NoticeBannerState | null>(null);
   const [ordersRefreshTrigger, setOrdersRefreshTrigger] = useState(0);
   const [pendingCartRestoreSignal, setPendingCartRestoreSignal] = useState(0);
+  const [marketing, setMarketing] = useState<ActiveMarketingResponse>({
+    banners: [],
+    dialogs: [],
+  });
   const returnFocusTermDbIdRef = useRef<number>(
     initialPaymentReturnRef.current?.termDbId || 0
   );
@@ -251,10 +260,12 @@ export default function App() {
       }
       setWpRefreshing(true);
       try {
-        const [curriculum, questions] = await Promise.all([
+        const [curriculum, questions, activeMarketing] = await Promise.all([
           fetchWordPressCurriculum(targetUrl),
           fetchWordPressQuestions(targetUrl),
+          fetchActiveMarketing(targetUrl).catch(() => ({ banners: [], dialogs: [] })),
         ]);
+        setMarketing(activeMarketing);
 
         if (curriculum.terms.length > 0) {
           setTerms(curriculum.terms);
@@ -301,6 +312,7 @@ export default function App() {
             curriculum.config.dailyChallengeCount || prev.dailyChallengeCount,
           wooActive: curriculum.config.wooActive ?? prev.wooActive,
           wooCurrency: curriculum.config.wooCurrency ?? prev.wooCurrency,
+          smsOtpEnabled: curriculum.config.smsOtpEnabled ?? prev.smsOtpEnabled,
           audioSettings: curriculum.config.audioSettings ?? prev.audioSettings,
         }));
         setWpConnected(true);
@@ -490,6 +502,12 @@ export default function App() {
   useEffect(() => {
     void hideNativeSplash();
   }, []);
+
+  // Track Web App & Mobile App visits per screen change
+  useEffect(() => {
+    if (!wpUrl) return;
+    void trackAppVisit(wpUrl, screen);
+  }, [wpUrl, screen]);
 
   useEffect(() => {
     return registerNativeBackHandler(() => {
@@ -1055,6 +1073,28 @@ export default function App() {
     setScreen('parents');
   }, []);
 
+  const navigateFromMarketing = useCallback((target: ScreenId) => {
+    audioEngine.play('uiTap');
+    if (target === 'parents') {
+      setParentUnlocked(false);
+    }
+    setScreen(target);
+  }, []);
+
+  const openTermFromDialog = useCallback(
+    (termDbId: number) => {
+      audioEngine.play('uiTap');
+      if (termDbId > 0) {
+        const matched = terms.find((t) => t.dbId === termDbId);
+        if (matched) {
+          setActiveTermId(matched.id);
+        }
+      }
+      setScreen('map');
+    },
+    [terms]
+  );
+
   const hasProgress = Object.keys(activeProfile.lessons).length > 0;
 
   return (
@@ -1070,6 +1110,9 @@ export default function App() {
           hasProgress={hasProgress}
           wpUser={wpUser}
           wpConnected={wpConnected}
+          banners={marketing.banners}
+          wpUrl={wpUrl}
+          onNavigateScreen={navigateFromMarketing}
           onContinueMap={() => {
             audioEngine.play('uiTap');
             setScreen('map');
@@ -1086,6 +1129,10 @@ export default function App() {
           onOpenSimulator={() => {
             audioEngine.play('uiTap');
             setScreen('simulator');
+          }}
+          onOpenFreeAbacus={() => {
+            audioEngine.play('uiTap');
+            setScreen('abacus');
           }}
           onOpenShop={() => {
             audioEngine.play('uiTap');
@@ -1184,6 +1231,10 @@ export default function App() {
           onRefreshCurriculum={() => void refreshFromWordPress()}
           onTermUnlocked={handleTermUnlocked}
           onOpenAuth={() => openParentsHub('account')}
+          onUpdateUser={(u) => {
+            wpUserRef.current = u;
+            setWpUser(u);
+          }}
           onSelectLesson={(lesson) => {
             audioEngine.play('uiTap');
             setActiveLesson(lesson);
@@ -1203,6 +1254,8 @@ export default function App() {
           }}
           returnNotice={mapReturnNotice}
           onDismissReturnNotice={() => setMapReturnNotice(null)}
+          banners={marketing.banners}
+          onNavigateScreen={navigateFromMarketing}
           onBack={() => setScreen('start')}
         />
       )}
@@ -1251,6 +1304,15 @@ export default function App() {
         />
       )}
 
+      {screen === 'abacus' && (
+        <FreeAbacusScreen
+          digitMode={data.settings.digitMode}
+          nightMode={data.settings.nightMode}
+          initialSoundEnabled={data.settings.soundEnabled}
+          onBack={() => setScreen('start')}
+        />
+      )}
+
       {screen === 'result' && lastResult && (
         <ResultScreen
           result={lastResult}
@@ -1273,6 +1335,10 @@ export default function App() {
           onRedeemShopMedal={handleRedeemShopMedal}
           onSpendPointsOnOrder={handleSpendPointsOnOrder}
           onOpenAuth={() => openParentsHub('account')}
+          onUpdateUser={(u) => {
+            wpUserRef.current = u;
+            setWpUser(u);
+          }}
           onOpenOrders={() => setScreen('auth')}
           onOrderCreated={() => {
             setOrdersRefreshTrigger((n) => n + 1);
@@ -1281,6 +1347,8 @@ export default function App() {
           returnNotice={shopReturnNotice}
           pendingCartRestoreSignal={pendingCartRestoreSignal}
           onDismissReturnNotice={() => setShopReturnNotice(null)}
+          banners={marketing.banners}
+          onNavigateScreen={navigateFromMarketing}
           onBack={() => setScreen('start')}
         />
       )}
@@ -1348,6 +1416,16 @@ export default function App() {
             }}
           />
         ))}
+
+      <ScheduledDialogHost
+        dialogs={marketing.dialogs}
+        screen={screen}
+        wpUrl={wpUrl}
+        digitMode={data.settings.digitMode}
+        reducedMotion={data.settings.reducedMotion}
+        onNavigateScreen={navigateFromMarketing}
+        onOpenTermCheckout={openTermFromDialog}
+      />
 
       <OfflineIndicator />
     </div>

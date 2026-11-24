@@ -1,8 +1,15 @@
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { Camera, CameraDirection, CameraResultType, CameraSource } from '@capacitor/camera';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { StatusBar, Style } from '@capacitor/status-bar';
+
+interface AppOrientationPlugin {
+  lockLandscape(): Promise<void>;
+  unlock(): Promise<void>;
+}
+
+const AppOrientation = registerPlugin<AppOrientationPlugin>('AppOrientation');
 
 export function isCapacitorNative(): boolean {
   try {
@@ -33,6 +40,51 @@ export async function syncNativeStatusBar(nightMode: boolean): Promise<void> {
     });
   } catch {
     // ignore outside native runtime
+  }
+}
+
+export async function lockLandscapeOrientation(): Promise<boolean> {
+  if (isCapacitorNative()) {
+    try {
+      await StatusBar.hide().catch(() => {});
+      await AppOrientation.lockLandscape();
+      return true;
+    } catch {
+      // fall through to Web API attempt
+    }
+  }
+  try {
+    const orientation = window.screen?.orientation as
+      | (ScreenOrientation & { lock?: (mode: string) => Promise<void> })
+      | undefined;
+    if (orientation && typeof orientation.lock === 'function') {
+      await orientation.lock('landscape');
+      return true;
+    }
+  } catch {
+    // Web browsers often disallow orientation.lock without fullscreen
+  }
+  return false;
+}
+
+export async function unlockOrientation(nightMode: boolean): Promise<void> {
+  if (isCapacitorNative()) {
+    try {
+      await AppOrientation.unlock();
+      await StatusBar.show().catch(() => {});
+      await syncNativeStatusBar(nightMode);
+      return;
+    } catch {
+      // ignore outside native runtime
+    }
+  }
+  try {
+    const orientation = window.screen?.orientation;
+    if (orientation && typeof orientation.unlock === 'function') {
+      orientation.unlock();
+    }
+  } catch {
+    // ignore unsupported browsers
   }
 }
 

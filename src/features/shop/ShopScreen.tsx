@@ -29,6 +29,8 @@ import type {
   BacsAccount,
   ChildProfile,
   DigitDisplayMode,
+  PromotionalBanner,
+  ScreenId,
   StoreCatalogResponse,
   StoreProduct,
   UserOrder,
@@ -38,13 +40,17 @@ import { formatNumber } from '../../lib/numbers';
 import {
   fetchStoreCatalog,
   getAppCheckoutReturnUrl,
+  isProfileCompleteForPurchase,
   startStoreCheckout,
   submitOfflineOrder,
   validateSafeHttpUrl,
+  WordPressApiError,
 } from '../../lib/wordpressApi';
 import { isCapacitorNative } from '../../lib/nativeBridge';
 import { getDailyBonusPreview, SHOP_VIRTUAL_MEDALS } from '../../lib/rewards';
 import type { OptimizedImageResult } from '../../lib/imageOptimizer';
+import { BannerSlot } from '../../components/BannerSlot';
+import { CompleteProfileModal } from '../../components/CompleteProfileModal';
 import { ReceiptUploaderField } from '../../components/ReceiptUploaderField';
 import { SaleCountdown } from '../../components/SaleCountdown';
 import { MedalIconGlyph } from '../progress/ChildProfileDetails';
@@ -63,9 +69,12 @@ interface ShopScreenProps {
   onRedeemShopMedal?: (medalId: string) => { ok: boolean; error?: string };
   onSpendPointsOnOrder?: (points: number) => void;
   onOpenAuth: () => void;
+  onUpdateUser?: (user: WordPressUser) => void;
   onOpenOrders?: () => void;
   onOrderCreated?: () => void;
   onBack: () => void;
+  banners?: PromotionalBanner[];
+  onNavigateScreen?: (screen: ScreenId) => void;
   returnNotice?: { type: 'success' | 'info' | 'error'; text: string } | null;
   pendingCartRestoreSignal?: number;
   onDismissReturnNotice?: () => void;
@@ -111,9 +120,12 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
   onRedeemShopMedal,
   onSpendPointsOnOrder,
   onOpenAuth,
+  onUpdateUser,
   onOpenOrders,
   onOrderCreated,
   onBack,
+  banners = [],
+  onNavigateScreen,
   returnNotice = null,
   pendingCartRestoreSignal = 0,
   onDismissReturnNotice,
@@ -132,6 +144,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [detailProduct, setDetailProduct] = useState<StoreProduct | null>(null);
+  const [completeProfileOpen, setCompleteProfileOpen] = useState(false);
 
   const [checkoutTab, setCheckoutTab] = useState<'online' | 'bacs'>('online');
   const [submitting, setSubmitting] = useState(false);
@@ -140,6 +153,8 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
   const [createdPendingOrder, setCreatedPendingOrder] = useState<UserOrder | null>(null);
   const [onlineRedirectNotice, setOnlineRedirectNotice] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const profileCompleteForPurchase = isProfileCompleteForPurchase(wpUser);
 
   const bonusPreview = getDailyBonusPreview(activeProfile);
   const rewardPoints = bonusPreview.rewardPointsBalance;
@@ -254,6 +269,10 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
 
   const handleOnlineCheckout = async () => {
     if (!wpUrl || !wpUser || cart.length === 0) return;
+    if (!profileCompleteForPurchase) {
+      setCompleteProfileOpen(true);
+      return;
+    }
     setSubmitting(true);
     setErrorMsg(null);
     try {
@@ -295,6 +314,10 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
         'صفحه پرداخت در پنجره جدید باز شد. پس از تکمیل پرداخت، وضعیت سفارش در بخش «حساب کاربری ← سفارش‌ها» قابل پیگیری است.'
       );
     } catch (err) {
+      if (err instanceof WordPressApiError && err.code === 'profile_incomplete') {
+        setCompleteProfileOpen(true);
+        return;
+      }
       setErrorMsg(err instanceof Error ? err.message : 'خطا در شروع پرداخت آنلاین.');
     } finally {
       setSubmitting(false);
@@ -303,6 +326,10 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
 
   const handleOfflineBacsCheckout = async () => {
     if (!wpUrl || !wpUser || cart.length === 0) return;
+    if (!profileCompleteForPurchase) {
+      setCompleteProfileOpen(true);
+      return;
+    }
     setSubmitting(true);
     setErrorMsg(null);
     try {
@@ -328,6 +355,10 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
       audioEngine.play('success');
       onOrderCreated?.();
     } catch (err) {
+      if (err instanceof WordPressApiError && err.code === 'profile_incomplete') {
+        setCompleteProfileOpen(true);
+        return;
+      }
       setErrorMsg(err instanceof Error ? err.message : 'ثبت سفارش کارت به کارت ناموفق بود.');
     } finally {
       setSubmitting(false);
@@ -426,6 +457,16 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
               )}
             </div>
           </div>
+        )}
+
+        {banners.length > 0 && onNavigateScreen && (
+          <BannerSlot
+            banners={banners}
+            placement="shop_top"
+            screen="shop"
+            wpUrl={wpUrl}
+            onNavigateScreen={onNavigateScreen}
+          />
         )}
 
         {/* Campaign Focal Banner */}
@@ -987,7 +1028,21 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
                         className="w-full min-h-[48px] rounded-2xl bg-[#5472EB] border-b-4 border-[#354EB8] text-white font-extrabold text-sm flex items-center justify-center gap-2"
                       >
                         <UserCheck className="w-4 h-4" />
-                        <span>ورود / ثبت نام</span>
+                        <span>ورود / ثبت‌نام سریع</span>
+                      </button>
+                    </div>
+                  ) : !profileCompleteForPurchase ? (
+                    <div className="space-y-3">
+                      <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-200 dark:border-amber-800 p-3.5 text-xs font-bold text-amber-950 dark:text-amber-200 leading-relaxed">
+                        حساب شما با ثبت‌نام سریع موبایل ایجاد شده است. برای ارسال کالا و ثبت نهایی سفارش، ابتدا نام، نام خانوادگی و نشانی پستی خود را تکمیل کنید.
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setCompleteProfileOpen(true)}
+                        className="w-full min-h-[48px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] text-white font-extrabold text-sm flex items-center justify-center gap-2"
+                      >
+                        <UserCheck className="w-4 h-4" />
+                        <span>تکمیل مشخصات و آدرس برای ثبت سفارش</span>
                       </button>
                     </div>
                   ) : (
@@ -1123,6 +1178,20 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {completeProfileOpen && wpUser && (
+        <CompleteProfileModal
+          wpUrl={wpUrl}
+          wpUser={wpUser}
+          onClose={() => setCompleteProfileOpen(false)}
+          onCompleted={(updatedUser) => {
+            onUpdateUser?.(updatedUser);
+            setCompleteProfileOpen(false);
+            setErrorMsg(null);
+            setMedalNotice('مشخصات و آدرس پستی شما ثبت شد. اکنون می‌توانید سفارش را تکمیل کنید.');
+          }}
+        />
       )}
     </div>
   );

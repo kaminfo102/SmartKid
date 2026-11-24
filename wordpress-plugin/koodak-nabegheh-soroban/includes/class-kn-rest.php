@@ -156,6 +156,26 @@ class KN_REST {
 
 		register_rest_route(
 			$ns,
+			'/auth/otp/send',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'handle_otp_send' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/auth/otp/verify',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'handle_otp_verify' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		register_rest_route(
+			$ns,
 			'/auth/logout',
 			array(
 				'methods'             => 'POST',
@@ -391,6 +411,37 @@ class KN_REST {
 				),
 			)
 		);
+
+		// Web vs Mobile App Visit Analytics & Active Promotional Banners / Scheduled Dialogs
+		register_rest_route(
+			$ns,
+			'/analytics/visit',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'handle_analytics_visit' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/marketing/active',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'handle_marketing_active' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/marketing/track',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'handle_marketing_track' ),
+				'permission_callback' => '__return_true',
+			)
+		);
 	}
 
 	/**
@@ -456,6 +507,7 @@ class KN_REST {
 				'questionsCount'      => count( $questions ),
 				'wooActive'           => KN_Woo::is_woo_active(),
 				'wooCurrency'         => KN_Woo::get_currency_label(),
+				'smsOtpEnabled'       => KN_SMS::is_enabled(),
 			)
 		);
 	}
@@ -472,8 +524,10 @@ class KN_REST {
 		}
 
 		$device     = isset( $params['deviceLabel'] ) ? (string) $params['deviceLabel'] : 'Web App';
+		$platform   = KN_Auth::detect_platform_from_request( $request );
 		$token_data = KN_Auth::issue_token( $user->ID, $device );
 		KN_Auth::set_session_cookie( $token_data['token'], intval( $token_data['expiresAt'] / 1000 ) );
+		KN_DB::log_user_event( $user->ID, 'register', $platform, $device );
 		$profiles   = KN_DB::get_user_profiles( $user->ID );
 		$settings   = self::get_user_app_settings( $user->ID );
 		$ent_map    = KN_DB::get_user_entitlement_map( $user->ID );
@@ -524,8 +578,10 @@ class KN_REST {
 		}
 
 		$device     = isset( $params['deviceLabel'] ) ? (string) $params['deviceLabel'] : 'Web App';
+		$platform   = KN_Auth::detect_platform_from_request( $request );
 		$token_data = KN_Auth::issue_token( $user->ID, $device );
 		KN_Auth::set_session_cookie( $token_data['token'], intval( $token_data['expiresAt'] / 1000 ) );
+		KN_DB::log_user_event( $user->ID, 'login_password', $platform, $device );
 		$settings   = self::get_user_app_settings( $user->ID );
 		$ent_map    = KN_DB::get_user_entitlement_map( $user->ID );
 
@@ -537,6 +593,67 @@ class KN_REST {
 				'profiles'        => $profiles,
 				'settings'        => $settings,
 				'unlockedTermIds' => array_map( 'intval', array_keys( $ent_map ) ),
+			)
+		);
+	}
+
+	public static function handle_otp_send( WP_REST_Request $request ) {
+		$params = $request->get_json_params();
+		if ( ! is_array( $params ) ) {
+			$params = $request->get_params();
+		}
+
+		$mobile = isset( $params['mobile'] ) ? (string) $params['mobile'] : '';
+		$result = KN_SMS::request_otp( $mobile );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		return rest_ensure_response( $result );
+	}
+
+	public static function handle_otp_verify( WP_REST_Request $request ) {
+		$params = $request->get_json_params();
+		if ( ! is_array( $params ) ) {
+			$params = $request->get_params();
+		}
+
+		$mobile     = isset( $params['mobile'] ) ? (string) $params['mobile'] : '';
+		$code       = isset( $params['code'] ) ? (string) $params['code'] : '';
+		$child_name = isset( $params['childName'] ) ? sanitize_text_field( (string) $params['childName'] ) : '';
+
+		$verified = KN_SMS::verify_otp( $mobile, $code );
+		if ( is_wp_error( $verified ) ) {
+			return $verified;
+		}
+
+		$auth_result = KN_Auth::login_or_register_by_otp( $mobile, $child_name );
+		if ( is_wp_error( $auth_result ) ) {
+			return $auth_result;
+		}
+
+		/** @var WP_User $user */
+		$user        = $auth_result['user'];
+		$is_new_user = ! empty( $auth_result['isNewUser'] );
+		$device      = isset( $params['deviceLabel'] ) ? (string) $params['deviceLabel'] : 'Mobile OTP';
+		$platform    = KN_Auth::detect_platform_from_request( $request );
+		$token_data  = KN_Auth::issue_token( $user->ID, $device );
+		KN_Auth::set_session_cookie( $token_data['token'], intval( $token_data['expiresAt'] / 1000 ) );
+		KN_DB::log_user_event( $user->ID, $is_new_user ? 'register' : 'login_otp', $platform, $device );
+
+		$profiles = KN_DB::get_user_profiles( $user->ID );
+		$settings = self::get_user_app_settings( $user->ID );
+		$ent_map  = KN_DB::get_user_entitlement_map( $user->ID );
+
+		return rest_ensure_response(
+			array(
+				'token'           => $token_data['token'],
+				'expiresAt'       => $token_data['expiresAt'],
+				'user'            => KN_Auth::format_user( $user ),
+				'profiles'        => $profiles,
+				'settings'        => $settings,
+				'unlockedTermIds' => array_map( 'intval', array_keys( $ent_map ) ),
+				'isNewUser'       => $is_new_user,
 			)
 		);
 	}
@@ -566,6 +683,13 @@ class KN_REST {
 		}
 		KN_Auth::set_session_cookie( $token, $exp );
 
+		$platform = KN_Auth::detect_platform_from_request( $request );
+		$r_key    = 'kn_srest_' . $user->ID . '_' . $platform;
+		if ( ! get_transient( $r_key ) ) {
+			KN_DB::log_user_event( $user->ID, 'session_restore', $platform, '' );
+			set_transient( $r_key, 1, HOUR_IN_SECONDS );
+		}
+
 		$ent_map = KN_DB::get_user_entitlement_map( $user->ID );
 		return rest_ensure_response(
 			array(
@@ -581,6 +705,11 @@ class KN_REST {
 	}
 
 	public static function handle_logout( WP_REST_Request $request ) {
+		$user = KN_Auth::authenticate_request( $request );
+		if ( $user ) {
+			$platform = KN_Auth::detect_platform_from_request( $request );
+			KN_DB::log_user_event( $user->ID, 'logout', $platform, '' );
+		}
 		KN_Auth::revoke_request_token( $request );
 		return rest_ensure_response( array( 'ok' => true ) );
 	}
@@ -648,8 +777,27 @@ class KN_REST {
 		);
 	}
 
+	private static function ensure_complete_profile_for_purchase( WP_User $user ) {
+		$missing = KN_Auth::get_missing_purchase_fields( $user );
+		if ( ! empty( $missing ) ) {
+			return new WP_Error(
+				'profile_incomplete',
+				'برای ثبت سفارش و خرید، ابتدا باید مشخصات کامل خود (نام، نام خانوادگی، استان، شهر، آدرس پستی و کد پستی ۱۰ رقمی) را تکمیل کنید.',
+				array(
+					'status'        => 422,
+					'missingFields' => $missing,
+				)
+			);
+		}
+		return true;
+	}
+
 	public static function handle_offline_checkout( WP_REST_Request $request ) {
-		$user   = self::get_authed_user( $request );
+		$user       = self::get_authed_user( $request );
+		$check_prof = self::ensure_complete_profile_for_purchase( $user );
+		if ( is_wp_error( $check_prof ) ) {
+			return $check_prof;
+		}
 		$params = $request->get_json_params();
 		if ( ! is_array( $params ) ) {
 			$params = $request->get_params();
@@ -712,6 +860,7 @@ class KN_REST {
 					'dailyChallengeCount' => isset( $settings['daily_challenge_count'] ) ? absint( $settings['daily_challenge_count'] ) : 5,
 					'wooActive'           => KN_Woo::is_woo_active(),
 					'wooCurrency'         => KN_Woo::get_currency_label(),
+					'smsOtpEnabled'       => KN_SMS::is_enabled(),
 					'audioSettings'       => KN_DB::get_audio_settings(),
 					'defaultSettings'     => array(
 						'soundEnabled'  => ! empty( $settings['default_sound_enabled'] ),
@@ -751,6 +900,12 @@ class KN_REST {
 
 		$entitlements     = KN_DB::get_user_entitlement_map( $user->ID );
 		$already_unlocked = ! empty( $term['is_free'] ) || isset( $entitlements[ $term_db_id ] ) || user_can( $user->ID, 'manage_options' );
+		if ( ! $already_unlocked ) {
+			$check_prof = self::ensure_complete_profile_for_purchase( $user );
+			if ( is_wp_error( $check_prof ) ) {
+				return $check_prof;
+			}
+		}
 		$commerce         = KN_Woo::get_term_commerce_meta( $term, $user->ID, true, $return_url, $return_from );
 		$pending_map      = KN_Woo::get_pending_term_order_map( $user->ID );
 
@@ -799,7 +954,11 @@ class KN_REST {
 	}
 
 	public static function handle_store_checkout( WP_REST_Request $request ) {
-		$user   = self::get_authed_user( $request );
+		$user       = self::get_authed_user( $request );
+		$check_prof = self::ensure_complete_profile_for_purchase( $user );
+		if ( is_wp_error( $check_prof ) ) {
+			return $check_prof;
+		}
 		$params = $request->get_json_params();
 		if ( ! is_array( $params ) ) {
 			$params = $request->get_params();
@@ -1098,5 +1257,59 @@ class KN_REST {
 				'settings' => $clean,
 			)
 		);
+	}
+
+	public static function handle_analytics_visit( WP_REST_Request $request ) {
+		$params = $request->get_json_params();
+		if ( ! is_array( $params ) ) {
+			$params = $request->get_params();
+		}
+		$user        = KN_Auth::authenticate_request( $request );
+		$user_id     = $user ? (int) $user->ID : 0;
+		$platform    = KN_Auth::detect_platform_from_request( $request );
+		$device_os   = isset( $params['deviceOs'] ) ? sanitize_key( (string) $params['deviceOs'] ) : '';
+		$screen      = isset( $params['screen'] ) ? sanitize_key( (string) $params['screen'] ) : 'start';
+		$session_key = isset( $params['sessionKey'] ) ? sanitize_key( (string) $params['sessionKey'] ) : '';
+
+		KN_Marketing::record_event( 'app_visit', 0, $platform, $device_os, $screen, $user_id, $session_key );
+
+		return rest_ensure_response( array( 'ok' => true ) );
+	}
+
+	public static function handle_marketing_active( WP_REST_Request $request ) {
+		$user     = KN_Auth::authenticate_request( $request );
+		$user_id  = $user ? (int) $user->ID : 0;
+		$platform = KN_Auth::detect_platform_from_request( $request );
+		return rest_ensure_response( KN_Marketing::get_active_marketing_payload( $platform, $user_id ) );
+	}
+
+	public static function handle_marketing_track( WP_REST_Request $request ) {
+		$params = $request->get_json_params();
+		if ( ! is_array( $params ) ) {
+			$params = $request->get_params();
+		}
+		$user        = KN_Auth::authenticate_request( $request );
+		$user_id     = $user ? (int) $user->ID : 0;
+		$event_type  = isset( $params['eventType'] ) ? sanitize_key( (string) $params['eventType'] ) : '';
+		$target_id   = isset( $params['targetId'] ) ? absint( $params['targetId'] ) : 0;
+		$platform    = KN_Auth::detect_platform_from_request( $request );
+		$device_os   = isset( $params['deviceOs'] ) ? sanitize_key( (string) $params['deviceOs'] ) : '';
+		$screen      = isset( $params['screen'] ) ? sanitize_key( (string) $params['screen'] ) : '';
+		$session_key = isset( $params['sessionKey'] ) ? sanitize_key( (string) $params['sessionKey'] ) : '';
+
+		$allowed_marketing = array(
+			'banner_impression',
+			'banner_click',
+			'dialog_impression',
+			'dialog_click',
+			'dialog_close',
+			'dialog_autoclose',
+		);
+		if ( ! in_array( $event_type, $allowed_marketing, true ) || $target_id <= 0 ) {
+			return new WP_Error( 'invalid_event', 'رویداد بازاریابی نامعتبر است.', array( 'status' => 400 ) );
+		}
+
+		KN_Marketing::record_event( $event_type, $target_id, $platform, $device_os, $screen, $user_id, $session_key );
+		return rest_ensure_response( array( 'ok' => true ) );
 	}
 }

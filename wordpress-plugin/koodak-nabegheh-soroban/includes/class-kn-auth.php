@@ -319,14 +319,17 @@ class KN_Auth {
 	}
 
 	/**
-	 * Convert Persian/Arabic numerals to ASCII Latin digits while keeping other characters intact.
+	 * Convert Persian/Arabic/Fullwidth numerals to ASCII Latin digits and strip invisible bidi marks.
 	 */
 	public static function to_latin_digits( $raw ) {
-		$fa  = array( '۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹' );
-		$ar  = array( '٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩' );
-		$en  = array( '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' );
-		$str = str_replace( $fa, $en, (string) $raw );
-		return str_replace( $ar, $en, $str );
+		$cleaned = preg_replace( '/[\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}\x{FEFF}]/u', '', (string) $raw );
+		$fa      = array( '۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹' );
+		$ar      = array( '٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩' );
+		$fw      = array( '０', '１', '２', '３', '４', '５', '６', '７', '８', '９' );
+		$en      = array( '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' );
+		$str     = str_replace( $fa, $en, $cleaned );
+		$str     = str_replace( $ar, $en, $str );
+		return str_replace( $fw, $en, $str );
 	}
 
 	/**
@@ -341,9 +344,13 @@ class KN_Auth {
 	 */
 	public static function normalize_mobile( $raw ) {
 		$digits = self::normalize_digits( $raw );
-		// Normalize 00989... / 989... / 9... prefix for Iranian numbers to 09...
-		if ( strlen( $digits ) === 14 && strpos( $digits, '00989' ) === 0 ) {
+		// Normalize 009809... / 00989... / 9809... / 989... / 9... prefix for Iranian numbers to 09...
+		if ( strlen( $digits ) === 15 && strpos( $digits, '009809' ) === 0 ) {
+			$digits = substr( $digits, 4 );
+		} elseif ( strlen( $digits ) === 14 && strpos( $digits, '00989' ) === 0 ) {
 			$digits = '0' . substr( $digits, 4 );
+		} elseif ( strlen( $digits ) === 13 && strpos( $digits, '9809' ) === 0 ) {
+			$digits = substr( $digits, 2 );
 		} elseif ( strlen( $digits ) === 12 && strpos( $digits, '989' ) === 0 ) {
 			$digits = '0' . substr( $digits, 2 );
 		} elseif ( strlen( $digits ) === 10 && strpos( $digits, '9' ) === 0 ) {
@@ -583,23 +590,208 @@ class KN_Auth {
 	}
 
 	/**
+	 * Effortless login or quick registration using a verified mobile number (no address/billing fields required yet).
+	 */
+	public static function login_or_register_by_otp( $raw_mobile, $child_name = '' ) {
+		$mobile = self::normalize_mobile( $raw_mobile );
+		if ( ! self::is_valid_iran_mobile( $mobile ) ) {
+			return new WP_Error( 'invalid_mobile', 'شماره موبایل معتبر نیست.', array( 'status' => 400 ) );
+		}
+
+		// Find existing user by user_login, kn_mobile, or billing_phone
+		$existing_user = get_user_by( 'login', $mobile );
+		if ( ! $existing_user ) {
+			$matched = get_users(
+				array(
+					'meta_query' => array(
+						'relation' => 'OR',
+						array(
+							'key'   => 'kn_mobile',
+							'value' => $mobile,
+						),
+						array(
+							'key'   => 'billing_phone',
+							'value' => $mobile,
+						),
+					),
+					'number'     => 1,
+				)
+			);
+			if ( ! empty( $matched ) && $matched[0] instanceof WP_User ) {
+				$existing_user = $matched[0];
+			}
+		}
+
+		if ( $existing_user instanceof WP_User ) {
+			$existing_mobile = get_user_meta( $existing_user->ID, 'kn_mobile', true );
+			if ( empty( $existing_mobile ) ) {
+				update_user_meta( $existing_user->ID, 'kn_mobile', $mobile );
+				update_user_meta( $existing_user->ID, 'billing_phone', $mobile );
+			}
+			$profiles = KN_DB::get_user_profiles( $existing_user->ID );
+			if ( empty( $profiles ) ) {
+				KN_DB::upsert_profile(
+					$existing_user->ID,
+					array(
+						'id'     => 'child_' . time(),
+						'name'   => 'کیا',
+						'avatar' => 'owl',
+						'age'    => 6,
+					)
+				);
+			}
+			return array(
+				'user'      => $existing_user,
+				'isNewUser' => false,
+			);
+		}
+
+		$settings = get_option( 'kn_soroban_settings', array() );
+		if ( empty( $settings['allow_registration'] ) && ! is_admin() ) {
+			return new WP_Error( 'registration_disabled', 'ثبت‌نام کاربران جدید در حال حاضر غیرفعال شده است.', array( 'status' => 403 ) );
+		}
+
+		$username = $mobile;
+		$email    = sanitize_email( $mobile . '@chootkeh.ir' );
+		if ( email_exists( $email ) ) {
+			$email = sanitize_email( $mobile . '_' . wp_rand( 100, 999 ) . '@chootkeh.ir' );
+		}
+
+		$random_pass = wp_generate_password( 24, true, true );
+		$user_id     = wp_create_user( $username, $random_pass, $email );
+		if ( is_wp_error( $user_id ) ) {
+			return new WP_Error( 'create_failed', $user_id->get_error_message(), array( 'status' => 400 ) );
+		}
+
+		$clean_child = sanitize_text_field( (string) $child_name );
+		if ( empty( $clean_child ) ) {
+			$clean_child = 'کیا';
+		}
+
+		$friendly_display = 'کاربر ' . substr( $mobile, -4 );
+		wp_update_user(
+			array(
+				'ID'           => $user_id,
+				'display_name' => $friendly_display,
+				'first_name'   => '',
+				'last_name'    => '',
+				'role'         => get_role( 'kn_student' ) ? 'kn_student' : 'subscriber',
+			)
+		);
+
+		// Intentionally leave first_name, last_name, state, city, address_1, postcode empty until purchase completion
+		self::sync_user_commerce_meta(
+			$user_id,
+			array(
+				'first_name' => '',
+				'last_name'  => '',
+				'mobile'     => $mobile,
+				'email'      => $email,
+				'state'      => '',
+				'city'       => '',
+				'address_1'  => '',
+				'postcode'   => '',
+			)
+		);
+		update_user_meta( $user_id, 'kn_auto_email', '1' );
+		update_user_meta( $user_id, 'kn_otp_registered', '1' );
+
+		KN_DB::upsert_profile(
+			$user_id,
+			array(
+				'id'     => 'child_' . time() . '_' . wp_rand( 100, 999 ),
+				'name'   => $clean_child,
+				'avatar' => 'owl',
+				'age'    => 6,
+			)
+		);
+
+		clean_user_cache( $user_id );
+		$new_user = get_user_by( 'id', $user_id );
+		return array(
+			'user'      => $new_user,
+			'isNewUser' => true,
+		);
+	}
+
+	/**
+	 * Determine which required customer fields are missing before allowing an order or purchase.
+	 *
+	 * @return string[]
+	 */
+	public static function get_missing_purchase_fields( WP_User $user ) {
+		$uid        = (int) $user->ID;
+		$first_name = trim( (string) ( get_user_meta( $uid, 'first_name', true ) ?: get_user_meta( $uid, 'billing_first_name', true ) ?: $user->first_name ) );
+		$last_name  = trim( (string) ( get_user_meta( $uid, 'last_name', true ) ?: get_user_meta( $uid, 'billing_last_name', true ) ?: $user->last_name ) );
+		$mobile     = self::normalize_mobile( get_user_meta( $uid, 'kn_mobile', true ) ?: get_user_meta( $uid, 'billing_phone', true ) );
+		$state      = trim( (string) ( get_user_meta( $uid, 'billing_state', true ) ?: get_user_meta( $uid, 'shipping_state', true ) ) );
+		$city       = trim( (string) ( get_user_meta( $uid, 'billing_city', true ) ?: get_user_meta( $uid, 'shipping_city', true ) ) );
+		$address1   = trim( (string) ( get_user_meta( $uid, 'billing_address_1', true ) ?: get_user_meta( $uid, 'shipping_address_1', true ) ) );
+		$postcode   = self::normalize_digits( get_user_meta( $uid, 'billing_postcode', true ) ?: get_user_meta( $uid, 'shipping_postcode', true ) );
+
+		$missing = array();
+		if ( '' === $first_name ) {
+			$missing[] = 'firstName';
+		}
+		if ( '' === $last_name ) {
+			$missing[] = 'lastName';
+		}
+		if ( ! self::is_valid_iran_mobile( $mobile ) ) {
+			$missing[] = 'mobile';
+		}
+		if ( '' === $state ) {
+			$missing[] = 'state';
+		}
+		if ( '' === $city ) {
+			$missing[] = 'city';
+		}
+		if ( '' === $address1 ) {
+			$missing[] = 'address1';
+		}
+		if ( strlen( $postcode ) !== 10 ) {
+			$missing[] = 'postcode';
+		}
+
+		return $missing;
+	}
+
+	/**
+	 * Return whether user has completed all mandatory registration & address fields required for ordering/purchasing.
+	 */
+	public static function is_profile_complete_for_purchase( WP_User $user ) {
+		return empty( self::get_missing_purchase_fields( $user ) );
+	}
+
+	/**
 	 * Update authenticated user's registration, password, and billing/shipping fields.
 	 */
 	public static function update_account_profile( WP_User $user, $params ) {
 		$user_id      = (int) $user->ID;
-		$first_name   = isset( $params['firstName'] ) ? sanitize_text_field( $params['firstName'] ) : $user->first_name;
-		$last_name    = isset( $params['lastName'] ) ? sanitize_text_field( $params['lastName'] ) : $user->last_name;
-		$display_name = isset( $params['displayName'] ) ? sanitize_text_field( $params['displayName'] ) : $user->display_name;
+		$first_name   = isset( $params['firstName'] ) ? trim( sanitize_text_field( $params['firstName'] ) ) : trim( (string) $user->first_name );
+		$last_name    = isset( $params['lastName'] ) ? trim( sanitize_text_field( $params['lastName'] ) ) : trim( (string) $user->last_name );
+		$display_name = isset( $params['displayName'] ) ? trim( sanitize_text_field( $params['displayName'] ) ) : $user->display_name;
 		$mobile_in    = isset( $params['mobile'] ) ? self::normalize_mobile( $params['mobile'] ) : get_user_meta( $user_id, 'kn_mobile', true );
 		$email_in     = isset( $params['email'] ) ? trim( self::to_latin_digits( (string) $params['email'] ) ) : $user->user_email;
-		$state        = isset( $params['state'] ) ? sanitize_text_field( $params['state'] ) : get_user_meta( $user_id, 'billing_state', true );
-		$city         = isset( $params['city'] ) ? sanitize_text_field( $params['city'] ) : get_user_meta( $user_id, 'billing_city', true );
-		$address_1    = isset( $params['address1'] ) ? sanitize_text_field( $params['address1'] ) : get_user_meta( $user_id, 'billing_address_1', true );
-		$postcode     = isset( $params['postcode'] ) ? self::normalize_digits( $params['postcode'] ) : get_user_meta( $user_id, 'billing_postcode', true );
+		$state        = isset( $params['state'] ) ? trim( sanitize_text_field( $params['state'] ) ) : trim( (string) get_user_meta( $user_id, 'billing_state', true ) );
+		$city         = isset( $params['city'] ) ? trim( sanitize_text_field( $params['city'] ) ) : trim( (string) get_user_meta( $user_id, 'billing_city', true ) );
+		$address_1    = isset( $params['address1'] ) ? trim( sanitize_text_field( $params['address1'] ) ) : trim( (string) get_user_meta( $user_id, 'billing_address_1', true ) );
+		$postcode     = isset( $params['postcode'] ) ? self::normalize_digits( $params['postcode'] ) : self::normalize_digits( get_user_meta( $user_id, 'billing_postcode', true ) );
 		$new_password = isset( $params['newPassword'] ) ? self::to_latin_digits( (string) $params['newPassword'] ) : '';
+
+		if ( empty( $first_name ) || empty( $last_name ) ) {
+			return new WP_Error( 'missing_name', 'لطفاً نام و نام خانوادگی خود را کامل وارد کنید.', array( 'status' => 400 ) );
+		}
 
 		if ( empty( $mobile_in ) || ! self::is_valid_iran_mobile( $mobile_in ) ) {
 			return new WP_Error( 'invalid_mobile', 'شماره موبایل معتبر نیست. لطفاً شماره ۱۱ رقمی با شروع 09 وارد کنید.', array( 'status' => 400 ) );
+		}
+
+		if ( empty( $state ) || empty( $city ) || empty( $address_1 ) ) {
+			return new WP_Error( 'missing_address', 'لطفاً استان، شهر و آدرس کامل پستی را وارد کنید.', array( 'status' => 400 ) );
+		}
+
+		if ( strlen( $postcode ) !== 10 ) {
+			return new WP_Error( 'invalid_postcode', 'کد پستی باید دقیقاً ۱۰ رقم باشد.', array( 'status' => 400 ) );
 		}
 
 		// Prevent hijacking another user's mobile number
@@ -821,21 +1013,182 @@ class KN_Auth {
 		$address1   = (string) ( get_user_meta( $uid, 'billing_address_1', true ) ?: get_user_meta( $uid, 'shipping_address_1', true ) );
 		$postcode   = (string) ( get_user_meta( $uid, 'billing_postcode', true ) ?: get_user_meta( $uid, 'shipping_postcode', true ) );
 
+		$missing_fields = self::get_missing_purchase_fields( $user );
+
 		return array(
-			'id'          => $uid,
-			'username'    => $user->user_login,
-			'email'       => (string) $user->user_email,
-			'mobile'      => $mobile,
-			'firstName'   => $first_name,
-			'lastName'    => $last_name,
-			'displayName' => $user->display_name ?: trim( $first_name . ' ' . $last_name ) ?: $user->user_login,
-			'state'       => $state,
-			'city'        => $city,
-			'address1'    => $address1,
-			'postcode'    => $postcode,
-			'roles'       => array_values( $user->roles ),
-			'isAdmin'     => user_can( $user, 'manage_options' ),
+			'id'                   => $uid,
+			'username'             => $user->user_login,
+			'email'                => (string) $user->user_email,
+			'mobile'               => $mobile,
+			'firstName'            => $first_name,
+			'lastName'             => $last_name,
+			'displayName'          => $user->display_name ?: trim( $first_name . ' ' . $last_name ) ?: $user->user_login,
+			'state'                => $state,
+			'city'                 => $city,
+			'address1'             => $address1,
+			'postcode'             => $postcode,
+			'profileComplete'      => empty( $missing_fields ),
+			'missingProfileFields' => $missing_fields,
+			'roles'                => array_values( $user->roles ),
+			'isAdmin'              => user_can( $user, 'manage_options' ),
 		);
+	}
+
+	/**
+	 * Detect client platform ('mobile_app' vs 'web') from request payload or query params.
+	 */
+	public static function detect_platform_from_request( WP_REST_Request $request ) {
+		$params = $request->get_json_params();
+		$raw    = '';
+		if ( is_array( $params ) && ! empty( $params['platform'] ) ) {
+			$raw = (string) $params['platform'];
+		} else {
+			$raw = (string) $request->get_param( 'platform' );
+		}
+		if ( $raw === 'mobile_app' || $raw === 'android' || $raw === 'ios' || $raw === 'capacitor' ) {
+			return 'mobile_app';
+		}
+		return 'web';
+	}
+
+	/**
+	 * Fetch user's session tokens for User CRM & Security Management.
+	 */
+	public static function get_user_tokens( $user_id ) {
+		global $wpdb;
+		$t_tokens = KN_DB::table_tokens();
+		$rows     = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT id, device_label, expires_at, revoked, created_at FROM {$t_tokens} WHERE user_id = %d ORDER BY id DESC LIMIT 40",
+				absint( $user_id )
+			),
+			ARRAY_A
+		);
+		return is_array( $rows ) ? $rows : array();
+	}
+
+	public static function revoke_token_by_id( $user_id, $token_id ) {
+		global $wpdb;
+		return false !== $wpdb->update(
+			KN_DB::table_tokens(),
+			array( 'revoked' => 1 ),
+			array(
+				'id'      => absint( $token_id ),
+				'user_id' => absint( $user_id ),
+			),
+			array( '%d' ),
+			array( '%d', '%d' )
+		);
+	}
+
+	public static function revoke_all_user_tokens( $user_id ) {
+		global $wpdb;
+		return false !== $wpdb->update(
+			KN_DB::table_tokens(),
+			array( 'revoked' => 1 ),
+			array( 'user_id' => absint( $user_id ) ),
+			array( '%d' ),
+			array( '%d' )
+		);
+	}
+
+	/**
+	 * Admin-side full user edit (profile, billing/shipping address, role, optional password reset).
+	 */
+	public static function admin_update_user_account( $user_id, $fields ) {
+		$user_id = absint( $user_id );
+		$user    = get_user_by( 'id', $user_id );
+		if ( ! $user ) {
+			return new WP_Error( 'not_found', 'کاربر یافت نشد.' );
+		}
+
+		$first_name   = sanitize_text_field( $fields['first_name'] ?? '' );
+		$last_name    = sanitize_text_field( $fields['last_name'] ?? '' );
+		$display_name = sanitize_text_field( $fields['display_name'] ?? '' );
+		$mobile       = self::normalize_mobile( $fields['mobile'] ?? '' );
+		$email_in     = sanitize_email( self::to_latin_digits( $fields['email'] ?? '' ) );
+		$state        = sanitize_text_field( $fields['state'] ?? '' );
+		$city         = sanitize_text_field( $fields['city'] ?? '' );
+		$address_1    = sanitize_text_field( $fields['address_1'] ?? '' );
+		$postcode     = self::normalize_digits( $fields['postcode'] ?? '' );
+		$new_password = self::to_latin_digits( (string) ( $fields['new_password'] ?? '' ) );
+		$role         = sanitize_key( $fields['role'] ?? '' );
+
+		if ( $mobile !== '' && ! self::is_valid_iran_mobile( $mobile ) ) {
+			return new WP_Error( 'invalid_mobile', 'فرمت شماره موبایل معتبر نیست (مثال: 09123456789).' );
+		}
+
+		if ( $mobile !== '' ) {
+			$existing = get_users(
+				array(
+					'exclude'    => array( $user_id ),
+					'meta_query' => array(
+						'relation' => 'OR',
+						array( 'key' => 'kn_mobile', 'value' => $mobile ),
+						array( 'key' => 'billing_phone', 'value' => $mobile ),
+					),
+					'number'     => 1,
+				)
+			);
+			if ( ! empty( $existing ) ) {
+				return new WP_Error( 'mobile_exists', 'این شماره موبایل برای کاربر دیگری ثبت شده است.' );
+			}
+		}
+
+		$update_args = array(
+			'ID'           => $user_id,
+			'first_name'   => $first_name,
+			'last_name'    => $last_name,
+			'display_name' => $display_name ?: ( trim( $first_name . ' ' . $last_name ) ?: $user->display_name ),
+		);
+
+		$final_email = $user->user_email;
+		if ( ! empty( $email_in ) && $email_in !== $user->user_email ) {
+			if ( ! is_email( $email_in ) ) {
+				return new WP_Error( 'invalid_email', 'ایمیل وارد شده معتبر نیست.' );
+			}
+			$owner = email_exists( $email_in );
+			if ( $owner && (int) $owner !== $user_id ) {
+				return new WP_Error( 'email_exists', 'این ایمیل متعلق به حساب دیگری است.' );
+			}
+			$update_args['user_email'] = $email_in;
+			$final_email               = $email_in;
+			delete_user_meta( $user_id, 'kn_auto_email' );
+		}
+
+		if ( ! empty( $new_password ) ) {
+			if ( strlen( $new_password ) < 6 ) {
+				return new WP_Error( 'weak_password', 'رمز عبور جدید باید حداقل ۶ کاراکتر باشد.' );
+			}
+			$update_args['user_pass'] = $new_password;
+		}
+
+		// Prevent admin from accidentally demoting themselves or assigning unknown roles
+		if ( ! empty( $role ) && get_role( $role ) && $user_id !== get_current_user_id() ) {
+			$update_args['role'] = $role;
+		}
+
+		$res = wp_update_user( $update_args );
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+
+		self::sync_user_commerce_meta(
+			$user_id,
+			array(
+				'first_name' => $first_name,
+				'last_name'  => $last_name,
+				'mobile'     => $mobile,
+				'email'      => $final_email,
+				'state'      => $state,
+				'city'       => $city,
+				'address_1'  => $address_1,
+				'postcode'   => $postcode,
+			)
+		);
+
+		clean_user_cache( $user_id );
+		return true;
 	}
 
 	private static function base64url_encode( $data ) {
