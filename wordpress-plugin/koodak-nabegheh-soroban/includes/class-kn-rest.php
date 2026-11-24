@@ -442,6 +442,16 @@ class KN_REST {
 				'permission_callback' => '__return_true',
 			)
 		);
+
+		register_rest_route(
+			$ns,
+			'/leaderboard',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'handle_leaderboard' ),
+				'permission_callback' => '__return_true',
+			)
+		);
 	}
 
 	/**
@@ -1311,5 +1321,14 @@ class KN_REST {
 
 		KN_Marketing::record_event( $event_type, $target_id, $platform, $device_os, $screen, $user_id, $session_key );
 		return rest_ensure_response( array( 'ok' => true ) );
+	}
+
+	public static function handle_leaderboard( WP_REST_Request $request ) {
+		$user    = KN_Auth::authenticate_request( $request );
+		$user_id = $user ? (int) $user->ID : 0;
+		$sort    = sanitize_key( (string) ( $request->get_param( 'sort' ) ?: 'stars' ) );
+		$limit   = absint( $request->get_param( 'limit' ) ?: 30 );
+
+		return rest_ensure_response( KN_DB::get_leaderboard( $sort, $limit, $user_id ) );
 	}
 }

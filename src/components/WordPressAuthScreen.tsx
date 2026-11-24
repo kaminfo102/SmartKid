@@ -3,9 +3,12 @@ import {
   AlertCircle,
   ArrowRight,
   CheckCircle2,
+  Compass,
   CreditCard,
   Download,
   Edit3,
+  Eye,
+  EyeOff,
   Globe,
   Headphones,
   KeyRound,
@@ -16,7 +19,12 @@ import {
   RefreshCw,
   Save,
   Shield,
+  ShieldCheck,
+  ShoppingBag,
   Smartphone,
+  Sparkles,
+  Trophy,
+  UserCheck,
   Users,
 } from 'lucide-react';
 import type {
@@ -65,6 +73,9 @@ interface WordPressAuthScreenProps {
   onRefreshFromWordPress: (overrideUrl?: string) => Promise<boolean>;
   onOpenProfiles?: () => void;
   onOpenTickets?: () => void;
+  onContinueAsGuest?: () => void;
+  authReasonMessage?: string | null;
+  isGuestMode?: boolean;
   onBack: () => void;
   embedded?: boolean;
   refreshTrigger?: number;
@@ -84,6 +95,9 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
   onRefreshFromWordPress,
   onOpenProfiles,
   onOpenTickets,
+  onContinueAsGuest,
+  authReasonMessage = null,
+  isGuestMode = false,
   onBack,
   embedded = false,
   refreshTrigger = 0,
@@ -100,6 +114,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   // Logged-in account tabs
   const [accountTab, setAccountTab] = useState<'orders' | 'profile' | 'admin'>('orders');
@@ -451,8 +466,14 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
     }
   };
 
+  const containerClass = embedded
+    ? 'space-y-4'
+    : wpUser
+      ? 'flex-1 w-full max-w-3xl mx-auto p-4 sm:p-6 space-y-5 pb-12'
+      : 'flex-1 w-full max-w-5xl mx-auto p-4 sm:p-6 space-y-5 pb-12';
+
   const contentBody = (
-      <div className={embedded ? 'space-y-4' : 'flex-1 w-full max-w-2xl mx-auto p-4 space-y-5 pb-12'}>
+      <div className={containerClass}>
         {statusMsg && (
           <div className="rounded-2xl bg-[#E7F9E5] border-2 border-[#8EE086] border-b-4 p-3 text-xs sm:text-sm font-extrabold text-[#1E6B19] flex items-center gap-2">
             <CheckCircle2 className="w-5 h-5 shrink-0" />
@@ -1026,214 +1047,342 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
             )}
           </>
         ) : (
-          <>
-            {/* Logged Out: Quick Mobile + SMS.ir OTP Auth (Default) & Password Login */}
-            <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] overflow-hidden">
-              <div className="grid grid-cols-2 bg-[#FFF6EB] dark:bg-slate-800 p-1.5 gap-1.5 border-b border-[#EEDCC5] dark:border-slate-700">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthTab('otp');
-                    setErrorMsg(null);
-                  }}
-                  className={`min-h-[46px] px-2 rounded-xl font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all ${
-                    authTab === 'otp'
-                      ? 'bg-[#4BB543] text-white shadow-sm'
-                      : 'text-[#783F1D] dark:text-slate-300'
-                  }`}
-                >
-                  <Smartphone className="w-4 h-4 shrink-0" />
-                  <span>ورود / ثبت‌نام با موبایل</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthTab('password');
-                    setErrorMsg(null);
-                  }}
-                  className={`min-h-[46px] px-2 rounded-xl font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all ${
-                    authTab === 'password'
-                      ? 'bg-[#5472EB] text-white shadow-sm'
-                      : 'text-[#783F1D] dark:text-slate-300'
-                  }`}
-                >
-                  <KeyRound className="w-4 h-4 shrink-0" />
-                  <span>ورود با رمز عبور</span>
-                </button>
-              </div>
+          <div className={embedded ? 'space-y-4' : 'grid grid-cols-1 lg:grid-cols-12 gap-6 items-start'}>
+            {/* Left Showcase & Guest vs Member Comparison (Standalone Desktop/Tablet) */}
+            {!embedded && (
+              <section className="lg:col-span-5 rounded-3xl bg-gradient-to-b from-[#FFF9EE] to-white dark:from-slate-900 dark:to-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] dark:border-b-slate-700 p-5 sm:p-6 space-y-5 shadow-[0_14px_30px_-12px_rgba(170,104,40,0.18)]">
+                <div className="flex items-center gap-3.5">
+                  <CloudSyncIllustration className="w-16 h-16 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-extrabold text-[#D97706] dark:text-amber-400">
+                      حساب خانواده کودک نابغه
+                    </p>
+                    <h2 className="text-lg sm:text-xl font-black text-[#3B2618] dark:text-white leading-snug">
+                      ورود سریع با شماره موبایل
+                    </h2>
+                  </div>
+                </div>
 
-              {authTab === 'otp' ? (
-                <div className="p-4 sm:p-5 space-y-4">
-                  <div className="rounded-2xl bg-[#FFF9F2] dark:bg-slate-800/70 border border-[#EEDCC5] dark:border-slate-700 p-3 text-xs font-bold text-[#783F1D] dark:text-slate-300 leading-relaxed">
-                    بدون نیاز به رمز عبور و فرم طولانی! فقط شماره موبایل خود را وارد کنید تا کد تایید یک‌بارمصرف برایتان پیامک شود. تکمیل آدرس فقط هنگام خرید انجام می‌شود.
+                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                  با یک شماره موبایل در کمتر از چند ثانیه وارد شوید؛ ستاره‌ها، پروفایل فرزندان، مدال‌ها و سفارش‌های شما به‌صورت امن بین موبایل و وب ذخیره می‌شوند.
+                </p>
+
+                <div className="space-y-2.5">
+                  <div className="text-xs font-black text-[#6E3D1C] dark:text-amber-200">
+                    مقایسه حساب کاربری و حالت مهمان
                   </div>
 
-                  {!otpSent ? (
-                    <form onSubmit={handleSendOtp} noValidate className="space-y-3.5">
-                      <div>
-                        <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-                          شماره موبایل (۱۱ رقم با شروع ۰۹)
-                        </label>
-                        <LatinDigitInput
-                          type="text"
-                          inputMode="tel"
-                          autoComplete="tel"
-                          dir="ltr"
-                          transformMode="mobile"
-                          value={otpMobile}
-                          onValueChange={setOtpMobile}
-                          placeholder="09123456789"
-                          className={`w-full min-h-[50px] px-4 rounded-2xl border-2 bg-[#FFF9F2] dark:bg-slate-800 text-base font-extrabold tracking-wider text-slate-900 dark:text-white text-center ${
-                            otpMobile.trim() && !isValidIranMobile(otpMobile)
-                              ? 'border-rose-400 dark:border-rose-500'
-                              : 'border-[#EEDCC5] dark:border-slate-700'
-                          }`}
-                        />
-                        {otpMobile.trim() && (
-                          <p
-                            className={`text-[11px] font-bold mt-1.5 ${
-                              isValidIranMobile(otpMobile)
-                                ? 'text-emerald-700 dark:text-emerald-400'
-                                : 'text-rose-600 dark:text-rose-400'
+                  <div className="rounded-2xl bg-[#EEF8EC] dark:bg-emerald-950/30 border border-[#BCE5B4] dark:border-emerald-800/60 p-3.5 space-y-2">
+                    <div className="flex items-center gap-2 text-xs font-black text-[#1E6B19] dark:text-emerald-300">
+                      <ShieldCheck className="w-4 h-4 shrink-0" />
+                      <span>امکانات با ورود به حساب کاربری</span>
+                    </div>
+                    <ul className="space-y-1.5 text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300">
+                      <li className="flex items-center gap-2">
+                        <Trophy className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                        <span>ثبت رکورد کودک در جدول قهرمانان (لیدربورد)</span>
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <ShoppingBag className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>باز کردن ترم‌های جدید، خرید از فروشگاه و پیگیری سفارش</span>
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Headphones className="w-3.5 h-3.5 text-[#5472EB] shrink-0" />
+                        <span>ذخیره ابری پیشرفت روی همه دستگاه‌ها و پشتیبانی تیکتی</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div className="rounded-2xl bg-[#FFF6EB] dark:bg-slate-800/70 border border-[#EEDCC5] dark:border-slate-700 p-3.5 space-y-1.5">
+                    <div className="flex items-center gap-2 text-xs font-black text-[#783F1D] dark:text-amber-200">
+                      <Compass className="w-4 h-4 shrink-0 text-[#E07C47]" />
+                      <span>امکانات حالت مهمان (بدون نیاز به ثبت‌نام)</span>
+                    </div>
+                    <p className="text-[11px] sm:text-xs font-bold text-slate-600 dark:text-slate-400 leading-relaxed">
+                      بازدید کامل صفحه اصلی · ترم اول رایگان · تمرین چرتکه · بازی‌های شاد · چرتکه سه‌بعدی تمام‌صفحه · مشاهده لیدربورد و فروشگاه
+                    </p>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* Right Auth Card + OTP / Password + Guest CTA */}
+            <div className={embedded ? 'space-y-4' : 'lg:col-span-7 space-y-4'}>
+              {authReasonMessage && (
+                <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-300 dark:border-amber-700 p-3.5 flex items-start gap-2.5 text-xs sm:text-sm font-extrabold text-amber-950 dark:text-amber-100 shadow-xs">
+                  <Sparkles className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                  <span className="leading-relaxed">{authReasonMessage}</span>
+                </div>
+              )}
+
+              {/* Quick Mobile + SMS.ir OTP Auth (Default) & Password Login */}
+              <section className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 dark:border-b-slate-700 shadow-[0_14px_30px_-10px_rgba(170,104,40,0.18)] overflow-hidden">
+                <div className="grid grid-cols-2 bg-[#FFF6EB] dark:bg-slate-800 p-1.5 gap-1.5 border-b border-[#EEDCC5] dark:border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthTab('otp');
+                      setErrorMsg(null);
+                    }}
+                    className={`min-h-[46px] px-2.5 rounded-2xl font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all whitespace-nowrap ${
+                      authTab === 'otp'
+                        ? 'bg-[#4BB543] text-white shadow-sm'
+                        : 'text-[#783F1D] dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/50'
+                    }`}
+                  >
+                    <Smartphone className="w-4 h-4 shrink-0" />
+                    <span>ورود / ثبت‌نام با موبایل</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthTab('password');
+                      setErrorMsg(null);
+                    }}
+                    className={`min-h-[46px] px-2.5 rounded-2xl font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all whitespace-nowrap ${
+                      authTab === 'password'
+                        ? 'bg-[#5472EB] text-white shadow-sm'
+                        : 'text-[#783F1D] dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/50'
+                    }`}
+                  >
+                    <KeyRound className="w-4 h-4 shrink-0" />
+                    <span>ورود با رمز عبور</span>
+                  </button>
+                </div>
+
+                {authTab === 'otp' ? (
+                  <div className="p-5 sm:p-6 space-y-4">
+                    <div className="rounded-2xl bg-[#FFF9F2] dark:bg-slate-800/70 border border-[#EEDCC5] dark:border-slate-700 p-3.5 text-xs font-bold text-[#783F1D] dark:text-slate-300 leading-relaxed">
+                      بدون نیاز به رمز عبور و فرم طولانی! فقط شماره موبایل خود را وارد کنید تا کد تایید یک‌بارمصرف پیامک شود. اطلاعات پستی فقط هنگام سفارش و خرید دریافت می‌شود.
+                    </div>
+
+                    {!otpSent ? (
+                      <form onSubmit={handleSendOtp} noValidate className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">
+                            شماره موبایل (۱۱ رقم با شروع ۰۹)
+                          </label>
+                          <LatinDigitInput
+                            type="text"
+                            inputMode="tel"
+                            autoComplete="tel"
+                            dir="ltr"
+                            transformMode="mobile"
+                            value={otpMobile}
+                            onValueChange={setOtpMobile}
+                            placeholder="09123456789"
+                            className={`w-full min-h-[54px] px-4 rounded-2xl border-2 bg-[#FFF9F2] dark:bg-slate-800 text-lg font-extrabold tracking-wider text-slate-900 dark:text-white text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-[#4BB543]/40 ${
+                              otpMobile.trim() && !isValidIranMobile(otpMobile)
+                                ? 'border-rose-400 dark:border-rose-500'
+                                : 'border-[#EEDCC5] dark:border-slate-700'
                             }`}
-                          >
-                            {isValidIranMobile(otpMobile)
-                              ? `شماره موبایل آماده ارسال کد است (${normalizeIranMobile(otpMobile)})`
-                              : 'شماره موبایل باید ۱۱ رقم و با ۰۹ شروع شود.'}
-                          </p>
-                        )}
-                      </div>
+                          />
+                          {otpMobile.trim() && (
+                            <p
+                              className={`text-[11px] font-bold mt-1.5 ${
+                                isValidIranMobile(otpMobile)
+                                  ? 'text-emerald-700 dark:text-emerald-400'
+                                  : 'text-rose-600 dark:text-rose-400'
+                              }`}
+                            >
+                              {isValidIranMobile(otpMobile)
+                                ? `شماره موبایل آماده ارسال کد است (${normalizeIranMobile(otpMobile)})`
+                                : 'شماره موبایل باید ۱۱ رقم و با ۰۹ شروع شود.'}
+                            </p>
+                          )}
+                        </div>
 
-                      <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full min-h-[52px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-sm sm:text-base flex items-center justify-center gap-2 disabled:opacity-60 transition-all"
-                      >
-                        {loading ? (
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                        ) : (
-                          <Smartphone className="w-5 h-5" />
-                        )}
-                        <span>دریافت کد تایید پیامکی</span>
-                      </button>
-                    </form>
-                  ) : (
-                    <form onSubmit={handleVerifyOtp} noValidate className="space-y-4">
-                      <div className="flex items-center justify-between gap-2 rounded-2xl bg-[#EFF6FF] dark:bg-slate-800 border border-sky-200 dark:border-slate-700 px-3.5 py-2.5 text-xs">
-                        <span className="font-bold text-slate-700 dark:text-slate-200">
-                          ارسال به شماره{' '}
-                          <strong dir="ltr" className="font-mono text-[#354EB8] dark:text-sky-300">
-                            {otpTargetMobile || normalizeIranMobile(otpMobile)}
-                          </strong>
-                        </span>
                         <button
-                          type="button"
-                          onClick={() => {
-                            setOtpSent(false);
-                            setOtpCode('');
-                            setErrorMsg(null);
-                            setStatusMsg(null);
-                          }}
-                          className="font-extrabold text-[#5472EB] hover:underline shrink-0"
+                          type="submit"
+                          disabled={loading}
+                          className="w-full min-h-[54px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-sm sm:text-base flex items-center justify-center gap-2 disabled:opacity-60 transition-all whitespace-nowrap"
                         >
-                          تغییر شماره
+                          {loading ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <Smartphone className="w-5 h-5" />
+                          )}
+                          <span>دریافت کد تایید پیامکی</span>
                         </button>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">
-                          کد تایید ۶ رقمی پیامک‌شده
-                        </label>
-                        <LatinDigitInput
-                          type="text"
-                          inputMode="numeric"
-                          autoComplete="one-time-code"
-                          dir="ltr"
-                          transformMode="digits-only"
-                          value={otpCode}
-                          onValueChange={(val) => setOtpCode(val.slice(0, 6))}
-                          placeholder="------"
-                          className="w-full min-h-[54px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-2xl font-mono font-extrabold tracking-[0.45em] text-center text-slate-900 dark:text-white"
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-400">
-                        {resendCountdown > 0 ? (
-                          <span className="tabular-nums">
-                            ارسال مجدد کد تا {formatNumber(resendCountdown, digitMode)} ثانیه دیگر
+                      </form>
+                    ) : (
+                      <form onSubmit={handleVerifyOtp} noValidate className="space-y-4">
+                        <div className="flex items-center justify-between gap-2 rounded-2xl bg-[#EFF6FF] dark:bg-slate-800 border border-sky-200 dark:border-slate-700 px-3.5 py-2.5 text-xs">
+                          <span className="font-bold text-slate-700 dark:text-slate-200">
+                            کد ۶ رقمی به{' '}
+                            <strong dir="ltr" className="font-mono text-[#354EB8] dark:text-sky-300 tabular-nums">
+                              {otpTargetMobile || normalizeIranMobile(otpMobile)}
+                            </strong>{' '}
+                            ارسال شد
                           </span>
-                        ) : (
                           <button
                             type="button"
-                            disabled={loading}
-                            onClick={() => void handleSendOtp()}
-                            className="font-extrabold text-[#5472EB] hover:underline disabled:opacity-50"
+                            onClick={() => {
+                              setOtpSent(false);
+                              setOtpCode('');
+                              setErrorMsg(null);
+                              setStatusMsg(null);
+                            }}
+                            className="font-extrabold text-[#5472EB] hover:underline shrink-0 whitespace-nowrap"
                           >
-                            ارسال مجدد کد تایید
+                            تغییر شماره
                           </button>
-                        )}
-                      </div>
+                        </div>
 
-                      <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full min-h-[52px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-sm sm:text-base flex items-center justify-center gap-2 disabled:opacity-60 transition-all"
-                      >
-                        {loading ? (
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                        ) : (
-                          <CheckCircle2 className="w-5 h-5" />
-                        )}
-                        <span>تایید کد و ورود به حساب</span>
-                      </button>
-                    </form>
-                  )}
-                </div>
-              ) : (
-                <form onSubmit={handleLogin} noValidate className="p-4 sm:p-5 space-y-3.5">
-                  <div>
-                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-                      شماره موبایل، نام کاربری یا ایمیل
-                    </label>
-                    <LatinDigitInput
-                      type="text"
-                      inputMode="text"
-                      autoComplete="username"
-                      dir="ltr"
-                      transformMode="latin-digits"
-                      value={identifier}
-                      onValueChange={setIdentifier}
-                      placeholder="09123456789 یا parent@example.com"
-                      className="w-full min-h-[48px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
-                    />
+                        {/* Visual 6-digit OTP indicator boxes synced with accessible input */}
+                        <div className="space-y-2">
+                          <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300">
+                            کد تایید ۶ رقمی پیامک‌شده
+                          </label>
+                          <div dir="ltr" aria-hidden="true" className="grid grid-cols-6 gap-2">
+                            {Array.from({ length: 6 }).map((_, idx) => {
+                              const char = otpCode[idx] || '';
+                              const isCurrent = otpCode.length === idx;
+                              return (
+                                <div
+                                  key={idx}
+                                  className={`h-12 rounded-xl border-2 flex items-center justify-center font-mono text-lg font-black tabular-nums transition-all ${
+                                    char
+                                      ? 'bg-[#EEF8EC] dark:bg-emerald-950/40 border-[#4BB543] text-[#1E6B19] dark:text-emerald-300'
+                                      : isCurrent
+                                      ? 'bg-white dark:bg-slate-800 border-[#5472EB] text-slate-400'
+                                      : 'bg-[#FFF9F2] dark:bg-slate-800/70 border-[#EEDCC5] dark:border-slate-700 text-slate-400'
+                                  }`}
+                                >
+                                  {char || '•'}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <LatinDigitInput
+                            type="text"
+                            inputMode="numeric"
+                            autoComplete="one-time-code"
+                            dir="ltr"
+                            transformMode="digits-only"
+                            value={otpCode}
+                            onValueChange={(val) => setOtpCode(val.slice(0, 6))}
+                            placeholder="کد ۶ رقمی را اینجا وارد کنید"
+                            className="w-full min-h-[50px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-xl font-mono font-extrabold tracking-[0.35em] text-center text-slate-900 dark:text-white tabular-nums"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-400">
+                          {resendCountdown > 0 ? (
+                            <span className="tabular-nums">
+                              ارسال مجدد کد تا {formatNumber(resendCountdown, digitMode)} ثانیه دیگر
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={loading}
+                              onClick={() => void handleSendOtp()}
+                              className="font-extrabold text-[#5472EB] hover:underline disabled:opacity-50"
+                            >
+                              ارسال مجدد کد تایید
+                            </button>
+                          )}
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={loading}
+                          className="w-full min-h-[54px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-sm sm:text-base flex items-center justify-center gap-2 disabled:opacity-60 transition-all whitespace-nowrap"
+                        >
+                          {loading ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="w-5 h-5" />
+                          )}
+                          <span>تایید کد و ورود به حساب</span>
+                        </button>
+                      </form>
+                    )}
                   </div>
-                  <div>
-                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
-                      رمز عبور
-                    </label>
-                    <LatinDigitInput
-                      type="password"
-                      autoComplete="current-password"
-                      dir="ltr"
-                      transformMode="latin-digits"
-                      value={password}
-                      onValueChange={setPassword}
-                      placeholder="••••••••"
-                      className="w-full min-h-[48px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
-                    />
+                ) : (
+                  <form onSubmit={handleLogin} noValidate className="p-5 sm:p-6 space-y-4">
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">
+                        شماره موبایل، نام کاربری یا ایمیل
+                      </label>
+                      <LatinDigitInput
+                        type="text"
+                        inputMode="text"
+                        autoComplete="username"
+                        dir="ltr"
+                        transformMode="latin-digits"
+                        value={identifier}
+                        onValueChange={setIdentifier}
+                        placeholder="09123456789 یا parent@example.com"
+                        className="w-full min-h-[50px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">
+                        رمز عبور
+                      </label>
+                      <div className="relative">
+                        <LatinDigitInput
+                          type={showPassword ? 'text' : 'password'}
+                          autoComplete="current-password"
+                          dir="ltr"
+                          transformMode="latin-digits"
+                          value={password}
+                          onValueChange={setPassword}
+                          placeholder="••••••••"
+                          className="w-full min-h-[50px] pl-12 pr-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword((prev) => !prev)}
+                          aria-label={showPassword ? 'پنهان کردن رمز عبور' : 'نمایش رمز عبور'}
+                          className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-xl flex items-center justify-center text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white transition-colors"
+                        >
+                          {showPassword ? (
+                            <EyeOff className="w-4 h-4" />
+                          ) : (
+                            <Eye className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="w-full min-h-[54px] rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-base flex items-center justify-center gap-2 disabled:opacity-60 transition-all whitespace-nowrap"
+                    >
+                      {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5" />}
+                      <span>ورود به حساب کاربری</span>
+                    </button>
+                  </form>
+                )}
+              </section>
+
+              {/* Prominent Guest Mode Option */}
+              {onContinueAsGuest && (
+                <section className="rounded-3xl bg-white/90 dark:bg-slate-900/90 border-2 border-[#EEDCC5] dark:border-slate-800 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                  <div className="min-w-0">
+                    <div className="text-xs sm:text-sm font-black text-[#4B2D16] dark:text-white">
+                      {isGuestMode
+                        ? 'ادامه کار با حالت مهمان'
+                        : 'می‌خواهید ابتدا بدون ثبت‌نام محیط برنامه را ببینید؟'}
+                    </div>
+                    <p className="text-[11px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 mt-0.5">
+                      صفحه اصلی، ترم اول، بازی‌ها و چرتکه سه‌بعدی در دسترس شماست.
+                    </p>
                   </div>
                   <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full min-h-[52px] rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] text-white font-extrabold text-base flex items-center justify-center gap-2 disabled:opacity-60"
+                    type="button"
+                    onClick={onContinueAsGuest}
+                    className="min-h-[48px] px-4 rounded-2xl bg-[#FFF6EB] hover:bg-amber-100 dark:bg-slate-800 dark:hover:bg-slate-700 border-2 border-[#EEDCC5] dark:border-slate-700 border-b-4 border-b-[#DFC6A8] dark:border-b-slate-600 text-[#6D3B19] dark:text-amber-200 font-extrabold text-xs sm:text-sm inline-flex items-center justify-center gap-2 shrink-0 whitespace-nowrap active:translate-y-0.5 transition-all"
                   >
-                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5" />}
-                    <span>ورود به حساب کاربری</span>
+                    <UserCheck className="w-4 h-4 text-[#E07C47]" />
+                    <span>ورود به عنوان مهمان</span>
                   </button>
-                </form>
+                </section>
               )}
-            </section>
-          </>
+            </div>
+          </div>
         )}
       </div>
   );

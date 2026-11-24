@@ -6,6 +6,8 @@ import type {
   BacsAccount,
   ChildProfile,
   ClientPlatform,
+  LeaderboardResponse,
+  LeaderboardSortKey,
   LessonDefinition,
   MarketingEventType,
   PendingOrderInfo,
@@ -1116,4 +1118,32 @@ export async function trackMarketingEvent(
     // Non-blocking telemetry
   }
 }
+
+export async function fetchWordPressLeaderboard(
+  siteUrl: string,
+  sort: LeaderboardSortKey = 'stars',
+  limit = 30
+): Promise<LeaderboardResponse> {
+  if (!siteUrl) {
+    return {
+      sort,
+      entries: [],
+      myBestEntry: null,
+      totalParticipants: 0,
+    };
+  }
+  const data = await wpRequest<LeaderboardResponse>(
+    siteUrl,
+    `/leaderboard?sort=${encodeURIComponent(sort)}&limit=${encodeURIComponent(String(limit))}`,
+    { method: 'GET' },
+    false
+  );
+  return {
+    sort: data?.sort || sort,
+    entries: Array.isArray(data?.entries) ? data.entries : [],
+    myBestEntry: data?.myBestEntry ?? null,
+    totalParticipants: typeof data?.totalParticipants === 'number' ? data.totalParticipants : 0,
+  };
+}
+
 

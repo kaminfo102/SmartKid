@@ -1,7 +1,9 @@
 export type ScreenId =
+  | 'welcome'
   | 'start'
   | 'auth'
   | 'profiles'
+  | 'leaderboard'
   | 'map'
   | 'lesson'
   | 'practice'
@@ -464,5 +466,31 @@ export interface SorobanTheme {
   studioBgLight: string;
   plateText: string;
 }
+
+export type LeaderboardSortKey = 'stars' | 'points' | 'streak';
+
+export interface LeaderboardEntry {
+  rank: number;
+  profileId: string;
+  name: string;
+  avatar: AvatarId;
+  avatarUrl?: string;
+  age: number;
+  totalStars: number;
+  rewardPoints: number;
+  badgesCount: number;
+  streak: number;
+  practiceMinutes: number;
+  accuracy: number;
+  isCurrentUser?: boolean;
+}
+
+export interface LeaderboardResponse {
+  sort: LeaderboardSortKey;
+  entries: LeaderboardEntry[];
+  myBestEntry?: LeaderboardEntry | null;
+  totalParticipants: number;
+}
+
 
 

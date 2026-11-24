@@ -1381,6 +1381,94 @@ class KN_DB {
 		return $row ? self::format_profile_row( $row ) : null;
 	}
 
+	/**
+	 * Fetch public child heroes leaderboard sorted by stars, reward points, or streak.
+	 * Only exposes safe public game metrics (no parent PII, emails, phones, or addresses).
+	 */
+	public static function get_leaderboard( $sort = 'stars', $limit = 30, $current_user_id = 0 ) {
+		global $wpdb;
+		$t_profiles      = self::table_profiles();
+		$limit           = max( 5, min( 100, absint( $limit ) ) );
+		$current_user_id = absint( $current_user_id );
+		$safe_sort       = in_array( $sort, array( 'stars', 'points', 'streak' ), true ) ? $sort : 'stars';
+
+		$rows = $wpdb->get_results(
+			"SELECT id, user_id, client_profile_id, name, avatar, avatar_url, age, total_stars, practice_minutes, total_correct, total_attempts, badges_json, reward_points, daily_bonus_json
+			 FROM {$t_profiles}
+			 ORDER BY total_stars DESC, reward_points DESC, total_correct DESC, id ASC
+			 LIMIT 200",
+			ARRAY_A
+		);
+
+		$entries = array();
+		if ( is_array( $rows ) ) {
+			foreach ( $rows as $row ) {
+				$badges      = json_decode( $row['badges_json'] ?? '[]', true );
+				$daily_bonus = json_decode( $row['daily_bonus_json'] ?? '{}', true );
+				$attempts    = max( 0, (int) $row['total_attempts'] );
+				$correct     = max( 0, (int) $row['total_correct'] );
+				$accuracy    = $attempts > 0 ? min( 100, (int) round( ( $correct / $attempts ) * 100 ) ) : 0;
+				$streak      = is_array( $daily_bonus ) && isset( $daily_bonus['streak'] ) ? max( 0, (int) $daily_bonus['streak'] ) : 0;
+
+				$entries[] = array(
+					'rank'            => 0,
+					'profileId'       => (string) $row['client_profile_id'],
+					'name'            => sanitize_text_field( (string) ( $row['name'] ?: 'کیا' ) ),
+					'avatar'          => sanitize_key( (string) ( $row['avatar'] ?: 'owl' ) ),
+					'avatarUrl'       => esc_url_raw( (string) ( $row['avatar_url'] ?? '' ) ),
+					'age'             => max( 3, min( 15, (int) $row['age'] ) ),
+					'totalStars'      => max( 0, (int) $row['total_stars'] ),
+					'rewardPoints'    => max( 0, (int) ( $row['reward_points'] ?? 0 ) ),
+					'badgesCount'     => is_array( $badges ) ? count( $badges ) : 0,
+					'streak'          => $streak,
+					'practiceMinutes' => max( 0, (int) $row['practice_minutes'] ),
+					'accuracy'        => $accuracy,
+					'isCurrentUser'   => $current_user_id > 0 && (int) $row['user_id'] === $current_user_id,
+				);
+			}
+		}
+
+		usort(
+			$entries,
+			static function ( $a, $b ) use ( $safe_sort ) {
+				if ( $safe_sort === 'points' ) {
+					if ( $b['rewardPoints'] !== $a['rewardPoints'] ) {
+						return $b['rewardPoints'] <=> $a['rewardPoints'];
+					}
+				} elseif ( $safe_sort === 'streak' ) {
+					if ( $b['streak'] !== $a['streak'] ) {
+						return $b['streak'] <=> $a['streak'];
+					}
+				}
+				if ( $b['totalStars'] !== $a['totalStars'] ) {
+					return $b['totalStars'] <=> $a['totalStars'];
+				}
+				if ( $b['rewardPoints'] !== $a['rewardPoints'] ) {
+					return $b['rewardPoints'] <=> $a['rewardPoints'];
+				}
+				return $b['badgesCount'] <=> $a['badgesCount'];
+			}
+		);
+
+		$total_participants = count( $entries );
+		$my_best_entry      = null;
+
+		foreach ( $entries as $idx => &$entry ) {
+			$entry['rank'] = $idx + 1;
+			if ( ! empty( $entry['isCurrentUser'] ) && $my_best_entry === null ) {
+				$my_best_entry = $entry;
+			}
+		}
+		unset( $entry );
+
+		return array(
+			'sort'              => $safe_sort,
+			'entries'           => array_slice( $entries, 0, $limit ),
+			'myBestEntry'       => $my_best_entry,
+			'totalParticipants' => $total_participants,
+		);
+	}
+
 	private static function get_default_terms_seed() {
 		return array(
 			array(

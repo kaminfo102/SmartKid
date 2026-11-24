@@ -54,9 +54,11 @@ import {
   syncNativeStatusBar,
 } from './lib/nativeBridge';
 import { StartScreen } from './components/StartScreen';
+import { WelcomeScreen } from './components/WelcomeScreen';
 import { WordPressAuthScreen } from './components/WordPressAuthScreen';
 import type { ChildAvatarSavePayload } from './components/ChildAvatarEditorModal';
 import { ProfileScreen } from './features/progress/ProfileScreen';
+import { LeaderboardScreen } from './features/progress/LeaderboardScreen';
 import { LessonMap } from './features/lessons/LessonMap';
 import { LessonScreen } from './features/lessons/LessonScreen';
 import { PracticeScreen } from './features/lessons/PracticeScreen';
@@ -74,6 +76,31 @@ import {
 import { SupportScreen } from './features/support/SupportScreen';
 import { OfflineIndicator } from './components/PWAInstallButton';
 import { ScheduledDialogHost } from './components/ScheduledDialogHost';
+
+const ONBOARDING_SEEN_KEY = 'kn_onboarding_seen_v1';
+const GUEST_MODE_KEY = 'kn_guest_mode_v1';
+
+function readStorageFlag(key: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeStorageFlag(key: string, value: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (value) {
+      window.localStorage.setItem(key, '1');
+    } else {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // ignore storage restriction
+  }
+}
 
 interface PaymentReturnPayload {
   from: 'map' | 'shop' | 'orders';
@@ -125,11 +152,16 @@ export default function App() {
   const [data, setData] = useState<StoredAppData>(() => loadAppData());
   const [screen, setScreen] = useState<ScreenId>(() => {
     const ret = initialPaymentReturnRef.current;
-    if (!ret) return 'start';
-    if (ret.from === 'shop') return 'shop';
-    if (ret.from === 'orders') return 'auth';
-    return 'map';
+    if (ret) {
+      if (ret.from === 'shop') return 'shop';
+      if (ret.from === 'orders') return 'auth';
+      return 'map';
+    }
+    return readStorageFlag(ONBOARDING_SEEN_KEY) ? 'start' : 'welcome';
   });
+  const [guestMode, setGuestMode] = useState<boolean>(() => readStorageFlag(GUEST_MODE_KEY));
+  const [authReturnScreen, setAuthReturnScreen] = useState<ScreenId | null>(null);
+  const [authReasonMessage, setAuthReasonMessage] = useState<string | null>(null);
   const [terms, setTerms] = useState<TermDefinition[]>(DEFAULT_TERMS);
   const [activeTermId, setActiveTermId] = useState<string>(DEFAULT_TERMS[0].id);
   const [wpQuestions, setWpQuestions] = useState<PracticeQuestion[]>([]);
@@ -354,6 +386,10 @@ export default function App() {
         wpUserRef.current = restored.user;
         setWpUser(restored.user);
         setWpConnected(true);
+        writeStorageFlag(ONBOARDING_SEEN_KEY, true);
+        writeStorageFlag(GUEST_MODE_KEY, false);
+        setGuestMode(false);
+        setScreen((prev) => (prev === 'welcome' ? 'start' : prev));
         setData((prev) => {
           const next: StoredAppData = {
             profiles: normalizedProfiles.length > 0 ? normalizedProfiles : prev.profiles,
@@ -515,6 +551,17 @@ export default function App() {
         setScreen('map');
         return true;
       }
+      if (screen === 'welcome') {
+        return false;
+      }
+      if (screen === 'auth') {
+        const dest =
+          authReturnScreen && authReturnScreen !== 'auth' ? authReturnScreen : 'start';
+        setAuthReturnScreen(null);
+        setAuthReasonMessage(null);
+        setScreen(dest);
+        return true;
+      }
       if (screen !== 'start') {
         if (screen === 'parents') {
           setParentUnlocked(false);
@@ -524,7 +571,7 @@ export default function App() {
       }
       return false;
     });
-  }, [screen]);
+  }, [screen, authReturnScreen]);
 
   const updateSettings = useCallback(
     (patch: Partial<AppSettings>) => {
@@ -884,6 +931,10 @@ export default function App() {
     wpUserRef.current = res.user;
     setWpUser(res.user);
     setWpConnected(true);
+    writeStorageFlag(ONBOARDING_SEEN_KEY, true);
+    writeStorageFlag(GUEST_MODE_KEY, false);
+    setGuestMode(false);
+    setAuthReasonMessage(null);
 
     const normalizedProfiles =
       res.profiles.length > 0 ? res.profiles.map(normalizeChildProfile) : [];
@@ -988,6 +1039,12 @@ export default function App() {
       );
     }
     void refreshFromWordPress();
+    if (screen === 'auth') {
+      const targetScreen =
+        authReturnScreen && authReturnScreen !== 'auth' ? authReturnScreen : 'start';
+      setAuthReturnScreen(null);
+      setScreen(targetScreen);
+    }
   };
 
   const handleWordPressLogout = useCallback(() => {
@@ -1073,6 +1130,31 @@ export default function App() {
     setScreen('parents');
   }, []);
 
+  const handleEnterLoginFromWelcome = useCallback(() => {
+    writeStorageFlag(ONBOARDING_SEEN_KEY, true);
+    setAuthReturnScreen('start');
+    setAuthReasonMessage(null);
+    setScreen('auth');
+  }, []);
+
+  const handleContinueAsGuest = useCallback(() => {
+    audioEngine.play('uiTap');
+    writeStorageFlag(ONBOARDING_SEEN_KEY, true);
+    writeStorageFlag(GUEST_MODE_KEY, true);
+    setGuestMode(true);
+    setAuthReasonMessage(null);
+    setAuthReturnScreen(null);
+    setScreen('start');
+  }, []);
+
+  const openAuthWithReturn = useCallback((fromScreen: ScreenId, reason?: string) => {
+    audioEngine.play('uiTap');
+    writeStorageFlag(ONBOARDING_SEEN_KEY, true);
+    setAuthReturnScreen(fromScreen);
+    setAuthReasonMessage(reason ?? null);
+    setScreen('auth');
+  }, []);
+
   const navigateFromMarketing = useCallback((target: ScreenId) => {
     audioEngine.play('uiTap');
     if (target === 'parents') {
@@ -1099,6 +1181,23 @@ export default function App() {
 
   return (
     <div className="min-h-screen w-full">
+      {screen === 'welcome' && (
+        <WelcomeScreen
+          activeChildName={activeProfile.name}
+          termsCount={terms.length}
+          stagesCount={lessons.length}
+          digitMode={data.settings.digitMode}
+          nightMode={data.settings.nightMode}
+          reducedMotion={data.settings.reducedMotion}
+          onEnterLogin={handleEnterLoginFromWelcome}
+          onContinueAsGuest={handleContinueAsGuest}
+          onToggleNightMode={() => {
+            audioEngine.play('uiTap');
+            updateSettings({ nightMode: !data.settings.nightMode });
+          }}
+        />
+      )}
+
       {screen === 'start' && (
         <StartScreen
           terms={terms}
@@ -1110,6 +1209,7 @@ export default function App() {
           hasProgress={hasProgress}
           wpUser={wpUser}
           wpConnected={wpConnected}
+          isGuest={!wpUser && guestMode}
           banners={marketing.banners}
           wpUrl={wpUrl}
           onNavigateScreen={navigateFromMarketing}
@@ -1134,6 +1234,10 @@ export default function App() {
             audioEngine.play('uiTap');
             setScreen('abacus');
           }}
+          onOpenLeaderboard={() => {
+            audioEngine.play('uiTap');
+            setScreen('leaderboard');
+          }}
           onOpenShop={() => {
             audioEngine.play('uiTap');
             setScreen('shop');
@@ -1151,6 +1255,16 @@ export default function App() {
             audioEngine.play('uiTap');
             setProfileTab('details');
             setScreen('profiles');
+          }}
+          onOpenLogin={() =>
+            openAuthWithReturn(
+              'start',
+              'با ورود یا ثبت‌نام سریع موبایلی، امتیازات، مدال‌ها و پیشرفت کودک ذخیره می‌شوند.'
+            )
+          }
+          onOpenWelcome={() => {
+            audioEngine.play('uiTap');
+            setScreen('welcome');
           }}
           onClaimDailyBonus={handleClaimDailyBonus}
           onToggleNightMode={() => {
@@ -1183,6 +1297,32 @@ export default function App() {
             setScreen('profiles');
           }}
           onOpenTickets={() => setScreen('tickets')}
+          onContinueAsGuest={handleContinueAsGuest}
+          authReasonMessage={authReasonMessage}
+          isGuestMode={!wpUser && guestMode}
+          onBack={() => {
+            const dest =
+              authReturnScreen && authReturnScreen !== 'auth' ? authReturnScreen : 'start';
+            setAuthReturnScreen(null);
+            setAuthReasonMessage(null);
+            setScreen(dest);
+          }}
+        />
+      )}
+
+      {screen === 'leaderboard' && (
+        <LeaderboardScreen
+          wpUrl={wpUrl}
+          wpUser={wpUser}
+          profiles={data.profiles}
+          activeProfile={activeProfile}
+          digitMode={data.settings.digitMode}
+          onOpenAuth={() =>
+            openAuthWithReturn(
+              'leaderboard',
+              'برای ثبت رکورد و حضور در رتبه‌بندی آنلاین قهرمانان، با شماره موبایل وارد شوید.'
+            )
+          }
           onBack={() => setScreen('start')}
         />
       )}
@@ -1230,7 +1370,12 @@ export default function App() {
           isRefreshing={wpRefreshing}
           onRefreshCurriculum={() => void refreshFromWordPress()}
           onTermUnlocked={handleTermUnlocked}
-          onOpenAuth={() => openParentsHub('account')}
+          onOpenAuth={() =>
+            openAuthWithReturn(
+              'map',
+              'برای خرید و باز کردن ترم‌های آموزشی پیشرفته، ابتدا با شماره موبایل وارد حساب کاربری شوید.'
+            )
+          }
           onUpdateUser={(u) => {
             wpUserRef.current = u;
             setWpUser(u);
@@ -1334,7 +1479,12 @@ export default function App() {
           onClaimDailyBonus={handleClaimDailyBonus}
           onRedeemShopMedal={handleRedeemShopMedal}
           onSpendPointsOnOrder={handleSpendPointsOnOrder}
-          onOpenAuth={() => openParentsHub('account')}
+          onOpenAuth={() =>
+            openAuthWithReturn(
+              'shop',
+              'برای نهایی‌کردن سفارش خرید و ثبت نشانی ارسال، ابتدا با شماره موبایل وارد شوید.'
+            )
+          }
           onUpdateUser={(u) => {
             wpUserRef.current = u;
             setWpUser(u);
@@ -1358,7 +1508,12 @@ export default function App() {
           wpUrl={wpUrl}
           wpUser={wpUser}
           digitMode={data.settings.digitMode}
-          onOpenAuth={() => openParentsHub('account')}
+          onOpenAuth={() =>
+            openAuthWithReturn(
+              'tickets',
+              'برای ارسال تیکت جدید و دریافت پاسخ تیم پشتیبانی، ابتدا وارد حساب کاربری شوید.'
+            )
+          }
           onBack={() => setScreen('start')}
         />
       )}
