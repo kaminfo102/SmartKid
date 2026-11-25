@@ -17,6 +17,7 @@ import { DEFAULT_TERMS, LESSONS } from './data/lessons';
 import {
   clearAppData,
   createChildProfile,
+  createEmptyDailyRacing,
   loadAppData,
   normalizeChildProfile,
   saveAppData,
@@ -25,6 +26,7 @@ import {
 import {
   claimDailyBonusOnProfile,
   evaluateProfileBadges,
+  getLocalDateKey,
   redeemShopMedalOnProfile,
 } from './lib/rewards';
 import {
@@ -63,6 +65,10 @@ import { LessonMap } from './features/lessons/LessonMap';
 import { LessonScreen } from './features/lessons/LessonScreen';
 import { PracticeScreen } from './features/lessons/PracticeScreen';
 import { GameScreen } from './features/games/GameScreen';
+import {
+  CarRacingGameScreen,
+  type RacingCommitPayload,
+} from './features/games/CarRacingGameScreen';
 import { SorobanStepSimulator } from './features/abacus/SorobanStepSimulator';
 import { FreeAbacusScreen } from './features/abacus/FreeAbacusScreen';
 import { ResultScreen } from './features/progress/ResultScreen';
@@ -1123,6 +1129,65 @@ export default function App() {
     );
   };
 
+  const handleCommitRacingProgress = useCallback(
+    (payload: RacingCommitPayload) => {
+      const todayKey = getLocalDateKey();
+      updateActiveProfile((p) => {
+        const base = p.dailyRacing ?? createEmptyDailyRacing();
+        const isSameDay = base.date === todayKey;
+        const limit =
+          typeof base.dailyLimitSeconds === 'number' && base.dailyLimitSeconds >= 120
+            ? base.dailyLimitSeconds
+            : 600;
+        const prevUsed = isSameDay ? Math.max(0, base.usedSeconds) : 0;
+        const nextUsed = Math.min(limit, prevUsed + Math.max(0, Math.round(payload.usedSecondsDelta)));
+        const nextBestStage = Math.max(base.bestStage ?? 1, payload.bestStageReached);
+        const nextBestScore = Math.max(base.bestScore ?? 0, Math.round(payload.score));
+        const earnedPoints = Math.max(0, Math.round(payload.earnedPoints));
+        const earnedStars = Math.max(0, Math.round(payload.earnedStars));
+
+        const draft: ChildProfile = {
+          ...p,
+          rewardPoints: Math.max(0, p.rewardPoints ?? 0) + earnedPoints,
+          totalStars: Math.max(0, p.totalStars) + earnedStars,
+          dailyRacing: {
+            ...base,
+            date: todayKey,
+            usedSeconds: nextUsed,
+            dailyLimitSeconds: limit,
+            bestStage: nextBestStage,
+            bestScore: nextBestScore,
+            totalCoinsEarned: Math.max(0, base.totalCoinsEarned ?? 0) + earnedPoints,
+            selectedCarId: payload.selectedCarId || base.selectedCarId,
+          },
+        };
+        return {
+          ...draft,
+          badges: evaluateProfileBadges(draft, lessons),
+        };
+      }, true);
+    },
+    [lessons, updateActiveProfile]
+  );
+
+  const handleUpdateRacingLimit = useCallback(
+    (limitSeconds: number) => {
+      const clamped = Math.max(120, Math.min(3600, Math.round(limitSeconds)));
+      audioEngine.play('uiTap');
+      updateActiveProfile((p) => {
+        const base = p.dailyRacing ?? createEmptyDailyRacing();
+        return {
+          ...p,
+          dailyRacing: {
+            ...base,
+            dailyLimitSeconds: clamped,
+          },
+        };
+      }, true);
+    },
+    [updateActiveProfile]
+  );
+
   const openParentsHub = useCallback((tab: ParentsHubTab = 'children') => {
     audioEngine.play('uiTap');
     setParentsTab(tab);
@@ -1225,6 +1290,10 @@ export default function App() {
           onOpenGames={() => {
             audioEngine.play('uiTap');
             setScreen('games');
+          }}
+          onOpenRacing={() => {
+            audioEngine.play('uiTap');
+            setScreen('racing');
           }}
           onOpenSimulator={() => {
             audioEngine.play('uiTap');
@@ -1436,6 +1505,20 @@ export default function App() {
           onUpdateSettings={updateSettings}
           onRecordAnswer={handleRecordAnswer}
           onFinishGame={handleCompleteSession}
+          onOpenRacing={() => {
+            audioEngine.play('uiTap');
+            setScreen('racing');
+          }}
+          onBack={() => setScreen('start')}
+        />
+      )}
+
+      {screen === 'racing' && (
+        <CarRacingGameScreen
+          profile={activeProfile}
+          settings={data.settings}
+          onUpdateSettings={updateSettings}
+          onCommitProgress={handleCommitRacingProgress}
           onBack={() => setScreen('start')}
         />
       )}
@@ -1559,6 +1642,7 @@ export default function App() {
               setScreen('shop');
             }}
             onUpdateSettings={updateSettings}
+            onUpdateRacingLimit={handleUpdateRacingLimit}
             ordersRefreshTrigger={ordersRefreshTrigger}
             onClearAllData={() => {
               const fresh = clearAppData();

@@ -40,8 +40,23 @@ export function createEmptyDailyBonus() {
   };
 }
 
+export const DEFAULT_DAILY_RACING_LIMIT_SECONDS = 600; // 10 minutes per day
+
+export function createEmptyDailyRacing() {
+  return {
+    date: '',
+    usedSeconds: 0,
+    dailyLimitSeconds: DEFAULT_DAILY_RACING_LIMIT_SECONDS,
+    bestStage: 1,
+    bestScore: 0,
+    totalCoinsEarned: 0,
+    selectedCarId: 'turbo-red',
+  };
+}
+
 export function normalizeChildProfile(profile: ChildProfile): ChildProfile {
   const safeAvatarUrl = validateSafeImageSrc(profile.avatarUrl);
+  const rawRacing = profile.dailyRacing;
   return {
     ...profile,
     name: typeof profile.name === 'string' && profile.name.trim() ? profile.name.trim() : 'کیا',
@@ -54,6 +69,31 @@ export function normalizeChildProfile(profile: ChildProfile): ChildProfile {
       ...createEmptyDailyBonus(),
       ...(profile.dailyBonus ?? {}),
       history: Array.isArray(profile.dailyBonus?.history) ? profile.dailyBonus.history : [],
+    },
+    dailyRacing: {
+      ...createEmptyDailyRacing(),
+      ...(rawRacing ?? {}),
+      usedSeconds:
+        typeof rawRacing?.usedSeconds === 'number' && Number.isFinite(rawRacing.usedSeconds)
+          ? Math.max(0, Math.round(rawRacing.usedSeconds))
+          : 0,
+      dailyLimitSeconds:
+        typeof rawRacing?.dailyLimitSeconds === 'number' && rawRacing.dailyLimitSeconds >= 120
+          ? Math.round(rawRacing.dailyLimitSeconds)
+          : DEFAULT_DAILY_RACING_LIMIT_SECONDS,
+      bestStage:
+        typeof rawRacing?.bestStage === 'number' && Number.isFinite(rawRacing.bestStage)
+          ? Math.max(1, Math.min(6, Math.round(rawRacing.bestStage)))
+          : 1,
+      bestScore:
+        typeof rawRacing?.bestScore === 'number' && Number.isFinite(rawRacing.bestScore)
+          ? Math.max(0, Math.round(rawRacing.bestScore))
+          : 0,
+      totalCoinsEarned:
+        typeof rawRacing?.totalCoinsEarned === 'number' &&
+        Number.isFinite(rawRacing.totalCoinsEarned)
+          ? Math.max(0, Math.round(rawRacing.totalCoinsEarned))
+          : 0,
     },
   };
 }
@@ -82,6 +122,7 @@ export function createChildProfile(
     badges: [],
     rewardPoints: 0,
     dailyBonus: createEmptyDailyBonus(),
+    dailyRacing: createEmptyDailyRacing(),
   };
 }
 

@@ -55,6 +55,7 @@ import { ReceiptUploaderField } from '../../components/ReceiptUploaderField';
 import { SaleCountdown } from '../../components/SaleCountdown';
 import { MedalIconGlyph } from '../progress/ChildProfileDetails';
 import { audioEngine } from '../../lib/audioEngine';
+import { ProductShowcaseSlider } from './ProductShowcaseSlider';
 
 export const PENDING_SHOP_CART_KEY = 'kn_pending_shop_cart';
 export const RESTORE_SHOP_CART_FLAG = 'kn_restore_shop_cart';
@@ -135,6 +136,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
   const [useRewardDiscount, setUseRewardDiscount] = useState(false);
 
   const [catalog, setCatalog] = useState<StoreCatalogResponse | null>(null);
+  const [sliderProducts, setSliderProducts] = useState<StoreProduct[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number>(0);
@@ -176,6 +178,11 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
     try {
       const res = await fetchStoreCatalog(wpUrl, selectedCategoryId, debouncedSearch);
       setCatalog(res);
+      if (selectedCategoryId === 0 && !debouncedSearch) {
+        setSliderProducts(res.products);
+      } else {
+        setSliderProducts((prev) => (prev.length > 0 ? prev : res.products));
+      }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'خطا در بارگذاری محصولات فروشگاه.');
     } finally {
@@ -459,6 +466,19 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
           </div>
         )}
 
+        {storeSection === 'products' && (
+          <ProductShowcaseSlider
+            products={sliderProducts.length > 0 ? sliderProducts : (catalog?.products ?? [])}
+            loading={loading}
+            digitMode={digitMode}
+            getQtyInCart={getProductQtyInCart}
+            onAddToCart={addToCart}
+            onUpdateQty={updateCartQty}
+            onOpenDetail={(prod) => setDetailProduct(prod)}
+            onOpenCart={() => setCartOpen(true)}
+          />
+        )}
+
         {banners.length > 0 && onNavigateScreen && (
           <BannerSlot
             banners={banners}
@@ -469,10 +489,10 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
           />
         )}
 
-        {/* Campaign Focal Banner */}
-        <section className="rounded-3xl bg-gradient-to-l from-[#FFCC33] via-[#FFD859] to-[#FFE89E] dark:from-slate-800 dark:to-slate-900 border-4 border-white dark:border-slate-700 shadow-[0_12px_28px_-8px_rgba(180,115,45,0.2)] p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1.5 max-w-2xl">
-            <h2 className="text-xl sm:text-2xl font-extrabold text-[#593400] dark:text-white">
+        {/* Search & Store Info Bar */}
+        <section className="rounded-2xl sm:rounded-3xl bg-gradient-to-l from-[#FFCC33] via-[#FFD859] to-[#FFE89E] dark:from-slate-800 dark:to-slate-900 border-2 sm:border-4 border-white dark:border-slate-700 shadow-[0_12px_28px_-8px_rgba(180,115,45,0.2)] p-3.5 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="space-y-1 max-w-2xl">
+            <h2 className="text-base sm:text-xl font-extrabold text-[#593400] dark:text-white">
               {catalog?.settings.bannerTitle || 'فروشگاه تجهیزات آموزشی چرتکه کودک نابغه'}
             </h2>
             <p className="text-xs sm:text-sm font-bold text-[#7A4E00] dark:text-slate-300 leading-relaxed">
@@ -489,7 +509,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="جستجوی محصول..."
-              className="w-full min-h-[46px] pr-10 pl-3 rounded-2xl bg-white/95 dark:bg-slate-800 border-2 border-amber-300 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5472EB]"
+              className="w-full min-h-[44px] pr-10 pl-3 rounded-2xl bg-white/95 dark:bg-slate-800 border-2 border-amber-300 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5472EB]"
             />
           </div>
         </section>
@@ -582,7 +602,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
               امتیازهای پاداش روزانه خودت را اینجا به مدال‌های کمیاب و افتخاری تبدیل کن تا در کارنامه پروفایلت بدرخشند (یا هنگام سفارش کارت به کارت ۵۰ امتیاز را برای تخفیف مصرف کن).
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
               {SHOP_VIRTUAL_MEDALS.map((medal) => {
                 const isOwned = (activeProfile.badges ?? []).includes(medal.id);
                 const canAfford = rewardPoints >= medal.pointsCost;
@@ -590,7 +610,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
                 return (
                   <article
                     key={medal.id}
-                    className={`rounded-2xl bg-white dark:bg-slate-900 border-2 p-4 flex flex-col justify-between gap-4 shadow-sm ${
+                    className={`rounded-2xl bg-white dark:bg-slate-900 border-2 p-3 sm:p-4 flex flex-col justify-between gap-3 sm:gap-4 shadow-sm ${
                       isOwned
                         ? 'border-emerald-400 dark:border-emerald-600'
                         : 'border-[#EEDCC5] dark:border-slate-800'
@@ -722,7 +742,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4 lg:gap-5">
             {catalog.products.map((product) => {
               const qtyInCart = getProductQtyInCart(product.id);
               const catName = product.categories[0]?.name || 'محصول آموزشی';
@@ -734,22 +754,26 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
                   <button
                     type="button"
                     onClick={() => setDetailProduct(product)}
-                    className="relative aspect-[4/3] w-full overflow-hidden bg-[#FFF9F2] dark:bg-slate-800 text-right focus:outline-none"
+                    className="relative aspect-square sm:aspect-[4/3] w-full overflow-hidden bg-[#FFF9F2] dark:bg-slate-800 text-right focus:outline-none"
                   >
                     <ProductImageFrame src={product.imageUrl} alt={product.name} />
                     {product.onSale && product.discountPercent > 0 && (
-                      <span className="absolute top-3 right-3 px-2.5 py-1 rounded-xl bg-rose-600 text-white text-xs font-extrabold shadow-sm tabular-nums">
+                      <span className="absolute top-2 right-2 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-lg sm:rounded-xl bg-rose-600 text-white text-[10px] sm:text-xs font-extrabold shadow-sm tabular-nums">
                         {formatNumber(product.discountPercent, digitMode)}٪ تخفیف
                       </span>
                     )}
                   </button>
 
-                  <div className="p-4 flex-1 flex flex-col justify-between gap-3">
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                        <span>{catName}</span>
-                        <span aria-hidden="true">·</span>
-                        <span className={product.inStock ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600'}>
+                  <div className="p-2.5 sm:p-4 flex-1 flex flex-col justify-between gap-2 sm:gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 min-w-0">
+                        <span className="truncate">{catName}</span>
+                        <span aria-hidden="true" className="shrink-0">·</span>
+                        <span
+                          className={`shrink-0 ${
+                            product.inStock ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600'
+                          }`}
+                        >
                           {product.inStock ? 'موجود' : 'ناموجود'}
                         </span>
                       </div>
@@ -757,13 +781,13 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
                       <button
                         type="button"
                         onClick={() => setDetailProduct(product)}
-                        className="text-right font-extrabold text-base text-slate-900 dark:text-white line-clamp-2 hover:text-[#5472EB] transition-colors"
+                        className="text-right font-extrabold text-xs sm:text-sm md:text-base text-slate-900 dark:text-white line-clamp-2 hover:text-[#5472EB] transition-colors leading-snug min-h-[2.2rem] sm:min-h-[2.75rem]"
                       >
                         {product.name}
                       </button>
 
                       {product.onSale && (
-                        <div>
+                        <div className="overflow-hidden">
                           <SaleCountdown
                             saleEndTimestamp={product.saleEndTimestamp}
                             digitMode={digitMode}
@@ -773,67 +797,71 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
                       )}
                     </div>
 
-                    <div className="space-y-2.5 pt-2 border-t border-[#F4E6D4] dark:border-slate-800">
-                      <div className="flex items-baseline justify-between gap-2">
+                    <div className="space-y-2 pt-1.5 sm:pt-2 border-t border-[#F4E6D4] dark:border-slate-800">
+                      <div className="flex items-baseline justify-between gap-1">
                         {product.onSale && product.regularPriceFormatted ? (
-                          <div className="flex items-baseline gap-2 flex-wrap">
-                            <span className="text-base font-extrabold text-[#4BB543] dark:text-emerald-400 tabular-nums">
+                          <div className="flex items-baseline gap-1.5 flex-wrap">
+                            <span className="text-xs sm:text-base font-extrabold text-[#4BB543] dark:text-emerald-400 tabular-nums">
                               {product.priceFormatted}
                             </span>
-                            <span className="text-xs text-slate-400 line-through tabular-nums">
+                            <span className="text-[10px] sm:text-xs text-slate-400 line-through tabular-nums">
                               {product.regularPriceFormatted}
                             </span>
                           </div>
                         ) : (
-                          <span className="text-base font-extrabold text-[#4BB543] dark:text-emerald-400 tabular-nums">
+                          <span className="text-xs sm:text-base font-extrabold text-[#4BB543] dark:text-emerald-400 tabular-nums">
                             {product.priceFormatted}
                           </span>
                         )}
                       </div>
 
                       {!product.inStock ? (
-                        <div className="w-full min-h-[44px] rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 font-extrabold text-xs flex items-center justify-center">
-                          فعلاً ناموجود است
+                        <div className="w-full min-h-[38px] sm:min-h-[44px] rounded-xl sm:rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 font-extrabold text-[11px] sm:text-xs flex items-center justify-center">
+                          ناموجود
                         </div>
                       ) : qtyInCart > 0 ? (
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 min-h-[44px] rounded-2xl bg-[#FFF6EB] dark:bg-slate-800 border-2 border-[#EEDCC5] dark:border-slate-700 flex items-center justify-between px-2">
+                        <div className="flex items-center gap-1.5">
+                          <div className="flex-1 min-h-[38px] sm:min-h-[44px] rounded-xl sm:rounded-2xl bg-[#FFF6EB] dark:bg-slate-800 border-2 border-[#EEDCC5] dark:border-slate-700 flex items-center justify-between px-1 sm:px-2">
                             <button
                               type="button"
                               onClick={() => updateCartQty(product.id, 1)}
                               aria-label="افزایش تعداد"
-                              className="w-8 h-8 rounded-xl bg-white dark:bg-slate-700 text-slate-800 dark:text-white flex items-center justify-center shadow-xs"
+                              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-white dark:bg-slate-700 text-slate-800 dark:text-white flex items-center justify-center shadow-xs"
                             >
-                              <Plus className="w-4 h-4" />
+                              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                             </button>
-                            <span className="text-sm font-extrabold text-slate-900 dark:text-white tabular-nums">
-                              {formatNumber(qtyInCart, digitMode)} در سبد
+                            <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white tabular-nums">
+                              {formatNumber(qtyInCart, digitMode)}
+                              <span className="hidden sm:inline"> در سبد</span>
                             </span>
                             <button
                               type="button"
                               onClick={() => updateCartQty(product.id, -1)}
                               aria-label="کاهش تعداد"
-                              className="w-8 h-8 rounded-xl bg-white dark:bg-slate-700 text-rose-600 flex items-center justify-center shadow-xs"
+                              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-white dark:bg-slate-700 text-rose-600 flex items-center justify-center shadow-xs"
                             >
-                              <Minus className="w-4 h-4" />
+                              <Minus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                             </button>
                           </div>
                           <button
                             type="button"
                             onClick={() => setCartOpen(true)}
-                            className="min-h-[44px] px-3 rounded-2xl bg-[#4BB543] border-b-4 border-[#2E8228] text-white font-extrabold text-xs shrink-0"
+                            aria-label="تکمیل خرید"
+                            className="min-h-[38px] sm:min-h-[44px] px-2 sm:px-3 rounded-xl sm:rounded-2xl bg-[#4BB543] border-b-4 border-[#2E8228] text-white font-extrabold text-[11px] sm:text-xs shrink-0 flex items-center justify-center"
                           >
-                            تکمیل خرید
+                            <span className="sm:hidden">سبد</span>
+                            <span className="hidden sm:inline">تکمیل خرید</span>
                           </button>
                         </div>
                       ) : (
                         <button
                           type="button"
                           onClick={() => addToCart(product)}
-                          className="w-full min-h-[44px] rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all"
+                          className="w-full min-h-[38px] sm:min-h-[44px] rounded-xl sm:rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-[11px] sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2 transition-all px-2"
                         >
-                          <ShoppingCart className="w-4 h-4" />
-                          <span>افزودن به سبد خرید</span>
+                          <ShoppingCart className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                          <span className="sm:hidden">افزودن</span>
+                          <span className="hidden sm:inline">افزودن به سبد خرید</span>
                         </button>
                       )}
                     </div>

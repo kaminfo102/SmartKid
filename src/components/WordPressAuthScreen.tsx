@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Compass,
   CreditCard,
+  Crown,
   Download,
   Edit3,
   Eye,
@@ -13,6 +14,7 @@ import {
   Headphones,
   KeyRound,
   Loader2,
+  Lock,
   LogIn,
   LogOut,
   Package,
@@ -24,9 +26,11 @@ import {
   Smartphone,
   Sparkles,
   Trophy,
+  User,
   UserCheck,
   Users,
 } from 'lucide-react';
+import loginPeekImg from '../assets/images/login_kid_peek_1795604964868.jpg';
 import type {
   BacsAccount,
   DigitDisplayMode,
@@ -1106,18 +1110,48 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
               </section>
             )}
 
-            {/* Right Auth Card + OTP / Password + Guest CTA */}
+            {/* Right Auth Card with 3D Peeking Characters + OTP / Password + Guest CTA */}
             <div className={embedded ? 'space-y-4' : 'lg:col-span-7 space-y-4'}>
               {authReasonMessage && (
-                <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-300 dark:border-amber-700 p-3.5 flex items-start gap-2.5 text-xs sm:text-sm font-extrabold text-amber-950 dark:text-amber-100 shadow-xs">
+                <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/50 border-2 border-amber-300 dark:border-amber-700 p-3.5 flex items-start gap-2.5 text-xs sm:text-sm font-extrabold text-amber-950 dark:text-amber-100 shadow-sm">
                   <Sparkles className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
                   <span className="leading-relaxed">{authReasonMessage}</span>
                 </div>
               )}
 
+              {/* Storybook Header + Peeking Characters directly atop white login card (Standalone) */}
+              {!embedded && (
+                <div className="pt-1">
+                  <div className="text-center space-y-1 mb-2.5">
+                    <div className="inline-flex items-center justify-center">
+                      <Crown className="w-7 h-7 text-amber-400 fill-amber-300 drop-shadow-xs" />
+                    </div>
+                    <h2 className="text-2xl sm:text-3xl font-black text-[#15429E] dark:text-sky-200 drop-shadow-[0_1px_0_rgba(255,255,255,0.85)] dark:drop-shadow-none">
+                      خوش برگشتی!
+                    </h2>
+                    <p className="text-xs sm:text-sm font-bold text-[#1E4B9E]/85 dark:text-slate-300">
+                      برای ادامه ماجراجویی چرتکه وارد شو
+                    </p>
+                  </div>
+
+                  <div className="relative mx-auto max-w-[380px] rounded-t-[28px] overflow-hidden border-2 border-b-0 border-white/80 dark:border-slate-700 shadow-sm">
+                    <img
+                      src={loginPeekImg}
+                      alt="کودک شاد و جغد مهربان بالای کارت ورود"
+                      referrerPolicy="no-referrer"
+                      className="w-full h-44 sm:h-48 object-cover object-top"
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* Quick Mobile + SMS.ir OTP Auth (Default) & Password Login */}
-              <section className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-800 dark:border-b-slate-700 shadow-[0_14px_30px_-10px_rgba(170,104,40,0.18)] overflow-hidden">
-                <div className="grid grid-cols-2 bg-[#FFF6EB] dark:bg-slate-800 p-1.5 gap-1.5 border-b border-[#EEDCC5] dark:border-slate-700">
+              <section
+                className={`relative z-10 rounded-[32px] bg-white dark:bg-slate-900 border-2 border-white dark:border-slate-800 border-b-4 border-b-[#C9DDF6] dark:border-b-slate-700 shadow-[0_20px_44px_-14px_rgba(37,99,235,0.22)] overflow-hidden ${
+                  !embedded ? '-mt-7' : ''
+                }`}
+              >
+                <div className="grid grid-cols-2 bg-[#EFF5FD] dark:bg-slate-800 p-1.5 gap-1.5 border-b border-[#DCE7F7] dark:border-slate-700">
                   <button
                     type="button"
                     onClick={() => {
@@ -1126,8 +1160,8 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                     }}
                     className={`min-h-[46px] px-2.5 rounded-2xl font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all whitespace-nowrap ${
                       authTab === 'otp'
-                        ? 'bg-[#4BB543] text-white shadow-sm'
-                        : 'text-[#783F1D] dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/50'
+                        ? 'bg-[#2574F5] text-white shadow-sm'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-slate-700/50'
                     }`}
                   >
                     <Smartphone className="w-4 h-4 shrink-0" />
@@ -1141,8 +1175,8 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                     }}
                     className={`min-h-[46px] px-2.5 rounded-2xl font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all whitespace-nowrap ${
                       authTab === 'password'
-                        ? 'bg-[#5472EB] text-white shadow-sm'
-                        : 'text-[#783F1D] dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/50'
+                        ? 'bg-[#2574F5] text-white shadow-sm'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-slate-700/50'
                     }`}
                   >
                     <KeyRound className="w-4 h-4 shrink-0" />
@@ -1152,8 +1186,8 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
 
                 {authTab === 'otp' ? (
                   <div className="p-5 sm:p-6 space-y-4">
-                    <div className="rounded-2xl bg-[#FFF9F2] dark:bg-slate-800/70 border border-[#EEDCC5] dark:border-slate-700 p-3.5 text-xs font-bold text-[#783F1D] dark:text-slate-300 leading-relaxed">
-                      بدون نیاز به رمز عبور و فرم طولانی! فقط شماره موبایل خود را وارد کنید تا کد تایید یک‌بارمصرف پیامک شود. اطلاعات پستی فقط هنگام سفارش و خرید دریافت می‌شود.
+                    <div className="rounded-2xl bg-[#F4F8FF] dark:bg-slate-800/70 border border-[#DCE7FB] dark:border-slate-700 p-3.5 text-xs font-bold text-[#1E4B9E] dark:text-slate-300 leading-relaxed">
+                      بدون نیاز به رمز عبور و فرم طولانی! فقط شماره موبایل خود را وارد کنید تا کد تایید یک‌بارمصرف برایتان پیامک شود.
                     </div>
 
                     {!otpSent ? (
@@ -1162,21 +1196,28 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                           <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">
                             شماره موبایل (۱۱ رقم با شروع ۰۹)
                           </label>
-                          <LatinDigitInput
-                            type="text"
-                            inputMode="tel"
-                            autoComplete="tel"
-                            dir="ltr"
-                            transformMode="mobile"
-                            value={otpMobile}
-                            onValueChange={setOtpMobile}
-                            placeholder="09123456789"
-                            className={`w-full min-h-[54px] px-4 rounded-2xl border-2 bg-[#FFF9F2] dark:bg-slate-800 text-lg font-extrabold tracking-wider text-slate-900 dark:text-white text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-[#4BB543]/40 ${
+                          <div
+                            className={`flex items-center gap-2.5 p-1.5 rounded-full border-2 bg-[#F2F6FC] dark:bg-slate-800 transition-colors ${
                               otpMobile.trim() && !isValidIranMobile(otpMobile)
                                 ? 'border-rose-400 dark:border-rose-500'
-                                : 'border-[#EEDCC5] dark:border-slate-700'
+                                : 'border-[#E1EAF8] dark:border-slate-700 focus-within:border-[#2574F5]'
                             }`}
-                          />
+                          >
+                            <span className="w-10 h-10 rounded-full bg-[#2574F5] text-white flex items-center justify-center shrink-0 shadow-xs">
+                              <Smartphone className="w-5 h-5" />
+                            </span>
+                            <LatinDigitInput
+                              type="text"
+                              inputMode="tel"
+                              autoComplete="tel"
+                              dir="ltr"
+                              transformMode="mobile"
+                              value={otpMobile}
+                              onValueChange={setOtpMobile}
+                              placeholder="09123456789"
+                              className="flex-1 min-h-[42px] px-3 bg-transparent text-base font-extrabold tracking-wider text-slate-900 dark:text-white text-center tabular-nums focus:outline-none"
+                            />
+                          </div>
                           {otpMobile.trim() && (
                             <p
                               className={`text-[11px] font-bold mt-1.5 ${
@@ -1195,7 +1236,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                         <button
                           type="submit"
                           disabled={loading}
-                          className="w-full min-h-[54px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-sm sm:text-base flex items-center justify-center gap-2 disabled:opacity-60 transition-all whitespace-nowrap"
+                          className="w-full min-h-[54px] rounded-full bg-[#2574F5] hover:bg-[#1963DE] border-b-4 border-[#144CB2] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-sm sm:text-base flex items-center justify-center gap-2 disabled:opacity-60 transition-all shadow-md whitespace-nowrap"
                         >
                           {loading ? (
                             <Loader2 className="w-5 h-5 animate-spin" />
@@ -1210,7 +1251,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                         <div className="flex items-center justify-between gap-2 rounded-2xl bg-[#EFF6FF] dark:bg-slate-800 border border-sky-200 dark:border-slate-700 px-3.5 py-2.5 text-xs">
                           <span className="font-bold text-slate-700 dark:text-slate-200">
                             کد ۶ رقمی به{' '}
-                            <strong dir="ltr" className="font-mono text-[#354EB8] dark:text-sky-300 tabular-nums">
+                            <strong dir="ltr" className="font-mono text-[#1E4B9E] dark:text-sky-300 tabular-nums">
                               {otpTargetMobile || normalizeIranMobile(otpMobile)}
                             </strong>{' '}
                             ارسال شد
@@ -1223,7 +1264,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                               setErrorMsg(null);
                               setStatusMsg(null);
                             }}
-                            className="font-extrabold text-[#5472EB] hover:underline shrink-0 whitespace-nowrap"
+                            className="font-extrabold text-[#2574F5] hover:underline shrink-0 whitespace-nowrap"
                           >
                             تغییر شماره
                           </button>
@@ -1241,12 +1282,12 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                               return (
                                 <div
                                   key={idx}
-                                  className={`h-12 rounded-xl border-2 flex items-center justify-center font-mono text-lg font-black tabular-nums transition-all ${
+                                  className={`h-12 rounded-2xl border-2 flex items-center justify-center font-mono text-lg font-black tabular-nums transition-all ${
                                     char
                                       ? 'bg-[#EEF8EC] dark:bg-emerald-950/40 border-[#4BB543] text-[#1E6B19] dark:text-emerald-300'
                                       : isCurrent
-                                      ? 'bg-white dark:bg-slate-800 border-[#5472EB] text-slate-400'
-                                      : 'bg-[#FFF9F2] dark:bg-slate-800/70 border-[#EEDCC5] dark:border-slate-700 text-slate-400'
+                                      ? 'bg-white dark:bg-slate-800 border-[#2574F5] text-slate-400'
+                                      : 'bg-[#F2F6FC] dark:bg-slate-800/70 border-[#E1EAF8] dark:border-slate-700 text-slate-400'
                                   }`}
                                 >
                                   {char || '•'}
@@ -1262,8 +1303,8 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                             transformMode="digits-only"
                             value={otpCode}
                             onValueChange={(val) => setOtpCode(val.slice(0, 6))}
-                            placeholder="کد ۶ رقمی را اینجا وارد کنید"
-                            className="w-full min-h-[50px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-xl font-mono font-extrabold tracking-[0.35em] text-center text-slate-900 dark:text-white tabular-nums"
+                            placeholder="کد ۶ رقمی را وارد کنید"
+                            className="w-full min-h-[50px] px-4 rounded-full border-2 border-[#E1EAF8] dark:border-slate-700 bg-[#F2F6FC] dark:bg-slate-800 text-xl font-mono font-extrabold tracking-[0.35em] text-center text-slate-900 dark:text-white tabular-nums"
                           />
                         </div>
 
@@ -1277,7 +1318,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                               type="button"
                               disabled={loading}
                               onClick={() => void handleSendOtp()}
-                              className="font-extrabold text-[#5472EB] hover:underline disabled:opacity-50"
+                              className="font-extrabold text-[#2574F5] hover:underline disabled:opacity-50"
                             >
                               ارسال مجدد کد تایید
                             </button>
@@ -1287,7 +1328,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                         <button
                           type="submit"
                           disabled={loading}
-                          className="w-full min-h-[54px] rounded-2xl bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-sm sm:text-base flex items-center justify-center gap-2 disabled:opacity-60 transition-all whitespace-nowrap"
+                          className="w-full min-h-[54px] rounded-full bg-[#4BB543] hover:bg-[#41A23A] border-b-4 border-[#2E8228] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-sm sm:text-base flex items-center justify-center gap-2 disabled:opacity-60 transition-all shadow-md whitespace-nowrap"
                         >
                           {loading ? (
                             <Loader2 className="w-5 h-5 animate-spin" />
@@ -1305,23 +1346,32 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                       <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">
                         شماره موبایل، نام کاربری یا ایمیل
                       </label>
-                      <LatinDigitInput
-                        type="text"
-                        inputMode="text"
-                        autoComplete="username"
-                        dir="ltr"
-                        transformMode="latin-digits"
-                        value={identifier}
-                        onValueChange={setIdentifier}
-                        placeholder="09123456789 یا parent@example.com"
-                        className="w-full min-h-[50px] px-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
-                      />
+                      <div className="flex items-center gap-2.5 p-1.5 rounded-full border-2 border-[#E1EAF8] dark:border-slate-700 focus-within:border-[#2574F5] bg-[#F2F6FC] dark:bg-slate-800">
+                        <span className="w-10 h-10 rounded-full bg-[#2574F5] text-white flex items-center justify-center shrink-0 shadow-xs">
+                          <User className="w-5 h-5" />
+                        </span>
+                        <LatinDigitInput
+                          type="text"
+                          inputMode="text"
+                          autoComplete="username"
+                          dir="ltr"
+                          transformMode="latin-digits"
+                          value={identifier}
+                          onValueChange={setIdentifier}
+                          placeholder="09123456789 یا parent@example.com"
+                          className="flex-1 min-h-[42px] px-3 bg-transparent text-sm font-bold text-slate-900 dark:text-white focus:outline-none"
+                        />
+                      </div>
                     </div>
+
                     <div>
                       <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">
                         رمز عبور
                       </label>
-                      <div className="relative">
+                      <div className="flex items-center gap-2.5 p-1.5 rounded-full border-2 border-[#E1EAF8] dark:border-slate-700 focus-within:border-[#2574F5] bg-[#F2F6FC] dark:bg-slate-800">
+                        <span className="w-10 h-10 rounded-full bg-[#2574F5] text-white flex items-center justify-center shrink-0 shadow-xs">
+                          <Lock className="w-5 h-5" />
+                        </span>
                         <LatinDigitInput
                           type={showPassword ? 'text' : 'password'}
                           autoComplete="current-password"
@@ -1330,13 +1380,13 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                           value={password}
                           onValueChange={setPassword}
                           placeholder="••••••••"
-                          className="w-full min-h-[50px] pl-12 pr-4 rounded-2xl border-2 border-[#EEDCC5] dark:border-slate-700 bg-[#FFF9F2] dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white"
+                          className="flex-1 min-h-[42px] px-3 bg-transparent text-sm font-bold text-slate-900 dark:text-white focus:outline-none"
                         />
                         <button
                           type="button"
                           onClick={() => setShowPassword((prev) => !prev)}
                           aria-label={showPassword ? 'پنهان کردن رمز عبور' : 'نمایش رمز عبور'}
-                          className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-xl flex items-center justify-center text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white transition-colors"
+                          className="w-10 h-10 rounded-full flex items-center justify-center text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white transition-colors shrink-0"
                         >
                           {showPassword ? (
                             <EyeOff className="w-4 h-4" />
@@ -1346,10 +1396,11 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                         </button>
                       </div>
                     </div>
+
                     <button
                       type="submit"
                       disabled={loading}
-                      className="w-full min-h-[54px] rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-base flex items-center justify-center gap-2 disabled:opacity-60 transition-all whitespace-nowrap"
+                      className="w-full min-h-[54px] rounded-full bg-[#2574F5] hover:bg-[#1963DE] border-b-4 border-[#144CB2] active:border-b-0 active:translate-y-0.5 text-white font-extrabold text-base flex items-center justify-center gap-2 disabled:opacity-60 transition-all shadow-md whitespace-nowrap"
                     >
                       {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5" />}
                       <span>ورود به حساب کاربری</span>
@@ -1360,9 +1411,9 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
 
               {/* Prominent Guest Mode Option */}
               {onContinueAsGuest && (
-                <section className="rounded-3xl bg-white/90 dark:bg-slate-900/90 border-2 border-[#EEDCC5] dark:border-slate-800 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                <section className="rounded-[28px] bg-white/95 dark:bg-slate-900/95 border-2 border-white dark:border-slate-800 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
                   <div className="min-w-0">
-                    <div className="text-xs sm:text-sm font-black text-[#4B2D16] dark:text-white">
+                    <div className="text-xs sm:text-sm font-black text-[#15429E] dark:text-white">
                       {isGuestMode
                         ? 'ادامه کار با حالت مهمان'
                         : 'می‌خواهید ابتدا بدون ثبت‌نام محیط برنامه را ببینید؟'}
@@ -1374,7 +1425,7 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
                   <button
                     type="button"
                     onClick={onContinueAsGuest}
-                    className="min-h-[48px] px-4 rounded-2xl bg-[#FFF6EB] hover:bg-amber-100 dark:bg-slate-800 dark:hover:bg-slate-700 border-2 border-[#EEDCC5] dark:border-slate-700 border-b-4 border-b-[#DFC6A8] dark:border-b-slate-600 text-[#6D3B19] dark:text-amber-200 font-extrabold text-xs sm:text-sm inline-flex items-center justify-center gap-2 shrink-0 whitespace-nowrap active:translate-y-0.5 transition-all"
+                    className="min-h-[48px] px-5 rounded-full bg-[#FFF6EB] hover:bg-amber-100 dark:bg-slate-800 dark:hover:bg-slate-700 border-2 border-[#EEDCC5] dark:border-slate-700 text-[#6D3B19] dark:text-amber-200 font-extrabold text-xs sm:text-sm inline-flex items-center justify-center gap-2 shrink-0 whitespace-nowrap active:translate-y-0.5 transition-all"
                   >
                     <UserCheck className="w-4 h-4 text-[#E07C47]" />
                     <span>ورود به عنوان مهمان</span>
@@ -1392,8 +1443,20 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F5E4CE] dark:bg-slate-950">
-      <header className="sticky top-0 z-20 bg-gradient-to-b from-[#F49A67] to-[#F8BA88] dark:from-slate-900 dark:to-slate-900 border-b-2 border-[#E3B488] dark:border-slate-800 px-4 h-16 flex items-center justify-between">
+    <div
+      className={`min-h-screen flex flex-col ${
+        wpUser
+          ? 'bg-[#F5E4CE] dark:bg-slate-950'
+          : 'bg-gradient-to-b from-[#6FB2FF] via-[#B4DAFF] to-[#EAF4FF] dark:from-slate-950 dark:via-slate-900 dark:to-slate-950'
+      }`}
+    >
+      <header
+        className={`sticky top-0 z-20 px-4 h-16 flex items-center justify-between ${
+          wpUser
+            ? 'bg-gradient-to-b from-[#F49A67] to-[#F8BA88] dark:from-slate-900 dark:to-slate-900 border-b-2 border-[#E3B488] dark:border-slate-800'
+            : 'bg-white/25 dark:bg-slate-900/80 border-b border-white/40 dark:border-slate-800'
+        }`}
+      >
         <button
           type="button"
           onClick={onBack}
@@ -1403,7 +1466,13 @@ export const WordPressAuthScreen: React.FC<WordPressAuthScreenProps> = ({
           <ArrowRight className="w-5 h-5" />
         </button>
 
-        <h1 className="text-base sm:text-lg font-extrabold text-white drop-shadow-[0_2px_0_rgba(148,70,22,0.45)]">
+        <h1
+          className={`text-base sm:text-lg font-black ${
+            wpUser
+              ? 'text-white drop-shadow-[0_2px_0_rgba(148,70,22,0.45)]'
+              : 'text-[#15429E] dark:text-white'
+          }`}
+        >
           {wpUser ? 'حساب کاربری و سفارش‌ها' : 'ورود و ثبت‌نام'}
         </h1>
 

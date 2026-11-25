@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import {
   Award,
+  Car,
   CheckCircle2,
   Compass,
   Flame,
@@ -38,6 +39,11 @@ import { AudioButton } from './AudioButton';
 import { DailyBonusCard } from './DailyBonusCard';
 import { BannerSlot } from './BannerSlot';
 import { audioEngine } from '../lib/audioEngine';
+import {
+  formatRacingClock,
+  getNormalizedRacingState,
+  RACING_STAGES,
+} from '../features/games/racingStages';
 
 interface StartScreenProps {
   terms?: TermDefinition[];
@@ -56,6 +62,7 @@ interface StartScreenProps {
   onContinueMap: () => void;
   onOpenPractice: () => void;
   onOpenGames: () => void;
+  onOpenRacing?: () => void;
   onOpenSimulator: () => void;
   onOpenFreeAbacus: () => void;
   onOpenLeaderboard: () => void;
@@ -86,6 +93,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   onContinueMap,
   onOpenPractice,
   onOpenGames,
+  onOpenRacing,
   onOpenSimulator,
   onOpenFreeAbacus,
   onOpenLeaderboard,
@@ -126,6 +134,10 @@ export const StartScreen: React.FC<StartScreenProps> = ({
 
   const dailyClaimedToday = activeProfile.dailyBonus?.lastClaimDate === todayKey;
   const streakCount = activeProfile.dailyBonus?.streak ?? 0;
+  const racingSummary = useMemo(
+    () => getNormalizedRacingState(activeProfile),
+    [activeProfile]
+  );
 
   const handleKiaTap = () => {
     const cheers = [
@@ -363,7 +375,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
       </div>
 
       {/* Main Responsive Canvas */}
-      <main className="relative z-20 -mt-8 flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 pb-24 md:pb-12 space-y-5">
+      <main className="relative z-20 -mt-8 flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 pb-28 md:pb-24 space-y-5">
         {/* Primary Adventure Start Banner */}
         <motion.section
           initial={reducedMotion ? false : { opacity: 0, y: 10 }}
@@ -567,6 +579,42 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                 مشاهده رتبه‌ها
               </span>
             </button>
+
+            {onOpenRacing && (
+              <button
+                type="button"
+                onClick={onOpenRacing}
+                aria-label="باز کردن بازی ماشین مسابقه‌ای مرحله‌ای"
+                className="w-full rounded-3xl bg-gradient-to-l from-[#ECFDF5] via-[#F4FBF8] to-white dark:from-emerald-950/60 dark:via-slate-900 dark:to-slate-900 border-2 border-[#6EE7B7] dark:border-emerald-700 border-b-4 border-b-[#10B981] hover:brightness-[1.02] p-4 flex items-center justify-between gap-3 text-right shadow-[0_10px_24px_-10px_rgba(16,185,129,0.28)] active:translate-y-0.5 transition-all"
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <KidIconTile color="green" size="lg">
+                    <Car className="w-8 h-8" />
+                  </KidIconTile>
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="font-black text-base text-[#064E3B] dark:text-emerald-200 flex items-center gap-2 flex-wrap">
+                      <span>مسابقه ماشین مرحله‌ای</span>
+                    </div>
+                    <div className="text-xs font-bold text-[#047857] dark:text-emerald-300/90 truncate tabular-nums">
+                      مرحله {formatNumber(racingSummary.bestStage, digitMode)} از{' '}
+                      {formatNumber(RACING_STAGES.length, digitMode)} · زمان امروز:{' '}
+                      {racingSummary.isLimitReached
+                        ? 'تکمیل شد'
+                        : formatRacingClock(racingSummary.remainingSeconds, digitMode)}
+                    </div>
+                  </div>
+                </div>
+                <span
+                  className={`px-3.5 py-2 rounded-xl font-extrabold text-xs shrink-0 whitespace-nowrap shadow-xs ${
+                    racingSummary.isLimitReached
+                      ? 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                      : 'bg-[#10B981] text-white'
+                  }`}
+                >
+                  {racingSummary.isLimitReached ? 'مشاهده رکورد' : 'شروع مسابقه'}
+                </span>
+              </button>
+            )}
           </div>
 
           {/* Outback-Style Daily Quests Timeline + Rewards + Shortcuts Column */}
@@ -690,6 +738,66 @@ export const StartScreen: React.FC<StartScreenProps> = ({
           />
         )}
       </main>
+
+      {/* Floating Quick-Access 3D Abacus Button */}
+      <motion.button
+        type="button"
+        onClick={() => {
+          audioEngine.play('uiTap');
+          onOpenFreeAbacus();
+        }}
+        initial={reducedMotion ? false : { opacity: 0, scale: 0.9 }}
+        animate={reducedMotion ? undefined : { opacity: 1, scale: 1 }}
+        whileHover={reducedMotion ? undefined : { y: -3, scale: 1.03 }}
+        whileTap={reducedMotion ? undefined : { scale: 0.96 }}
+        transition={{ duration: 0.2 }}
+        aria-label="دسترسی سریع به چرتکه سه‌بعدی"
+        title="باز کردن چرتکه سه‌بعدی"
+        className="fixed bottom-20 left-3.5 md:bottom-7 md:left-7 z-40 group flex items-center gap-2.5 rounded-3xl bg-gradient-to-br from-[#1C2522] via-[#263630] to-[#121917] border-2 border-[#E6C35C] border-b-4 border-b-[#9E7C22] pl-3.5 pr-2.5 py-2 shadow-[0_14px_30px_-8px_rgba(20,28,25,0.65)] hover:border-[#F8DC81] focus:outline-none focus:ring-4 focus:ring-amber-400/40"
+      >
+        <div className="w-10 h-10 rounded-2xl bg-[#101513] border border-[#D9B54C]/70 flex items-center justify-center shrink-0 shadow-inner">
+          <svg aria-hidden="true" viewBox="0 0 48 32" className="w-8 h-6">
+            <rect
+              x="2"
+              y="3"
+              width="44"
+              height="26"
+              rx="3"
+              fill="#181A1F"
+              stroke="#E6C35C"
+              strokeWidth="2.2"
+            />
+            <line
+              x1="4"
+              y1="12"
+              x2="44"
+              y2="12"
+              stroke="#525B66"
+              strokeWidth="2"
+            />
+            <line x1="12" y1="5" x2="12" y2="27" stroke="#30363E" strokeWidth="1.4" />
+            <line x1="24" y1="5" x2="24" y2="27" stroke="#30363E" strokeWidth="1.4" />
+            <line x1="36" y1="5" x2="36" y2="27" stroke="#30363E" strokeWidth="1.4" />
+            <ellipse cx="12" cy="8.5" rx="3.4" ry="2" fill="#F4F6F9" />
+            <ellipse cx="24" cy="8.5" rx="3.4" ry="2" fill="#EE5267" />
+            <ellipse cx="36" cy="8.5" rx="3.4" ry="2" fill="#F4F6F9" />
+            <ellipse cx="12" cy="18" rx="3.4" ry="2" fill="#F4F6F9" />
+            <ellipse cx="24" cy="18" rx="3.4" ry="2" fill="#EE5267" />
+            <ellipse cx="36" cy="18" rx="3.4" ry="2" fill="#F4F6F9" />
+            <ellipse cx="12" cy="23.5" rx="3.4" ry="2" fill="#F4F6F9" />
+            <ellipse cx="24" cy="23.5" rx="3.4" ry="2" fill="#F4F6F9" />
+            <ellipse cx="36" cy="23.5" rx="3.4" ry="2" fill="#EE5267" />
+          </svg>
+        </div>
+        <div className="text-right">
+          <div className="text-xs sm:text-sm font-black text-amber-300 leading-tight whitespace-nowrap">
+            چرتکه ۳بعدی
+          </div>
+          <div className="text-[10px] font-bold text-slate-200/80 leading-tight whitespace-nowrap">
+            شروع سریع
+          </div>
+        </div>
+      </motion.button>
 
       {/* Ergonomic Mobile Bottom Navigation Dock */}
       <nav

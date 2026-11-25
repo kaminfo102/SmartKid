@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import {
   ArrowRight,
+  Car,
   CheckCircle2,
   Gamepad2,
   Star,
@@ -33,6 +34,11 @@ import { GameHubIllustration } from '../../components/KidIllustrations';
 import { KidIconTile, type KidTileColor } from '../../components/KidIconTile';
 import { audioEngine } from '../../lib/audioEngine';
 import { formatNumber } from '../../lib/numbers';
+import {
+  formatRacingClock,
+  getNormalizedRacingState,
+  RACING_STAGES,
+} from './racingStages';
 
 interface GameScreenProps {
   profile: ChildProfile;
@@ -40,6 +46,7 @@ interface GameScreenProps {
   onUpdateSettings: (patch: Partial<AppSettings>) => void;
   onRecordAnswer: (skill: SkillKey, correct: boolean) => void;
   onFinishGame: (result: SessionResult) => void;
+  onOpenRacing?: () => void;
   onBack: () => void;
 }
 
@@ -177,8 +184,10 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   onUpdateSettings,
   onRecordAnswer,
   onFinishGame,
+  onOpenRacing,
   onBack,
 }) => {
+  const racingSummary = useMemo(() => getNormalizedRacingState(profile), [profile]);
   const [activeMode, setActiveMode] = useState<GameModeId | null>(null);
   const [roundIdx, setRoundIdx] = useState(0);
   const [round, setRound] = useState<GameRound | null>(null);
@@ -354,6 +363,35 @@ export const GameScreen: React.FC<GameScreenProps> = ({
               </motion.button>
             ))}
           </div>
+          {onOpenRacing && (
+            <button
+              type="button"
+              onClick={onOpenRacing}
+              className="w-full p-4 rounded-2xl bg-gradient-to-l from-[#ECFDF5] to-white dark:from-emerald-950/60 dark:to-slate-900 border-2 border-[#6EE7B7] dark:border-emerald-700 border-b-4 border-b-[#10B981] hover:brightness-[1.02] text-right flex items-center justify-between gap-3 shadow-[0_10px_22px_-6px_rgba(16,185,129,0.24)] transition-all active:translate-y-0.5"
+            >
+              <div className="flex items-center gap-3.5 min-w-0">
+                <KidIconTile color="green" size="xl">
+                  <Car className="w-8 h-8" />
+                </KidIconTile>
+                <div className="min-w-0">
+                  <h2 className="font-extrabold text-base text-[#064E3B] dark:text-emerald-200">
+                    مسابقه ماشین کودکانه (مرحله‌ای)
+                  </h2>
+                  <p className="text-xs text-[#047857] dark:text-emerald-300/90 mt-1 tabular-nums">
+                    ۶ جاده واقعی متفاوت · زمان امروز:{' '}
+                    {racingSummary.isLimitReached
+                      ? 'تکمیل شد'
+                      : formatRacingClock(racingSummary.remainingSeconds, settings.digitMode)}{' '}
+                    · مرحله {formatNumber(racingSummary.bestStage, settings.digitMode)} از{' '}
+                    {formatNumber(RACING_STAGES.length, settings.digitMode)}
+                  </p>
+                </div>
+              </div>
+              <span className="px-3.5 py-2 rounded-xl bg-[#10B981] text-white font-extrabold text-xs shrink-0 whitespace-nowrap">
+                {racingSummary.isLimitReached ? 'مشاهده' : 'رانندگی'}
+              </span>
+            </button>
+          )}
         </main>
       </div>
     );

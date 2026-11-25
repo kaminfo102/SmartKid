@@ -8,6 +8,7 @@ export type ScreenId =
   | 'lesson'
   | 'practice'
   | 'games'
+  | 'racing'
   | 'simulator'
   | 'abacus'
   | 'result'
@@ -268,6 +269,16 @@ export interface RewardMedalDefinition {
   pointsCost?: number;
 }
 
+export interface DailyRacingState {
+  date: string; // YYYY-MM-DD in local timezone
+  usedSeconds: number;
+  dailyLimitSeconds: number;
+  bestStage: number; // 1..6
+  bestScore: number;
+  totalCoinsEarned: number;
+  selectedCarId?: string;
+}
+
 export interface ChildProfile {
   id: string;
   name: string;
@@ -285,6 +296,7 @@ export interface ChildProfile {
   badges: string[];
   rewardPoints?: number;
   dailyBonus?: DailyBonusState;
+  dailyRacing?: DailyRacingState;
 }
 
 export interface LessonStep {

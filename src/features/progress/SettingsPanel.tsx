@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import {
   ArrowRight,
+  Car,
   Check,
+  Clock,
+  Coffee,
   Edit3,
   Globe,
   Headphones,
-  MessageSquare,
+  Mic,
+  MicOff,
   Moon,
   Music,
   Plus,
@@ -13,10 +17,14 @@ import {
   ShieldCheck,
   Sparkles,
   Star,
+  Sun,
   Trash2,
   UserCircle2,
   Users,
   Volume2,
+  VolumeX,
+  X,
+  ZapOff,
 } from 'lucide-react';
 import type {
   AppSettings,
@@ -35,8 +43,9 @@ import {
 import { WordPressAuthScreen } from '../../components/WordPressAuthScreen';
 import { ProgressPanel } from './ProgressPanel';
 import { PWAInstallButton } from '../../components/PWAInstallButton';
-import { BuyCoffeeButton } from '../../components/BuyCoffeeButton';
+import { SUPPORT_COFFEE_URL } from '../../components/BuyCoffeeButton';
 import { KidIconTile, type KidTileColor } from '../../components/KidIconTile';
+import { DEFAULT_DAILY_RACING_LIMIT_SECONDS } from '../../lib/storage';
 
 export type ParentsHubTab = 'children' | 'account' | 'settings';
 
@@ -67,6 +76,7 @@ interface SettingsPanelProps {
   onPracticeSkill?: (skill: SkillKey) => void;
   onOpenShop?: () => void;
   onUpdateSettings: (patch: Partial<AppSettings>) => void;
+  onUpdateRacingLimit?: (limitSeconds: number) => void;
   onClearAllData: () => void;
   onBack: () => void;
   ordersRefreshTrigger?: number;
@@ -96,6 +106,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onPracticeSkill,
   onOpenShop,
   onUpdateSettings,
+  onUpdateRacingLimit,
   onClearAllData,
   onBack,
   ordersRefreshTrigger = 0,
@@ -127,40 +138,42 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     }
   };
 
-  const toggleRow = (
-    label: string,
-    desc: string,
+  const iconToggleCard = (
+    ariaLabel: string,
     checked: boolean,
     onChange: (val: boolean) => void,
-    icon: React.ReactNode,
+    activeIcon: React.ReactNode,
+    inactiveIcon: React.ReactNode,
     tileColor: KidTileColor
   ) => (
-    <div className="flex items-center justify-between gap-3 py-3 border-b border-[#EFE0CE] dark:border-slate-800 last:border-b-0">
-      <div className="flex items-center gap-3 min-w-0">
-        <KidIconTile color={tileColor} size="md">
-          {icon}
-        </KidIconTile>
-        <div className="min-w-0">
-          <div className="font-extrabold text-sm text-slate-900 dark:text-white">{label}</div>
-          <div className="text-xs text-slate-600 dark:text-slate-400">{desc}</div>
-        </div>
-      </div>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={ariaLabel}
+      title={ariaLabel}
+      onClick={() => onChange(!checked)}
+      className={`rounded-2xl border-2 p-3.5 flex items-center justify-between gap-3 transition-all active:translate-y-0.5 ${
+        checked
+          ? 'bg-[#FFFBF5] dark:bg-slate-800/80 border-[#46B849] dark:border-emerald-600 shadow-xs'
+          : 'bg-white dark:bg-slate-900 border-[#EFE0CE] dark:border-slate-800 opacity-85 hover:opacity-100'
+      }`}
+    >
+      <KidIconTile color={tileColor} size="md">
+        {checked ? activeIcon : inactiveIcon}
+      </KidIconTile>
 
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-label={label}
-        onClick={() => onChange(!checked)}
-        className={`min-h-[44px] min-w-[64px] px-1 rounded-full flex items-center transition-colors shrink-0 border-2 ${
+      <span
+        aria-hidden="true"
+        className={`min-h-[36px] min-w-[56px] px-1 rounded-full flex items-center transition-colors shrink-0 border-2 ${
           checked
             ? 'bg-[#46B849] border-[#2E8D30] justify-end'
             : 'bg-slate-200 border-slate-300 dark:bg-slate-700 dark:border-slate-600 justify-start'
         }`}
       >
-        <span className="w-8 h-8 rounded-full bg-white shadow-sm block" />
-      </button>
-    </div>
+        <span className="w-6 h-6 rounded-full bg-white shadow-sm block" />
+      </span>
+    </button>
   );
 
   return (
@@ -407,176 +420,196 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           />
         )}
 
-        {/* TAB 3: Audio, Accessibility, Support & Device Storage */}
+        {/* TAB 3: Icon-Only Minimal Settings */}
         {tab === 'settings' && (
-          <div className="space-y-5">
-            {onOpenTickets && (
-              <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] p-4 flex items-center justify-between gap-3 flex-wrap">
-                <div className="flex items-center gap-3 min-w-0">
-                  <KidIconTile color="sky" size="md">
-                    <Headphones className="w-5 h-5" />
-                  </KidIconTile>
-                  <div>
-                    <h2 className="font-extrabold text-sm text-slate-900 dark:text-white">
-                      پشتیبانی و ارسال تیکت
-                    </h2>
-                    <p className="text-xs text-slate-600 dark:text-slate-400">
-                      پیگیری سفارش‌ها، راهنمایی دوره‌ها و ارتباط مستقیم با تیم پشتیبانی
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={onOpenTickets}
-                  className="min-h-[44px] px-4 rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] text-white font-extrabold text-xs inline-flex items-center gap-1.5"
+          <div className="space-y-4">
+            {/* Icon-Only Toggles Grid */}
+            <section className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] p-4 sm:p-5 space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {iconToggleCard(
+                  'افکت‌های صوتی',
+                  settings.soundEnabled,
+                  (val) => onUpdateSettings({ soundEnabled: val }),
+                  <Volume2 className="w-6 h-6" />,
+                  <VolumeX className="w-6 h-6" />,
+                  'blue'
+                )}
+
+                {iconToggleCard(
+                  'گوینده فارسی',
+                  settings.speechEnabled,
+                  (val) => onUpdateSettings({ speechEnabled: val }),
+                  <Mic className="w-6 h-6" />,
+                  <MicOff className="w-6 h-6" />,
+                  'pink'
+                )}
+
+                {iconToggleCard(
+                  'موسیقی پس‌زمینه',
+                  settings.musicEnabled,
+                  (val) => onUpdateSettings({ musicEnabled: val }),
+                  <Music className="w-6 h-6" />,
+                  <Music className="w-6 h-6 opacity-50" />,
+                  'violet'
+                )}
+
+                {iconToggleCard(
+                  'کاهش انیمیشن',
+                  settings.reducedMotion,
+                  (val) => onUpdateSettings({ reducedMotion: val }),
+                  <ZapOff className="w-6 h-6" />,
+                  <Sparkles className="w-6 h-6" />,
+                  'amber'
+                )}
+
+                {iconToggleCard(
+                  'حالت مطالعه شب',
+                  settings.nightMode,
+                  (val) => onUpdateSettings({ nightMode: val }),
+                  <Moon className="w-6 h-6" />,
+                  <Sun className="w-6 h-6" />,
+                  'sky'
+                )}
+              </div>
+
+              {/* Compact Multi-Choice Icon Controls */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div
+                  title="نمایش اعداد"
+                  className="rounded-2xl border-2 border-[#EFE0CE] dark:border-slate-800 p-3 flex items-center justify-between gap-2"
                 >
-                  <Headphones className="w-4 h-4" />
-                  <span>باز کردن پشتیبانی</span>
-                </button>
-              </section>
-            )}
-
-            <BuyCoffeeButton variant="card" reducedMotion={settings.reducedMotion} />
-
-            {/* App Settings */}
-            <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] p-4 sm:p-5">
-              <h2 className="font-extrabold text-base text-slate-900 dark:text-white mb-2">
-                تنظیمات صدا، نمایش و دسترسی‌پذیری
-              </h2>
-
-              {toggleRow(
-                'افکت‌های صوتی',
-                'صدای مهره‌های چرتکه و تشویق پاسخ درست',
-                settings.soundEnabled,
-                (val) => onUpdateSettings({ soundEnabled: val }),
-                <Volume2 className="w-5 h-5" />,
-                'blue'
-              )}
-
-              {toggleRow(
-                'گوینده خانم (فارسی کودکانه)',
-                'خواندن درس‌ها و تشویق‌ها با صدای مهربان خانم مناسب کودکان',
-                settings.speechEnabled,
-                (val) => onUpdateSettings({ speechEnabled: val }),
-                <MessageSquare className="w-5 h-5" />,
-                'pink'
-              )}
-
-              {toggleRow(
-                'موسیقی ملایم پس‌زمینه',
-                'ملودی آرام هنگام یادگیری',
-                settings.musicEnabled,
-                (val) => onUpdateSettings({ musicEnabled: val }),
-                <Music className="w-5 h-5" />,
-                'violet'
-              )}
-
-              {toggleRow(
-                'کاهش انیمیشن (حساسیت حسی)',
-                'توقف حرکات اضافه برای تمرکز بیشتر کودک',
-                settings.reducedMotion,
-                (val) => onUpdateSettings({ reducedMotion: val }),
-                <Sparkles className="w-5 h-5" />,
-                'amber'
-              )}
-
-              {toggleRow(
-                'حالت مطالعه شب',
-                'رنگ‌های تیره و ملایم برای نور کم',
-                settings.nightMode,
-                (val) => onUpdateSettings({ nightMode: val }),
-                <Moon className="w-5 h-5" />,
-                'sky'
-              )}
-
-              {/* Digits & Language option */}
-              <div className="flex items-center justify-between gap-3 py-3 border-t border-[#EFE0CE] dark:border-slate-800">
-                <div className="flex items-center gap-3">
                   <KidIconTile color="green" size="md">
                     <Globe className="w-5 h-5" />
                   </KidIconTile>
-                  <div>
-                    <div className="font-extrabold text-sm text-slate-900 dark:text-white">
-                      نمایش اعداد و زبان
-                    </div>
-                    <div className="text-xs text-slate-600 dark:text-slate-400">
-                      زبان فعلی: فارسی (امکان انتخاب ارقام فارسی یا انگلیسی)
-                    </div>
+                  <div className="flex items-center gap-1 p-1 rounded-xl bg-[#FFF6EB] dark:bg-slate-800 border border-[#EEDCC5] dark:border-slate-700">
+                    <button
+                      type="button"
+                      aria-label="اعداد فارسی"
+                      onClick={() => onUpdateSettings({ digitMode: 'fa' })}
+                      className={`min-h-[38px] px-3.5 rounded-lg text-sm font-black tabular-nums transition-colors ${
+                        settings.digitMode === 'fa'
+                          ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                          : 'text-slate-500 dark:text-slate-400'
+                      }`}
+                    >
+                      ۱۲۳
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="اعداد انگلیسی"
+                      onClick={() => onUpdateSettings({ digitMode: 'en' })}
+                      className={`min-h-[38px] px-3.5 rounded-lg text-sm font-black tabular-nums transition-colors ${
+                        settings.digitMode === 'en'
+                          ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                          : 'text-slate-500 dark:text-slate-400'
+                      }`}
+                    >
+                      123
+                    </button>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1 p-1 rounded-2xl bg-[#FFF6EB] dark:bg-slate-800 border border-[#EEDCC5] dark:border-slate-700">
-                  <button
-                    type="button"
-                    onClick={() => onUpdateSettings({ digitMode: 'fa' })}
-                    className={`min-h-[38px] px-3 rounded-xl text-xs font-extrabold ${
-                      settings.digitMode === 'fa'
-                        ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
-                        : 'text-slate-600 dark:text-slate-400'
-                    }`}
+                {onUpdateRacingLimit && (
+                  <div
+                    title="زمان روزانه بازی ماشین"
+                    className="rounded-2xl border-2 border-[#EFE0CE] dark:border-slate-800 p-3 flex items-center justify-between gap-2"
                   >
-                    ۱۲۳ فارسی
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onUpdateSettings({ digitMode: 'en' })}
-                    className={`min-h-[38px] px-3 rounded-xl text-xs font-extrabold ${
-                      settings.digitMode === 'en'
-                        ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
-                        : 'text-slate-600 dark:text-slate-400'
-                    }`}
-                  >
-                    123
-                  </button>
-                </div>
-              </div>
-            </section>
-
-            {/* PWA & Local Data Management */}
-            <section className="rounded-2xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h2 className="font-extrabold text-sm text-slate-900 dark:text-white">
-                  نصب اپلیکیشن و مدیریت حافظه دستگاه
-                </h2>
-                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                  نصب نسخه وب‌اپلیکیشن روی گوشی یا تبلت و پاکسازی داده‌های موقت این دستگاه.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                <PWAInstallButton />
-
-                {!confirmClear ? (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmClear(true)}
-                    className="min-h-[44px] px-4 rounded-2xl bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 border-b-4 border-amber-300 dark:border-amber-800 text-amber-950 dark:text-amber-100 font-bold text-xs inline-flex items-center gap-1.5"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span>حذف اطلاعات محلی</span>
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onClearAllData();
-                        setConfirmClear(false);
-                      }}
-                      className="min-h-[44px] px-3 rounded-2xl bg-amber-600 border-b-4 border-amber-800 text-white font-bold text-xs"
-                    >
-                      تایید حذف کامل
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmClear(false)}
-                      className="min-h-[44px] px-3 rounded-2xl bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100 font-bold text-xs"
-                    >
-                      لغو
-                    </button>
+                    <KidIconTile color="amber" size="md">
+                      <Car className="w-5 h-5" />
+                    </KidIconTile>
+                    <div className="flex items-center gap-1 p-1 rounded-xl bg-[#FFF6EB] dark:bg-slate-800 border border-[#EEDCC5] dark:border-slate-700">
+                      <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 mx-1 shrink-0" />
+                      {[300, 600, 900, 1200].map((secs) => {
+                        const currentLimit =
+                          activeProfile.dailyRacing?.dailyLimitSeconds ??
+                          DEFAULT_DAILY_RACING_LIMIT_SECONDS;
+                        const selected = currentLimit === secs;
+                        const mins = Math.round(secs / 60);
+                        return (
+                          <button
+                            key={secs}
+                            type="button"
+                            aria-label={`${mins} دقیقه`}
+                            title={`${mins} دقیقه`}
+                            onClick={() => onUpdateRacingLimit(secs)}
+                            className={`min-h-[38px] min-w-[36px] px-2 rounded-lg text-xs font-black tabular-nums transition-colors ${
+                              selected
+                                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                                : 'text-slate-500 dark:text-slate-400'
+                            }`}
+                          >
+                            {formatNumber(mins, settings.digitMode)}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
+            </section>
+
+            {/* Icon-Only Quick Utility Actions */}
+            <section className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-[#EEDCC5] dark:border-slate-800 border-b-4 border-b-[#DFC6A8] shadow-[0_10px_24px_-8px_rgba(170,104,40,0.16)] p-4 flex items-center justify-center gap-3 flex-wrap">
+              {onOpenTickets && (
+                <button
+                  type="button"
+                  onClick={onOpenTickets}
+                  aria-label="پشتیبانی و ارسال تیکت"
+                  title="پشتیبانی"
+                  className="min-h-[48px] min-w-[48px] px-4 rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] active:border-b-0 active:translate-y-0.5 text-white flex items-center justify-center transition-all"
+                >
+                  <Headphones className="w-5 h-5" />
+                </button>
+              )}
+
+              <a
+                href={SUPPORT_COFFEE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="حمایت از کودک نابغه"
+                title="حمایت"
+                className="min-h-[48px] min-w-[48px] px-4 rounded-2xl bg-[#92400E] hover:bg-[#78350F] border-b-4 border-[#451A03] active:border-b-0 active:translate-y-0.5 text-amber-200 flex items-center justify-center transition-all"
+              >
+                <Coffee className="w-5 h-5" />
+              </a>
+
+              <PWAInstallButton iconOnly />
+
+              {!confirmClear ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmClear(true)}
+                  aria-label="حذف اطلاعات محلی"
+                  title="حذف اطلاعات محلی"
+                  className="min-h-[48px] min-w-[48px] px-4 rounded-2xl bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 border-b-4 border-amber-300 dark:border-amber-800 active:border-b-0 active:translate-y-0.5 text-amber-950 dark:text-amber-100 flex items-center justify-center transition-all"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    aria-label="تایید حذف اطلاعات محلی"
+                    title="تایید حذف"
+                    onClick={() => {
+                      onClearAllData();
+                      setConfirmClear(false);
+                    }}
+                    className="min-h-[48px] min-w-[48px] px-3.5 rounded-2xl bg-rose-600 border-b-4 border-rose-800 text-white flex items-center justify-center"
+                  >
+                    <Check className="w-5 h-5" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="لغو حذف"
+                    title="لغو"
+                    onClick={() => setConfirmClear(false)}
+                    className="min-h-[48px] min-w-[48px] px-3.5 rounded-2xl bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100 flex items-center justify-center"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              )}
             </section>
           </div>
         )}

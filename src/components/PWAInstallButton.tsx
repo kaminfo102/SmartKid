@@ -2,7 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { Download, WifiOff } from 'lucide-react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 
-export const PWAInstallButton: React.FC = () => {
+interface PWAInstallButtonProps {
+  iconOnly?: boolean;
+}
+
+export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({ iconOnly = false }) => {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showIOSGuide, setShowIOSGuide] = useState(false);
 
@@ -14,10 +18,13 @@ export const PWAInstallButton: React.FC = () => {
         type="button"
         onClick={install}
         aria-label="نصب اپلیکیشن کودک نابغه روی گوشی"
-        className="min-h-[44px] inline-flex items-center gap-2 rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] active:border-b-0 active:translate-y-0.5 text-white px-4 py-2 text-xs sm:text-sm font-extrabold transition-all shadow-xs"
+        title="نصب برنامه"
+        className={`min-h-[44px] inline-flex items-center justify-center gap-2 rounded-2xl bg-[#5472EB] hover:bg-[#425FD6] border-b-4 border-[#354EB8] active:border-b-0 active:translate-y-0.5 text-white text-xs sm:text-sm font-extrabold transition-all shadow-xs ${
+          iconOnly ? 'min-w-[44px] px-3 py-2' : 'px-4 py-2'
+        }`}
       >
-        <Download className="w-4 h-4" />
-        <span>نصب برنامه</span>
+        <Download className="w-5 h-5" />
+        {!iconOnly && <span>نصب برنامه</span>}
       </button>
     );
   }
@@ -29,10 +36,13 @@ export const PWAInstallButton: React.FC = () => {
           type="button"
           onClick={() => setShowIOSGuide(true)}
           aria-label="راهنمای نصب در آیفون و آیپد"
-          className="min-h-[44px] inline-flex items-center gap-2 rounded-2xl bg-white hover:bg-[#FFF6EB] dark:bg-slate-800 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-700 px-3 py-2 text-xs font-extrabold text-[#5C3A00] dark:text-slate-200 transition-all"
+          title="نصب در آیفون"
+          className={`min-h-[44px] inline-flex items-center justify-center gap-2 rounded-2xl bg-white hover:bg-[#FFF6EB] dark:bg-slate-800 border-2 border-[#EEDCC5] border-b-4 border-b-[#DFC6A8] dark:border-slate-700 text-xs font-extrabold text-[#5C3A00] dark:text-slate-200 transition-all ${
+            iconOnly ? 'min-w-[44px] px-3 py-2' : 'px-3 py-2'
+          }`}
         >
-          <Download className="w-4 h-4" />
-          <span>نصب در آیفون</span>
+          <Download className="w-5 h-5" />
+          {!iconOnly && <span>نصب در آیفون</span>}
         </button>
 
         {showIOSGuide && (
