@@ -175,6 +175,46 @@
       if (row) {
         row.remove();
       }
+      return;
+    }
+
+    var addPronBtn = e.target.closest('[data-kn-add-pron-row]');
+    if (addPronBtn) {
+      e.preventDefault();
+      var pronBody = document.getElementById('kn-tts-pron-body');
+      var pronTpl = document.getElementById('kn-tts-pron-row-template');
+      if (!pronBody || !pronTpl) return;
+      var tempTbl = document.createElement('table');
+      tempTbl.innerHTML = '<tbody>' + pronTpl.innerHTML + '</tbody>';
+      var pronRow = tempTbl.querySelector('tr');
+      if (pronRow) {
+        pronBody.appendChild(pronRow);
+      }
+      return;
+    }
+
+    var removePronBtn = e.target.closest('[data-kn-remove-pron-row]');
+    if (removePronBtn) {
+      e.preventDefault();
+      var pRow = removePronBtn.closest('tr.kn-tts-pron-row');
+      if (pRow) {
+        pRow.remove();
+      }
+      return;
+    }
+
+    var appendPromptBtn = e.target.closest('[data-kn-append-prompt]');
+    if (appendPromptBtn) {
+      e.preventDefault();
+      var ruleText = (appendPromptBtn.getAttribute('data-kn-append-prompt') || '').trim();
+      var instrEl = document.getElementById('kn-tts-instructions');
+      if (instrEl && ruleText) {
+        var cur = (instrEl.value || '').trim();
+        if (cur.indexOf(ruleText) === -1) {
+          instrEl.value = cur ? cur + '\n' + ruleText : ruleText;
+        }
+        instrEl.focus();
+      }
     }
   });
 
@@ -203,4 +243,166 @@
       tr.style.display = (!term || text.indexOf(term) !== -1) ? '' : 'none';
     });
   });
+
+  // AI TTS Provider Preset Switcher & Live Voice Test in Admin Audio Page
+  var ttsCard = document.getElementById('kn-tts-settings-card');
+  if (ttsCard) {
+    var catalogRaw = ttsCard.getAttribute('data-kn-tts-catalog');
+    var catalog = {};
+    try {
+      catalog = catalogRaw ? JSON.parse(catalogRaw) : {};
+    } catch (err) {
+      catalog = {};
+    }
+
+    var providerSelect = document.getElementById('kn-tts-provider');
+    var baseUrlInput = document.getElementById('kn-tts-base-url');
+    var modelInput = document.getElementById('kn-tts-model');
+    var voiceInput = document.getElementById('kn-tts-voice');
+    var hintEl = document.getElementById('kn-tts-provider-hint');
+    var modelsList = document.getElementById('kn-tts-models-list');
+    var voicesList = document.getElementById('kn-tts-voices-list');
+
+    if (providerSelect) {
+      providerSelect.addEventListener('change', function () {
+        var meta = catalog[providerSelect.value];
+        if (!meta) return;
+        if (hintEl) {
+          hintEl.textContent = meta.hint || '';
+        }
+        if (baseUrlInput) {
+          baseUrlInput.value = meta.base_url || '';
+        }
+        if (modelInput && meta.default_model) {
+          modelInput.value = meta.default_model;
+        }
+        if (voiceInput && meta.default_voice) {
+          voiceInput.value = meta.default_voice;
+        }
+        if (modelsList && Array.isArray(meta.models)) {
+          modelsList.innerHTML = '';
+          meta.models.forEach(function (m) {
+            var opt = document.createElement('option');
+            opt.value = m;
+            modelsList.appendChild(opt);
+          });
+        }
+        if (voicesList && Array.isArray(meta.voices)) {
+          voicesList.innerHTML = '';
+          meta.voices.forEach(function (v) {
+            var opt = document.createElement('option');
+            opt.value = v;
+            voicesList.appendChild(opt);
+          });
+        }
+      });
+    }
+
+    var basePresetBtns = ttsCard.querySelectorAll('[data-kn-tts-baseurl]');
+    basePresetBtns.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var val = btn.getAttribute('data-kn-tts-baseurl') || '';
+        if (baseUrlInput && val) {
+          baseUrlInput.value = val;
+        }
+      });
+    });
+
+    var originalPresetBtn = document.getElementById('kn-tts-preset-original');
+    var formatSelect = document.getElementById('kn-tts-format');
+    var speedSelect = document.getElementById('kn-tts-speed');
+    var instructionsInput = document.getElementById('kn-tts-instructions');
+    var presetNotice = document.getElementById('kn-tts-preset-notice');
+    if (originalPresetBtn) {
+      originalPresetBtn.addEventListener('click', function () {
+        var currentBase = baseUrlInput ? (baseUrlInput.value || '').trim() : '';
+        var wasGapgpt = providerSelect && providerSelect.value === 'gapgpt';
+        if (providerSelect) {
+          providerSelect.value = 'gapgpt';
+          providerSelect.dispatchEvent(new Event('change'));
+        }
+        if (baseUrlInput && wasGapgpt && currentBase) {
+          baseUrlInput.value = currentBase;
+        }
+        if (modelInput) modelInput.value = 'gemini-3.8-flash-tts';
+        if (voiceInput) voiceInput.value = 'Kore';
+        if (formatSelect) formatSelect.value = 'wav';
+        if (speedSelect) speedSelect.value = '0.95';
+        if (instructionsInput) {
+          instructionsInput.value = 'Warm, gentle, cheerful Iranian female kindergarten teacher speaking clear, friendly Persian (fa-IR) warmly and slowly for children ages 4 to 15.';
+        }
+        if (presetNotice) {
+          presetNotice.style.display = 'inline';
+        }
+      });
+    }
+
+    var testBtn = document.getElementById('kn-tts-test-btn');
+    var testText = document.getElementById('kn-tts-test-text');
+    var testTone = document.getElementById('kn-tts-test-tone');
+    var testStatus = document.getElementById('kn-tts-test-status');
+    var testAudio = document.getElementById('kn-tts-test-audio');
+
+    if (testBtn && typeof window.ajaxurl === 'string') {
+      testBtn.addEventListener('click', function () {
+        var phrase = (testText && testText.value ? testText.value : '').trim();
+        var tone = testTone ? testTone.value : 'cheer';
+        var nonce = testBtn.getAttribute('data-nonce') || '';
+        if (!phrase) {
+          if (testStatus) testStatus.textContent = 'لطفاً یک متن فارسی وارد کنید.';
+          return;
+        }
+
+        testBtn.disabled = true;
+        if (testStatus) {
+          testStatus.style.color = '#475569';
+          testStatus.textContent = 'در حال ارسال به سرور و تولید صدا...';
+        }
+
+        var body = new URLSearchParams();
+        body.append('action', 'kn_test_tts');
+        body.append('nonce', nonce);
+        body.append('text', phrase);
+        body.append('tone', tone);
+
+        fetch(window.ajaxurl, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+          body: body.toString()
+        })
+          .then(function (r) {
+            return r.json();
+          })
+          .then(function (resp) {
+            if (!resp || !resp.success || !resp.data || !resp.data.audioBase64) {
+              var errMsg = (resp && resp.data && resp.data.message) ? resp.data.message : 'خطا در تولید صدا.';
+              throw new Error(errMsg);
+            }
+            var mime = resp.data.mimeType || 'audio/mpeg';
+            var dataUri = 'data:' + mime + ';base64,' + resp.data.audioBase64;
+            if (testAudio) {
+              testAudio.src = dataUri;
+              testAudio.style.display = 'block';
+              testAudio.play().catch(function () {});
+            }
+            if (testStatus) {
+              testStatus.style.color = '#15803d';
+              var usedUrl = resp.data.usedBaseUrl ? ' | ' + resp.data.usedBaseUrl : '';
+              var spokenNote = resp.data.spokenText ? ' — متن ارسالی: «' + resp.data.spokenText + '»' : '';
+              testStatus.textContent = 'صدا با موفقیت از سرویس (' + (resp.data.provider || '') + usedUrl + ') تولید و پخش شد.' + spokenNote;
+            }
+          })
+          .catch(function (err) {
+            if (testStatus) {
+              testStatus.style.color = '#b91c1c';
+              testStatus.textContent = err && err.message ? err.message : 'ارتباط با سرویس ناموفق بود.';
+            }
+          })
+          .finally(function () {
+            testBtn.disabled = false;
+          });
+      });
+    }
+  }
 })();

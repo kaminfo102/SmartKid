@@ -49,6 +49,8 @@ export interface AudioSettingsConfig {
   >;
   bgMusicUrl?: string;
   voiceClips?: VoiceClipMapping[];
+  ttsEnabled?: boolean;
+  ttsProvider?: string;
 }
 
 export interface WordPressConfig {

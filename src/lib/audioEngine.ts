@@ -1,4 +1,5 @@
 import type { AudioSettingsConfig, VoiceClipMapping } from '../types/app';
+import { synthesizeWordPressTts } from './wordpressApi';
 
 // Embedded from public/audio/sfx/*.mp3 to eliminate HTTP .mp3 requests (prevents IDM hijacking & works 100% offline)
 const EMBEDDED_SFX_BASE64: Record<string, string> = {
@@ -110,8 +111,9 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
   return bytes.buffer;
 }
 
-function base64WavToObjectUrl(base64: string): string {
-  const blob = new Blob([base64ToArrayBuffer(base64)], { type: 'audio/wav' });
+function base64AudioToObjectUrl(base64: string, mimeType = 'audio/wav'): string {
+  const safeMime = mimeType && mimeType.startsWith('audio/') ? mimeType : 'audio/wav';
+  const blob = new Blob([base64ToArrayBuffer(base64)], { type: safeMime });
   return URL.createObjectURL(blob);
 }
 
@@ -135,6 +137,9 @@ class SoundEngine {
   private validatedAudioUrls = new Map<string, boolean>();
   private sfxUrlOverrides: Partial<Record<SoundEffectKey, string>> = {};
   private pluginVoiceClips: VoiceClipMapping[] = [];
+  private wpUrl = '';
+  private wpTtsEnabled = false;
+  private wpTtsProvider = '';
 
   private currentAudio: HTMLAudioElement | null = null;
   private ttsAbortController: AbortController | null = null;
@@ -428,9 +433,38 @@ class SoundEngine {
       ? audioConfig.voiceClips.filter((c) => c && isSafeAudioUrl(c.url))
       : [];
 
+    const nextEnabled = Boolean(audioConfig.ttsEnabled);
+    const nextProvider = String(audioConfig.ttsProvider || '');
+    if (nextEnabled !== this.wpTtsEnabled || nextProvider !== this.wpTtsProvider) {
+      this.clearTtsObjectUrlCache();
+      this.wpTtsEnabled = nextEnabled;
+      this.wpTtsProvider = nextProvider;
+    }
+
     if (sfxChanged && this.soundEnabled && this.isGestureUnlocked()) {
       this.preloadAllSfx();
     }
+  }
+
+  public configureTtsBackend(opts: { wpUrl?: string; wpTtsEnabled?: boolean }) {
+    const cleanUrl = (opts.wpUrl || '').trim().replace(/\/+$/, '');
+    const nextEnabled = opts.wpTtsEnabled !== undefined ? Boolean(opts.wpTtsEnabled) : this.wpTtsEnabled;
+    if (cleanUrl !== this.wpUrl || nextEnabled !== this.wpTtsEnabled) {
+      this.clearTtsObjectUrlCache();
+      this.wpUrl = cleanUrl;
+      this.wpTtsEnabled = nextEnabled;
+    }
+  }
+
+  private clearTtsObjectUrlCache() {
+    this.audioCache.forEach((url) => {
+      try {
+        URL.revokeObjectURL(url);
+      } catch {
+        // ignore
+      }
+    });
+    this.audioCache.clear();
   }
 
   public configure(opts: {
@@ -865,23 +899,30 @@ class SoundEngine {
     const controller = new AbortController();
     this.ttsAbortController = controller;
 
-    void fetch('/api/tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: cleanText, tone }),
-      signal: controller.signal,
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          throw new Error(`TTS HTTP ${res.status}`);
-        }
-        const data = (await res.json()) as { audioBase64?: string };
+    const synthesizePayload = async (): Promise<{ audioBase64?: string; mimeType?: string }> => {
+      if (this.wpUrl && this.wpTtsEnabled) {
+        return synthesizeWordPressTts(this.wpUrl, cleanText, tone, controller.signal);
+      }
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: cleanText, tone }),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        throw new Error(`TTS HTTP ${res.status}`);
+      }
+      return (await res.json()) as { audioBase64?: string; mimeType?: string };
+    };
+
+    void synthesizePayload()
+      .then(async (data) => {
         if (!data.audioBase64) {
           throw new Error('Empty audio payload');
         }
         if (controller.signal.aborted) return;
 
-        const objectUrl = base64WavToObjectUrl(data.audioBase64);
+        const objectUrl = base64AudioToObjectUrl(data.audioBase64, data.mimeType || 'audio/wav');
         if (this.audioCache.size >= 80) {
           const oldestKey = this.audioCache.keys().next().value;
           if (oldestKey !== undefined) {

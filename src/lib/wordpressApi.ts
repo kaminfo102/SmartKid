@@ -387,6 +387,7 @@ export interface WordPressHealthResponse {
   wooActive?: boolean;
   wooCurrency?: string;
   smsOtpEnabled?: boolean;
+  ttsEnabled?: boolean;
 }
 
 export async function checkWordPressHealth(
@@ -1144,6 +1145,31 @@ export async function fetchWordPressLeaderboard(
     myBestEntry: data?.myBestEntry ?? null,
     totalParticipants: typeof data?.totalParticipants === 'number' ? data.totalParticipants : 0,
   };
+}
+
+export interface WordPressTtsResponse {
+  audioBase64?: string;
+  mimeType?: string;
+  provider?: string;
+  cached?: boolean;
+}
+
+export async function synthesizeWordPressTts(
+  siteUrl: string,
+  text: string,
+  tone: 'teach' | 'cheer' | 'encourage',
+  signal?: AbortSignal
+): Promise<WordPressTtsResponse> {
+  return wpRequest<WordPressTtsResponse>(
+    siteUrl,
+    '/tts',
+    {
+      method: 'POST',
+      body: JSON.stringify({ text, tone }),
+      signal,
+    },
+    false
+  );
 }
 
 

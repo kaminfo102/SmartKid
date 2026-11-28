@@ -1233,9 +1233,11 @@ class KN_DB {
 		}
 
 		return array(
-			'sfxUrls'    => ! empty( $sfx_out ) ? $sfx_out : new stdClass(),
-			'bgMusicUrl' => ! empty( $raw['bg_music_url'] ) ? esc_url_raw( (string) $raw['bg_music_url'] ) : '',
-			'voiceClips' => $clips_out,
+			'sfxUrls'     => ! empty( $sfx_out ) ? $sfx_out : new stdClass(),
+			'bgMusicUrl'  => ! empty( $raw['bg_music_url'] ) ? esc_url_raw( (string) $raw['bg_music_url'] ) : '',
+			'voiceClips'  => $clips_out,
+			'ttsEnabled'  => class_exists( 'KN_TTS' ) ? KN_TTS::is_enabled() : false,
+			'ttsProvider' => class_exists( 'KN_TTS' ) ? KN_TTS::get_public_provider() : 'gapgpt',
 		);
 	}
 

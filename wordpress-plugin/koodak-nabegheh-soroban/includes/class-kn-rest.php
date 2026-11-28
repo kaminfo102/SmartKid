@@ -452,6 +452,16 @@ class KN_REST {
 				'permission_callback' => '__return_true',
 			)
 		);
+
+		register_rest_route(
+			$ns,
+			'/tts',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( 'KN_TTS', 'handle_rest_tts' ),
+				'permission_callback' => '__return_true',
+			)
+		);
 	}
 
 	/**
@@ -518,6 +528,7 @@ class KN_REST {
 				'wooActive'           => KN_Woo::is_woo_active(),
 				'wooCurrency'         => KN_Woo::get_currency_label(),
 				'smsOtpEnabled'       => KN_SMS::is_enabled(),
+				'ttsEnabled'          => KN_TTS::is_enabled(),
 			)
 		);
 	}

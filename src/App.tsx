@@ -343,6 +343,10 @@ export default function App() {
         setWpQuestions(questions);
         setBacsAccounts(curriculum.bacsAccounts ?? []);
         audioEngine.configureAssets(curriculum.config.audioSettings);
+        audioEngine.configureTtsBackend({
+          wpUrl: targetUrl,
+          wpTtsEnabled: Boolean(curriculum.config.audioSettings?.ttsEnabled),
+        });
         setWpConfig((prev) => ({
           ...prev,
           appTitle: curriculum.config.appTitle || prev.appTitle,

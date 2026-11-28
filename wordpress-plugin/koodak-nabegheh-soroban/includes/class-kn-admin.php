@@ -60,6 +60,35 @@ class KN_Admin {
 		add_action( 'admin_menu', array( __CLASS__, 'register_menus' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue_assets' ) );
 		add_action( 'admin_init', array( __CLASS__, 'handle_actions' ) );
+		add_action( 'wp_ajax_kn_test_tts', array( __CLASS__, 'handle_ajax_test_tts' ) );
+	}
+
+	/**
+	 * Admin-only AJAX endpoint to test configured AI TTS provider (GapGPT / OpenAI / etc.) live in dashboard.
+	 */
+	public static function handle_ajax_test_tts() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => 'دسترسی غیرمجاز.' ), 403 );
+		}
+		check_ajax_referer( 'kn_test_tts', 'nonce' );
+
+		$text = isset( $_POST['text'] ) ? trim( sanitize_textarea_field( wp_unslash( $_POST['text'] ) ) ) : '';
+		if ( $text === '' ) {
+			$text = 'سلام قهرمان! آفرین، خیلی عالی و دقیق روی چرتکه کار کردی!';
+		}
+		if ( mb_strlen( $text, 'UTF-8' ) > 400 ) {
+			wp_send_json_error( array( 'message' => 'متن تست نباید بیشتر از ۴۰۰ کاراکتر باشد.' ), 400 );
+		}
+
+		$raw_tone = isset( $_POST['tone'] ) ? sanitize_key( wp_unslash( $_POST['tone'] ) ) : 'cheer';
+		$tone     = in_array( $raw_tone, array( 'teach', 'cheer', 'encourage' ), true ) ? $raw_tone : 'cheer';
+
+		$res = KN_TTS::synthesize( $text, $tone, true );
+		if ( is_wp_error( $res ) ) {
+			wp_send_json_error( array( 'message' => $res->get_error_message() ), 400 );
+		}
+
+		wp_send_json_success( $res );
 	}
 
 	public static function register_menus() {
@@ -673,7 +702,7 @@ class KN_Admin {
 			}
 		}
 
-		// 14. Save Hybrid Audio & Voiceover Library Settings
+		// 14. Save Hybrid Audio, AI TTS Provider & Voiceover Library Settings
 		if ( $action === 'save_audio_settings' && check_admin_referer( 'kn_save_audio_settings' ) ) {
 			$sfx_keys = array( 'beadClick', 'uiTap', 'success', 'tryAgain', 'levelComplete', 'birdChirp' );
 			$sfx_in   = isset( $_POST['sfx_urls'] ) && is_array( $_POST['sfx_urls'] ) ? wp_unslash( $_POST['sfx_urls'] ) : array();
@@ -714,7 +743,92 @@ class KN_Admin {
 					'voice_clips'  => $clips_out,
 				)
 			);
-			self::redirect_with_notice( 'kn-soroban-audio', 'تنظیمات فایل‌های صوتی، موسیقی پس‌زمینه و کتابخانه گویندگی ذخیره شد.' );
+
+			// Save AI TTS Settings (GapGPT, OpenAI, AvalAI, ElevenLabs, Gemini, Custom)
+			$existing_tts = KN_TTS::get_settings();
+			$catalog      = KN_TTS::get_providers_catalog();
+			$tts_provider = sanitize_key( wp_unslash( $_POST['tts_provider'] ?? 'gapgpt' ) );
+			if ( ! isset( $catalog[ $tts_provider ] ) ) {
+				$tts_provider = 'gapgpt';
+			}
+
+			$raw_base_url = trim( sanitize_text_field( wp_unslash( $_POST['tts_base_url'] ?? '' ) ) );
+			if ( $raw_base_url === '' && ! empty( $catalog[ $tts_provider ]['base_url'] ) ) {
+				$raw_base_url = $catalog[ $tts_provider ]['base_url'];
+			}
+			$validated_base_url = KN_TTS::validate_safe_external_base_url( $raw_base_url );
+			if ( $raw_base_url !== '' && $validated_base_url === '' ) {
+				self::redirect_with_notice( 'kn-soroban-audio', 'آدرس پایه API سرویس صدا باید یک دامنه عمومی معتبر با https:// باشد.', true );
+			}
+
+			$posted_tts_key = trim( sanitize_text_field( wp_unslash( $_POST['tts_api_key'] ?? '' ) ) );
+			$clear_tts_key  = ! empty( $_POST['tts_clear_api_key'] );
+			$final_tts_key  = $clear_tts_key
+				? ''
+				: ( $posted_tts_key !== '' ? $posted_tts_key : (string) ( $existing_tts['api_key'] ?? '' ) );
+
+			$tts_model = trim( sanitize_text_field( wp_unslash( $_POST['tts_model'] ?? '' ) ) );
+			if ( $tts_model === '' ) {
+				$tts_model = $catalog[ $tts_provider ]['default_model'];
+			}
+
+			$tts_voice = trim( sanitize_text_field( wp_unslash( $_POST['tts_voice'] ?? '' ) ) );
+			if ( $tts_voice === '' ) {
+				$tts_voice = $catalog[ $tts_provider ]['default_voice'];
+			}
+
+			$tts_format = strtolower( sanitize_key( wp_unslash( $_POST['tts_format'] ?? 'mp3' ) ) );
+			if ( ! in_array( $tts_format, array( 'mp3', 'wav', 'opus', 'aac' ), true ) ) {
+				$tts_format = 'mp3';
+			}
+
+			$tts_speed = (float) wp_unslash( $_POST['tts_speed'] ?? '0.95' );
+			if ( $tts_speed < 0.5 || $tts_speed > 2.0 ) {
+				$tts_speed = 0.95;
+			}
+
+			$tts_instructions = sanitize_textarea_field( wp_unslash( $_POST['tts_instructions'] ?? '' ) );
+
+			$pron_from = isset( $_POST['tts_pron_from'] ) && is_array( $_POST['tts_pron_from'] ) ? wp_unslash( $_POST['tts_pron_from'] ) : array();
+			$pron_to   = isset( $_POST['tts_pron_to'] ) && is_array( $_POST['tts_pron_to'] ) ? wp_unslash( $_POST['tts_pron_to'] ) : array();
+			$pron_raw  = array();
+			$pron_len  = max( count( $pron_from ), count( $pron_to ) );
+			for ( $pi = 0; $pi < $pron_len; $pi++ ) {
+				$pron_raw[] = array(
+					'from' => (string) ( $pron_from[ $pi ] ?? '' ),
+					'to'   => (string) ( $pron_to[ $pi ] ?? '' ),
+				);
+			}
+			$pron_rules = KN_TTS::sanitize_pronunciation_rules( $pron_raw );
+
+			update_option(
+				KN_TTS::OPTION_KEY,
+				array(
+					'enabled'             => ! empty( $_POST['tts_enabled'] ) ? 1 : 0,
+					'provider'            => $tts_provider,
+					'base_url'            => $validated_base_url,
+					'api_key'             => $final_tts_key,
+					'model'               => $tts_model,
+					'voice'               => $tts_voice,
+					'format'              => $tts_format,
+					'speed'               => number_format( $tts_speed, 2, '.', '' ),
+					'instructions'        => $tts_instructions,
+					'pronunciation_rules' => $pron_rules,
+					'cache_enabled'       => ! empty( $_POST['tts_cache_enabled'] ) ? 1 : 0,
+					'require_auth'        => ! empty( $_POST['tts_require_auth'] ) ? 1 : 0,
+				)
+			);
+
+			if ( ! empty( $_POST['tts_clear_cache'] ) ) {
+				KN_TTS::clear_cache();
+			}
+
+			self::redirect_with_notice( 'kn-soroban-audio', 'تنظیمات هوش مصنوعی تولید صدا (TTS)، فایل‌های صوتی و کتابخانه گویندگی ذخیره شد.' );
+		}
+
+		if ( $action === 'clear_tts_cache' && check_admin_referer( 'kn_clear_tts_cache' ) ) {
+			$removed = KN_TTS::clear_cache();
+			self::redirect_with_notice( 'kn-soroban-audio', sprintf( 'کش صوتی هوش مصنوعی پاکسازی شد (%d فایل حذف شد).', $removed ) );
 		}
 
 		// 15. Promotional Banners CRUD
@@ -2492,10 +2606,16 @@ class KN_Admin {
 	 * Page 9: Hybrid Audio, SFX, Background Music & Voiceover Library Manager
 	 */
 	public static function render_audio_page() {
-		$audio_cfg = KN_DB::get_audio_settings();
-		$sfx_urls  = is_object( $audio_cfg['sfxUrls'] ) ? array() : (array) $audio_cfg['sfxUrls'];
-		$bg_url    = (string) ( $audio_cfg['bgMusicUrl'] ?? '' );
-		$clips     = is_array( $audio_cfg['voiceClips'] ) ? $audio_cfg['voiceClips'] : array();
+		$audio_cfg    = KN_DB::get_audio_settings();
+		$sfx_urls     = is_object( $audio_cfg['sfxUrls'] ) ? array() : (array) $audio_cfg['sfxUrls'];
+		$bg_url       = (string) ( $audio_cfg['bgMusicUrl'] ?? '' );
+		$clips        = is_array( $audio_cfg['voiceClips'] ) ? $audio_cfg['voiceClips'] : array();
+		$tts_cfg      = KN_TTS::get_settings();
+		$tts_catalog  = KN_TTS::get_providers_catalog();
+		$has_tts_key  = ! empty( $tts_cfg['api_key'] );
+		$tts_active   = KN_TTS::is_enabled();
+		$cache_count  = KN_TTS::get_cache_count();
+		$test_nonce   = wp_create_nonce( 'kn_test_tts' );
 
 		$sfx_catalog = array(
 			'beadClick'     => array(
@@ -2532,14 +2652,324 @@ class KN_Admin {
 		);
 		self::render_shell_open(
 			'kn-soroban-audio',
-			'مدیریت صدا، افکت‌های صوتی و گویندگی',
-			'سیستم صوتی هیبرید: اگر فایل صوتی را اینجا آپلود کنید، با اولویت اول از وردپرس پخش می‌شود؛ و در غیر این صورت فایل ثابت اپلیکیشن یا سنتز هوشمند اجرا می‌گردد.'
+			'مدیریت صدا، هوش مصنوعی گوینده (GapGPT / TTS) و کتابخانه صوتی',
+			'سیستم صوتی هیبرید: اولویت اول با فایل‌های آپلودشده است؛ و برای بقیه جملات، در صورت فعال بودن سرویس هوش مصنوعی (مثل گپ‌جی‌پی‌تی)، صدا از طریق سرور وردپرس تولید و روی وب و اندروید پخش می‌شود.'
 		);
 		?>
 
 			<form method="post">
 				<?php wp_nonce_field( 'kn_save_audio_settings' ); ?>
 				<input type="hidden" name="kn_action" value="save_audio_settings" />
+
+				<!-- Card 0: AI TTS Provider Settings (GapGPT, OpenAI, AvalAI, ElevenLabs, Gemini, Custom) -->
+				<div class="kn-card" id="kn-tts-settings-card" data-kn-tts-catalog="<?php echo esc_attr( wp_json_encode( $tts_catalog ) ); ?>">
+					<div class="kn-card-header">
+						<h2>۰. سرویس هوش مصنوعی تبدیل متن به صدا (GapGPT و سایر APIها)</h2>
+						<?php if ( $tts_active ) : ?>
+							<span class="kn-pill kn-pill-green">فعال و متصل (<?php echo esc_html( strtoupper( $tts_cfg['provider'] ) ); ?>)</span>
+						<?php else : ?>
+							<span class="kn-pill kn-pill-amber">غیرفعال / کلید تنظیم نشده</span>
+						<?php endif; ?>
+					</div>
+					<p style="font-size:12px;color:#5c3a1f;margin-top:0;line-height:1.8;">
+						می‌توانید سرویس تولید صدای هوشمند را مستقیماً به <strong>گپ‌جی‌پی‌تی ایرانی (GapGPT)</strong>، <strong>OpenAI</strong>، <strong>AvalAI</strong>، <strong>ElevenLabs</strong>، <strong>Gemini</strong> یا هر API سازگار با OpenAI متصل کنید.
+						کلید API فقط روی سرور وردپرس نگهداری می‌شود و هم نسخه وب و هم نسخه موبایل (APK) بدون افشای کلید از آن استفاده می‌کنند.
+					</p>
+
+					<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:12px;padding:10px 14px;margin-bottom:14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;">
+						<div style="font-size:12px;color:#7c2d12;line-height:1.7;">
+							<?php if ( stripos( (string) $tts_cfg['model'], 'gpt-' ) !== false || strtolower( (string) $tts_cfg['voice'] ) === 'nova' ) : ?>
+								<strong>توجه مهم درباره صدای فعلی:</strong> هم‌اکنون مدل OpenAI (<code dir="ltr"><?php echo esc_html( $tts_cfg['model'] . ' / ' . $tts_cfg['voice'] ); ?></code>) فعال است که صدای متفاوتی دارد. برای داشتن <strong>همان صدای مربی مهربان اصلی اپلیکیشن</strong> از مدل Gemini با صدای <code dir="ltr">Kore</code> استفاده کنید.
+							<?php else : ?>
+								<strong>صدای اصلی اپلیکیشن:</strong> برای داشتن دقیقاً همان لحن و صدای مربی مهربان فارسی اپلیکیشن در GapGPT، مدل <code dir="ltr">gemini-3.8-flash-tts</code> (یا <code dir="ltr">gemini-3.8-flash-lite-tts</code>) و صدای <code dir="ltr">Kore</code> پیشنهاد می‌شود.
+							<?php endif; ?>
+						</div>
+						<button type="button" class="kn-btn kn-btn-amber" id="kn-tts-preset-original" style="white-space:nowrap;">
+							اعمال صدای اصلی اپلیکیشن (Gemini Kore)
+						</button>
+					</div>
+
+					<div class="kn-grid-2">
+						<div class="kn-field">
+							<label style="display:block;margin-bottom:8px;">وضعیت گوینده هوش مصنوعی در اپلیکیشن</label>
+							<label style="display:block;padding:10px 12px;background:#fff8ed;border:1px solid #eedcc5;border-radius:10px;">
+								<input type="checkbox" name="tts_enabled" value="1" <?php checked( ! empty( $tts_cfg['enabled'] ) ); ?> />
+								فعال‌سازی تولید صدا از طریق سرویس انتخاب‌شده وردپرس
+							</label>
+						</div>
+
+						<div class="kn-field">
+							<label for="kn-tts-provider">نوع سرویس هوش مصنوعی (Provider)</label>
+							<select id="kn-tts-provider" name="tts_provider">
+								<?php foreach ( $tts_catalog as $p_key => $p_meta ) : ?>
+									<option value="<?php echo esc_attr( $p_key ); ?>" <?php selected( $tts_cfg['provider'], $p_key ); ?>>
+										<?php echo esc_html( $p_meta['label'] ); ?>
+									</option>
+								<?php endforeach; ?>
+							</select>
+							<div id="kn-tts-provider-hint" style="font-size:11px;color:#7c5b43;margin-top:4px;">
+								<?php echo esc_html( $tts_catalog[ $tts_cfg['provider'] ]['hint'] ?? '' ); ?>
+							</div>
+						</div>
+					</div>
+
+					<div class="kn-grid-2">
+						<div class="kn-field">
+							<label for="kn-tts-base-url">آدرس پایه API سرویس (Base URL با https)</label>
+							<input
+								type="url"
+								id="kn-tts-base-url"
+								name="tts_base_url"
+								dir="ltr"
+								value="<?php echo esc_attr( $tts_cfg['base_url'] ); ?>"
+								placeholder="https://api.gapgpt.ir/v1"
+							/>
+							<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+								<button type="button" class="kn-btn kn-btn-ghost" style="padding:3px 8px;font-size:11px;" data-kn-tts-baseurl="https://api.gapgpt.ir/v1">سرور ایران: api.gapgpt.ir/v1</button>
+								<button type="button" class="kn-btn kn-btn-ghost" style="padding:3px 8px;font-size:11px;" data-kn-tts-baseurl="https://api.gapapi.com/v1">CDN خارجی (کلودفلر): api.gapapi.com/v1</button>
+							</div>
+							<div style="font-size:11px;color:#7c5b43;margin-top:4px;">
+								طبق مستندات GapGPT، برای هاست داخل ایران <code dir="ltr">https://api.gapgpt.ir/v1</code> و برای هاست‌های خارج از ایران <code dir="ltr">https://api.gapapi.com/v1</code> استفاده می‌شود (در صورت خطای اتصال، افزونه خودکار روی CDN جایگزین تلاش می‌کند).
+							</div>
+						</div>
+
+						<div class="kn-field">
+							<label for="kn-tts-api-key">
+								کلید API سرویس
+								<?php if ( $has_tts_key ) : ?>
+									<span class="kn-pill kn-pill-green" style="margin-right:6px;">ذخیره شده (امن)</span>
+								<?php else : ?>
+									<span class="kn-pill kn-pill-amber" style="margin-right:6px;">تنظیم نشده</span>
+								<?php endif; ?>
+							</label>
+							<input
+								type="password"
+								id="kn-tts-api-key"
+								name="tts_api_key"
+								dir="ltr"
+								autocomplete="new-password"
+								value=""
+								placeholder="<?php echo $has_tts_key ? 'برای حفظ کلید فعلی خالی بگذارید یا کلید جدید وارد کنید' : 'کلید API دریافتی از پنل GapGPT یا سرویس انتخابی...'; ?>"
+							/>
+							<?php if ( $has_tts_key ) : ?>
+								<label style="display:inline-block;margin-top:6px;font-size:11px;color:#b91c1c;">
+									<input type="checkbox" name="tts_clear_api_key" value="1" /> حذف کلید API ذخیره شده فعلی
+								</label>
+							<?php endif; ?>
+						</div>
+					</div>
+
+					<div class="kn-grid-2">
+						<div class="kn-field">
+							<label for="kn-tts-model">مدل تبدیل متن به صدا (Model)</label>
+							<input
+								type="text"
+								id="kn-tts-model"
+								name="tts_model"
+								dir="ltr"
+								list="kn-tts-models-list"
+								value="<?php echo esc_attr( $tts_cfg['model'] ); ?>"
+								placeholder="gemini-3.8-flash-tts"
+							/>
+							<datalist id="kn-tts-models-list">
+								<?php
+								$model_options = $tts_catalog[ $tts_cfg['provider'] ]['models'] ?? array( 'gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts', 'gemini-2.5-flash-preview-tts', 'gpt-4o-mini-tts' );
+								foreach ( $model_options as $m_opt ) :
+									?>
+									<option value="<?php echo esc_attr( $m_opt ); ?>"></option>
+								<?php endforeach; ?>
+							</datalist>
+							<div style="font-size:11px;color:#7c5b43;margin-top:4px;">
+								برای صدای اصلی پروژه در GapGPT: <code dir="ltr">gemini-3.8-flash-tts</code> یا <code dir="ltr">gemini-3.8-flash-lite-tts</code> یا <code dir="ltr">gemini-2.5-flash-preview-tts</code>
+							</div>
+						</div>
+
+						<div class="kn-field">
+							<label for="kn-tts-voice">صدای گوینده (Voice / Voice ID)</label>
+							<input
+								type="text"
+								id="kn-tts-voice"
+								name="tts_voice"
+								dir="ltr"
+								list="kn-tts-voices-list"
+								value="<?php echo esc_attr( $tts_cfg['voice'] ); ?>"
+								placeholder="Kore"
+							/>
+							<datalist id="kn-tts-voices-list">
+								<?php
+								$voice_options = $tts_catalog[ $tts_cfg['provider'] ]['voices'] ?? array( 'Kore', 'Aoede', 'Zephyr', 'nova', 'shimmer' );
+								foreach ( $voice_options as $v_opt ) :
+									?>
+									<option value="<?php echo esc_attr( $v_opt ); ?>"></option>
+								<?php endforeach; ?>
+							</datalist>
+							<div style="font-size:11px;color:#7c5b43;margin-top:4px;">
+								صدای اصلی پروژه: <code dir="ltr">Kore</code> (زنانه مهربان کودکانه) — سایر صداهای Gemini: <code dir="ltr">Aoede</code>، <code dir="ltr">Zephyr</code>، <code dir="ltr">Leda</code>
+							</div>
+						</div>
+					</div>
+
+					<div class="kn-grid-2">
+						<div class="kn-field">
+							<label for="kn-tts-format">فرمت فایل خروجی</label>
+							<select id="kn-tts-format" name="tts_format" dir="ltr">
+								<option value="wav" <?php selected( $tts_cfg['format'], 'wav' ); ?>>WAV (پیشنهادی برای Gemini — بدون افت کیفیت)</option>
+								<option value="mp3" <?php selected( $tts_cfg['format'], 'mp3' ); ?>>MP3 (پیشنهادی برای OpenAI / ElevenLabs)</option>
+								<option value="opus" <?php selected( $tts_cfg['format'], 'opus' ); ?>>OPUS / OGG</option>
+								<option value="aac" <?php selected( $tts_cfg['format'], 'aac' ); ?>>AAC</option>
+							</select>
+						</div>
+
+						<div class="kn-field">
+							<label for="kn-tts-speed">سرعت صحبت گوینده (0.75 تا 1.25)</label>
+							<select id="kn-tts-speed" name="tts_speed" dir="ltr">
+								<?php
+								$speeds = array(
+									'0.80' => '0.80x — خیلی شمرده',
+									'0.90' => '0.90x — شمرده کودکانه',
+									'0.95' => '0.95x — طبیعی و ملایم (پیشنهادی)',
+									'1.00' => '1.00x — عادی',
+									'1.10' => '1.10x — کمی سریع‌تر',
+									'1.20' => '1.20x — تند',
+								);
+								foreach ( $speeds as $sp_val => $sp_lbl ) :
+									?>
+									<option value="<?php echo esc_attr( $sp_val ); ?>" <?php selected( $tts_cfg['speed'], $sp_val ); ?>>
+										<?php echo esc_html( $sp_lbl ); ?>
+									</option>
+								<?php endforeach; ?>
+							</select>
+						</div>
+					</div>
+
+					<div class="kn-field">
+						<label for="kn-tts-instructions">پرامپت و قوانین اختصاصی هوش مصنوعی (Prompt و دستورالعمل رفتار، لحن و تلفظ گوینده)</label>
+						<textarea id="kn-tts-instructions" name="tts_instructions" rows="3" dir="auto" placeholder="مثال: همیشه با لحن شاد، آرام و مهربان ایرانی صحبت کن؛ کلمه چرتکه را با تلفظ چُرتُکه بخوان و بین جملات مکث کوتاه بده..."><?php echo esc_textarea( $tts_cfg['instructions'] ); ?></textarea>
+						<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+							<button type="button" class="kn-btn kn-btn-ghost" style="padding:3px 9px;font-size:11px;" data-kn-append-prompt="همیشه با لحن ایرانی اصیل، گرم، شاد و شمرده مخصوص کودکان ۴ تا ۱۵ سال صحبت کن.">+ لحن مربی شاد و کودکانه</button>
+							<button type="button" class="kn-btn kn-btn-ghost" style="padding:3px 9px;font-size:11px;" data-kn-append-prompt="اعداد را واضح و با مکث کوتاه بین شماره‌ها بخوان.">+ مکث واضح بین اعداد</button>
+							<button type="button" class="kn-btn kn-btn-ghost" style="padding:3px 9px;font-size:11px;" data-kn-append-prompt="واژه چرتکه را دقیقاً «چُرتُکه» (chortokeh) و سوروبان را «سُروبآن» تلفظ کن.">+ قانون تلفظ چُرتُکه و سُروبآن</button>
+						</div>
+						<div style="font-size:11px;color:#7c5b43;margin-top:4px;">
+							هر قانون یا دستورالعملی که اینجا بنویسید (به فارسی یا انگلیسی) هنگام تولید صدا همراه با درخواست به هوش مصنوعی ارسال و روی سرور ذخیره می‌شود.
+						</div>
+					</div>
+
+					<!-- Custom Word Pronunciation Correction Dictionary -->
+					<div style="background:#fffaf3;border:1px solid #eedcc5;border-radius:12px;padding:12px;margin-bottom:14px;">
+						<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
+							<div>
+								<strong style="font-size:13px;color:#5c3a1f;">جدول اصلاح تلفظ کلمات (تبدیل خودکار پیش از ارسال به هوش مصنوعی)</strong>
+								<div style="font-size:11px;color:#7c5b43;margin-top:2px;">
+									کلماتی که هوش مصنوعی اشتباه تلفظ می‌کند (مثل <code>چرتکه</code>) را با شکل حرکت‌گذاری‌شده یا آوایی درست (مثل <code>چُرتُکه</code> یا <code>چُرْتُکه</code>) جایگزین کنید تا همیشه دقیق خوانده شوند.
+								</div>
+							</div>
+							<button type="button" class="kn-btn kn-btn-amber" style="padding:6px 12px;font-size:12px;" data-kn-add-pron-row="1">+ افزودن کلمه جدید</button>
+						</div>
+
+						<table class="kn-table" style="margin:0;">
+							<thead>
+								<tr>
+									<th style="width:42%;">کلمه یا عبارت در متن (اشتباه خوانده‌شده)</th>
+									<th style="width:46%;">شکل اصلاح‌شده برای تلفظ دقیق (با اعراب ـَ ـِ ـُ ـْ یا آوایی)</th>
+									<th style="width:12%;">حذف</th>
+								</tr>
+							</thead>
+							<tbody id="kn-tts-pron-body">
+								<?php
+								$pron_rows = isset( $tts_cfg['pronunciation_rules'] ) && is_array( $tts_cfg['pronunciation_rules'] )
+									? $tts_cfg['pronunciation_rules']
+									: array();
+								foreach ( $pron_rows as $pr ) :
+									?>
+									<tr class="kn-tts-pron-row">
+										<td>
+											<input type="text" name="tts_pron_from[]" value="<?php echo esc_attr( $pr['from'] ?? '' ); ?>" placeholder="مثلاً: چرتکه" style="width:100%;padding:6px 10px;border:2px solid #eedcc5;border-radius:8px;" />
+										</td>
+										<td>
+											<input type="text" name="tts_pron_to[]" value="<?php echo esc_attr( $pr['to'] ?? '' ); ?>" placeholder="مثلاً: چُرتُکه" style="width:100%;padding:6px 10px;border:2px solid #eedcc5;border-radius:8px;" />
+										</td>
+										<td>
+											<button type="button" class="kn-btn kn-btn-danger" data-kn-remove-pron-row="1" style="padding:5px 10px;font-size:12px;">حذف</button>
+										</td>
+									</tr>
+								<?php endforeach; ?>
+							</tbody>
+						</table>
+
+						<template id="kn-tts-pron-row-template">
+							<tr class="kn-tts-pron-row">
+								<td>
+									<input type="text" name="tts_pron_from[]" value="" placeholder="مثلاً: سوروبان" style="width:100%;padding:6px 10px;border:2px solid #eedcc5;border-radius:8px;" />
+								</td>
+								<td>
+									<input type="text" name="tts_pron_to[]" value="" placeholder="مثلاً: سُروبآن" style="width:100%;padding:6px 10px;border:2px solid #eedcc5;border-radius:8px;" />
+								</td>
+								<td>
+									<button type="button" class="kn-btn kn-btn-danger" data-kn-remove-pron-row="1" style="padding:5px 10px;font-size:12px;">حذف</button>
+								</td>
+							</tr>
+						</template>
+					</div>
+
+					<div style="margin-bottom:14px;display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
+						<button type="submit" class="kn-btn kn-btn-primary" id="kn-tts-quick-save-btn">ذخیره تنظیمات سرویس صدا</button>
+						<span id="kn-tts-preset-notice" style="display:none;font-size:12px;color:#b45309;font-weight:700;">
+							تنظیمات صدای اصلی (Gemini Kore) در فرم قرار گرفت — لطفاً دکمه «ذخیره تنظیمات سرویس صدا» را بزنید.
+						</span>
+					</div>
+
+					<div class="kn-grid-2" style="margin-bottom:12px;">
+						<div style="background:#fffaf3;border:1px solid #eedcc5;border-radius:12px;padding:10px 12px;">
+							<label style="display:block;margin-bottom:6px;">
+								<input type="checkbox" name="tts_cache_enabled" value="1" <?php checked( ! empty( $tts_cfg['cache_enabled'] ) ); ?> />
+								کش کردن صداهای تولیدشده روی هاست (پخش فوری + کاهش شدید هزینه API)
+							</label>
+							<div style="font-size:11px;color:#7c5b43;">
+								تعداد جملات کش‌شده فعلی: <strong><?php echo esc_html( (string) $cache_count ); ?></strong> فایل
+								<?php if ( $cache_count > 0 ) : ?>
+									— <label style="color:#b91c1c;"><input type="checkbox" name="tts_clear_cache" value="1" /> پاکسازی کش هنگام ذخیره</label>
+								<?php endif; ?>
+							</div>
+						</div>
+
+						<div style="background:#fffaf3;border:1px solid #eedcc5;border-radius:12px;padding:10px 12px;">
+							<label style="display:block;margin-bottom:6px;">
+								<input type="checkbox" name="tts_require_auth" value="1" <?php checked( ! empty( $tts_cfg['require_auth'] ) ); ?> />
+								محدود به کاربران واردشده (در حالت مهمان پخش نشود)
+							</label>
+							<div style="font-size:11px;color:#7c5b43;">
+								در حالت عادی (تیک نخورده)، محدودیت نرخ درخواست ضداسپم روی سرور فعال است تا مهمان‌ها هم صدای مربی را بشنوند.
+							</div>
+						</div>
+					</div>
+
+					<!-- Live TTS Test Widget -->
+					<div style="background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;padding:12px;">
+						<div style="font-weight:700;font-size:13px;margin-bottom:8px;">تست زنده تولید صدا با تنظیمات ذخیره‌شده فعلی</div>
+						<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+							<input
+								type="text"
+								id="kn-tts-test-text"
+								value="آفرین قهرمان کوچولو! خیلی دقیق روی چرتکه حساب کردی!"
+								style="flex:1;min-width:240px;height:38px;padding:6px 10px;border:2px solid #cbd5e1;border-radius:10px;"
+							/>
+							<select id="kn-tts-test-tone" style="height:38px;min-height:38px;line-height:1.4;padding:4px 10px;border:2px solid #cbd5e1;border-radius:10px;">
+								<option value="cheer">لحن تشویقی</option>
+								<option value="teach">لحن آموزشی</option>
+								<option value="encourage">لحن دلگرمی</option>
+							</select>
+							<button
+								type="button"
+								class="kn-btn kn-btn-amber"
+								id="kn-tts-test-btn"
+								data-nonce="<?php echo esc_attr( $test_nonce ); ?>"
+							>تست و پخش صدا</button>
+						</div>
+						<div id="kn-tts-test-status" style="font-size:12px;margin-top:8px;color:#475569;">ابتدا تنظیمات بالا را ذخیره کنید و سپس دکمه تست را بزنید.</div>
+						<audio id="kn-tts-test-audio" controls style="display:none;margin-top:8px;width:100%;max-width:420px;"></audio>
+					</div>
+				</div>
 
 				<!-- Card 1: App Sound Effects -->
 				<div class="kn-card">
